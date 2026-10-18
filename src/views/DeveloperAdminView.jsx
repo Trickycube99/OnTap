@@ -657,7 +657,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                 gap: 6
               }}
             >
-              <span>← Return to Public Customer Menu</span>
+              <span>← Return to Restaurant Portal</span>
             </button>
           </div>
         </div>
@@ -839,7 +839,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
             }}
           >
             <ExternalLink size={13} />
-            <span>Open Dining App</span>
+            <span>Open Owner App</span>
           </button>
 
           <button

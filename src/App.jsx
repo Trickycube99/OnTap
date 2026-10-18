@@ -201,8 +201,8 @@ export default function App() {
       return 'customer';
     }
 
-    // 2. Developer Superadmin dashboard extension (#manj, #dev, #developer, #superadmin)
-    if (route === 'manj' || route === 'dev' || route === 'developer' || route === 'superadmin') {
+    // 2. Developer Superadmin dashboard (strictly accessible via direct #manj link)
+    if (route === 'manj') {
       return 'developer';
     }
 
@@ -404,11 +404,8 @@ export default function App() {
       }
 
       let targetRole = null;
-      if (route === 'manj' || route === 'dev' || route === 'developer' || route === 'superadmin') {
+      if (route === 'manj') {
         targetRole = 'developer';
-        if (window.location.hash !== '#manj') {
-          window.location.hash = 'manj';
-        }
       } else if (route === 'counter' || route === 'pos' || route === 'kds' || route === 'kitchen') {
         targetRole = 'counter';
       } else if (route === 'portal' || route === 'staff') {

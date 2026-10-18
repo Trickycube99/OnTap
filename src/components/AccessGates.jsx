@@ -211,37 +211,6 @@ export function AdminOwnerLoginGate({ onOpenLogin, onSwitchRole, theme }) {
             >
               <BarChart3 size={14} color="#10B981" /> Counter Terminal
             </button>
-
-            <button
-              onClick={() => {
-                playTapSound();
-                onSwitchRole('developer');
-              }}
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                color: '#CBD5E1',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                padding: '7px 14px',
-                borderRadius: '10px',
-                fontSize: '13px',
-                fontWeight: 600,
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#FFFFFF';
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = '#CBD5E1';
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-              }}
-            >
-              <Layers size={14} color="#38BDF8" /> Dev Console (#manj)
-            </button>
           </div>
 
           <div

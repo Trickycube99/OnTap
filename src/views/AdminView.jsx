@@ -4561,7 +4561,7 @@ export default function AdminView({
                 </button>
 
                 <div style={{ fontSize: 11, color: '#64748B', textAlign: 'center', marginTop: 8 }}>
-                  ⚡ Real-Time Sync: Changes are saved to this restaurant business and broadcasted immediately (&lt;50ms) to customer dining phones, QR menus, and POS stations. Developer console remains strictly isolated.
+                  ⚡ Real-Time Sync: Changes are saved to this restaurant business and broadcasted immediately (&lt;50ms) to customer dining phones, QR menus, and POS stations.
                 </div>
               </div>
             </div>

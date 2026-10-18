@@ -325,52 +325,8 @@ export default function Header({
           </div>
         </div>
 
-        {/* Center: Workstation Switching (Dev, Admin, Counterperson POS) */}
+        {/* Center: Workstation Switching (Admin, Counterperson POS) */}
         <nav className="header-center-nav staff-center-nav">
-          {/* Developer Superadmin has Master Access */}
-          {currentRole === 'developer' && (
-            <>
-              <button
-                className="nav-role-pill active"
-                onClick={() => onRoleSwitch('developer')}
-                title="Developer Superadmin Console (#manj)"
-                style={{ background: '#0F172A', color: '#38BDF8', borderColor: '#38BDF8' }}
-              >
-                <Server size={14} color="#38BDF8" />
-                <span>Dev Console (#manj)</span>
-              </button>
-
-              <button
-                className="nav-role-pill"
-                onClick={() => onRoleSwitch('admin')}
-                title="Switch to Active Business Owner Admin"
-              >
-                <BarChart3 size={14} />
-                <span>Owner Admin</span>
-              </button>
-
-              <button
-                className="nav-role-pill"
-                onClick={() => onRoleSwitch('counter')}
-                title="Switch to Live Counter POS"
-              >
-                <Layers size={14} />
-                <span>Live POS</span>
-                {activeOrdersCount > 0 && (
-                  <span className="nav-badge-pill">{activeOrdersCount}</span>
-                )}
-              </button>
-
-              <button
-                className="nav-role-pill"
-                onClick={() => onRoleSwitch('customer')}
-                title="Preview Customer QR Dining Experience"
-              >
-                <Utensils size={14} color="#007AFF" />
-                <span>Customer Menu</span>
-              </button>
-            </>
-          )}
 
           {/* Admin has Master Access across all stations */}
           {currentRole === 'admin' && (
