@@ -28,6 +28,7 @@ import {
 } from 'firebase/auth';
 import { getFirebaseConfig } from './firebaseSync';
 import { getBusinesses, saveBusinesses, createBusiness, updateBusiness, setActiveBusiness } from './businessManager';
+import { getStoredSessions, saveStoredSessions } from './auth';
 
 let authInstance = null;
 
@@ -215,6 +216,10 @@ export async function logInUserWithVerification({ email, password }) {
         authenticatedBy: 'firebase_auth'
       };
 
+      const currentSessions = getStoredSessions();
+      currentSessions.admin = session;
+      saveStoredSessions(currentSessions);
+
       return {
         success: true,
         user,
@@ -249,20 +254,26 @@ export async function logInUserWithVerification({ email, password }) {
 
   setActiveBusiness(matchingBiz.id);
 
+  const fallbackSession = {
+    role: 'admin',
+    businessId: matchingBiz.id,
+    businessName: matchingBiz.name,
+    name: matchingBiz.owner.name,
+    email: cleanEmail,
+    branch: matchingBiz.city,
+    token: `admin_${matchingBiz.id}_${Date.now()}`,
+    authenticatedAt: new Date().toISOString(),
+    authenticatedBy: 'admin'
+  };
+
+  const currentSessions = getStoredSessions();
+  currentSessions.admin = fallbackSession;
+  saveStoredSessions(currentSessions);
+
   return {
     success: true,
     business: matchingBiz,
-    session: {
-      role: 'admin',
-      businessId: matchingBiz.id,
-      businessName: matchingBiz.name,
-      name: matchingBiz.owner.name,
-      email: cleanEmail,
-      branch: matchingBiz.city,
-      token: `admin_${matchingBiz.id}_${Date.now()}`,
-      authenticatedAt: new Date().toISOString(),
-      authenticatedBy: 'admin'
-    }
+    session: fallbackSession
   };
 }
 

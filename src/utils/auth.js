@@ -415,18 +415,21 @@ export function isAuthenticated(role, activeSessionRole = null) {
 
   // Admin Master session can access both Admin and Counter for their own business ONLY
   if (sessions[ROLES.ADMIN] && sessions[ROLES.ADMIN].token) {
-    if (sessions[ROLES.ADMIN].businessId === currentBizId) {
+    if (!sessions[ROLES.ADMIN].businessId || sessions[ROLES.ADMIN].businessId === currentBizId) {
+      return true;
+    }
+    if (role === ROLES.ADMIN) {
+      setActiveBusiness(sessions[ROLES.ADMIN].businessId);
       return true;
     }
   }
 
-  // If session switched from Admin, require an active admin session token matching this business
+  // If session switched from Admin, require an active admin session token
   if (
     role === ROLES.ADMIN &&
     typeof sessionStorage !== 'undefined' &&
     sessionStorage.getItem('flowscape_switched_from_admin') === 'true' &&
-    Boolean(sessions[ROLES.ADMIN]?.token) &&
-    sessions[ROLES.ADMIN]?.businessId === currentBizId
+    Boolean(sessions[ROLES.ADMIN]?.token)
   ) {
     return true;
   }

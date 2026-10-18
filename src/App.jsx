@@ -676,7 +676,8 @@ export default function App() {
 
   // Auth Success Handler
   const handleAuthSuccess = (newSession, matchedBusiness) => {
-    const role = newSession.role;
+    const role = newSession?.role || 'admin';
+    const currentSessions = getStoredSessions();
 
     if (role === 'counter') {
       // Direct login to live POS: strictly clear any admin session and switched-from-admin flag
@@ -684,23 +685,22 @@ export default function App() {
         sessionStorage.removeItem('flowscape_switched_from_admin');
       }
       setSwitchedFromAdmin(false);
-      const currentSessions = getStoredSessions();
       currentSessions.admin = null;
-      saveStoredSessions(currentSessions);
-      setAuthSessions(currentSessions);
+      currentSessions.counter = newSession;
     } else if (role === 'admin') {
       if (typeof sessionStorage !== 'undefined') {
         sessionStorage.setItem('flowscape_switched_from_admin', 'true');
       }
       setSwitchedFromAdmin(true);
-      const updated = getStoredSessions();
-      setAuthSessions(updated);
+      currentSessions.admin = newSession;
     } else {
-      const updated = getStoredSessions();
-      setAuthSessions(updated);
+      currentSessions[role] = newSession;
     }
 
-    if (newSession.staffId) {
+    saveStoredSessions(currentSessions);
+    setAuthSessions({ ...currentSessions });
+
+    if (newSession?.staffId) {
       try {
         if (typeof sessionStorage !== 'undefined') {
           sessionStorage.setItem('counter_active_staff_id', newSession.staffId);
@@ -711,14 +711,15 @@ export default function App() {
       } catch {}
     }
 
+    const bizObj = matchedBusiness || (newSession?.businessId ? getBusinesses().find((b) => b.id === newSession.businessId) : null);
+    if (bizObj) {
+      setActiveBusiness(bizObj.id);
+      setActiveBusinessId(bizObj.id);
+      loadBusinessData(bizObj.id, bizObj);
+    }
+
     setAuthActionState(null);
     setAuthModal({ isOpen: false, targetRole: null });
-
-    if (matchedBusiness) {
-      setActiveBusiness(matchedBusiness.id);
-      setActiveBusinessId(matchedBusiness.id);
-      loadBusinessData(matchedBusiness.id, matchedBusiness);
-    }
 
     if (role === 'counter') {
       setCurrentRole('counter');
