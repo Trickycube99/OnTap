@@ -197,7 +197,15 @@ export default function App() {
       } else if (msg.type === SYNC_EVENTS.EXPENSE_ADDED) {
         setExpenses((prev) => [msg.payload, ...prev]);
       } else if (msg.type === SYNC_EVENTS.CHECKLIST_SUBMITTED) {
-        setChecklists((prev) => [msg.payload, ...prev]);
+        if (msg.payload && msg.payload.id) {
+          setChecklists((prev) => {
+            const list = Array.isArray(prev) ? prev : [];
+            if (list.some((c) => c.id === msg.payload.id)) {
+              return list.map((c) => (c.id === msg.payload.id ? msg.payload : c));
+            }
+            return [msg.payload, ...list];
+          });
+        }
       } else if (msg.type === SYNC_EVENTS.THEME_UPDATED) {
         if (msg.payload) setTheme(msg.payload);
       } else if (msg.type === SYNC_EVENTS.CHEF_UPDATED) {
@@ -648,6 +656,7 @@ export default function App() {
               chef={chef}
               setChef={setChef}
               checklists={checklists}
+              setChecklists={setChecklists}
               offers={offers}
               setOffers={setOffers}
               activeAdminTab={adminTab}

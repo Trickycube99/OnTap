@@ -394,3 +394,105 @@ export function subscribeToCloudMenu(onMenuUpdated) {
   }
 }
 
+/**
+ * Sync staff and POS terminal permissions to Firebase Firestore (Cross-Device)
+ */
+export async function syncStaffToCloud(staff) {
+  const database = initFirebase();
+  if (!database || !Array.isArray(staff)) return false;
+
+  try {
+    const configDocRef = doc(database, 'restaurant_config', 'staff');
+    await setDoc(configDocRef, {
+      staff: sanitizeForFirestore(staff),
+      _cloudSyncedAt: Date.now()
+    }, { merge: true });
+    console.log(`🔥 [Cloud Sync] Staff & Permissions successfully synced to Firestore (${staff.length} staff)`);
+    return true;
+  } catch (err) {
+    console.error('🔥 [Cloud Sync] Error uploading staff to Firestore:', err);
+    return false;
+  }
+}
+
+/**
+ * Subscribe to staff & permissions updates across devices in real time
+ */
+export function subscribeToCloudStaff(onStaffUpdated) {
+  const database = initFirebase();
+  if (!database) return () => {};
+
+  try {
+    const configDocRef = doc(database, 'restaurant_config', 'staff');
+    let isInitial = true;
+    const unsubscribe = onSnapshot(configDocRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data && Array.isArray(data.staff)) {
+          console.log(`🔥 [Cloud Sync] Received staff update from Firestore (${data.staff.length} staff, initial: ${isInitial})`);
+          if (onStaffUpdated) onStaffUpdated(data.staff, isInitial);
+        }
+      }
+      isInitial = false;
+    }, (err) => {
+      console.warn('🔥 [Cloud Sync] Error listening to staff changes:', err);
+    });
+    return unsubscribe;
+  } catch {
+    return () => {};
+  }
+}
+
+/**
+ * Sync EOD closing checklist reports to Firebase Firestore (Cross-Device)
+ */
+export async function syncChecklistToCloud(report) {
+  const database = initFirebase();
+  if (!database || !report || !report.id) return false;
+
+  try {
+    const reportDocRef = doc(database, 'restaurant_checklists', report.id);
+    await setDoc(reportDocRef, {
+      ...sanitizeForFirestore(report),
+      _cloudSyncedAt: Date.now()
+    }, { merge: true });
+    console.log(`🔥 [Cloud Sync] EOD Checklist successfully synced to Firestore (${report.id})`);
+    return true;
+  } catch (err) {
+    console.error('🔥 [Cloud Sync] Error uploading EOD checklist to Firestore:', err);
+    return false;
+  }
+}
+
+/**
+ * Subscribe to EOD closing checklist reports across devices in real time
+ */
+export function subscribeToCloudChecklists(onChecklistUpdated) {
+  const database = initFirebase();
+  if (!database) return () => {};
+
+  try {
+    const colRef = collection(database, 'restaurant_checklists');
+    const q = query(colRef, limit(50));
+    let isInitial = true;
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        const data = change.doc.data();
+        if (change.type === 'added' || change.type === 'modified') {
+          if (onChecklistUpdated && data && data.id) {
+            onChecklistUpdated(data, isInitial);
+          }
+        }
+      });
+      isInitial = false;
+    }, (err) => {
+      console.warn('🔥 [Cloud Sync] Error listening to checklists changes:', err);
+    });
+    return unsubscribe;
+  } catch {
+    return () => {};
+  }
+}
+
+
+

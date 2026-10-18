@@ -40,17 +40,20 @@ function isOfferExpired(offer) {
   return offer.expiryDate < today;
 }
 
-function createClosingChecklistReport({ expected, actual, variance, varianceReason }) {
+function createClosingChecklistReport({ expected, actual, variance, varianceReason, submittedBy, staffRole }) {
   const now = new Date();
   return {
     id: `CHK-${now.getTime()}`,
     date: now.toLocaleDateString(),
     timestamp: now.toLocaleTimeString(),
+    createdAt: now.toISOString(),
     expected,
     actual,
     variance,
     varianceReason: varianceReason || 'Balanced settlement within threshold',
-    status: 'Audited & Submitted'
+    status: 'Audited & Submitted',
+    submittedBy: submittedBy || 'Counter Staff',
+    staffRole: staffRole || 'Counter POS Staff'
   };
 }
 
@@ -64,7 +67,7 @@ export default function CounterView({
   theme,
   setTheme: _setTheme,
   chef,
-  checklists: _checklists,
+  checklists = [],
   setChecklists,
   activeSubTab = 'orders',
   setActiveSubTab,
@@ -87,6 +90,8 @@ export default function CounterView({
   const [actualUpi, setActualUpi] = useState('');
   const [varianceReason, setVarianceReason] = useState('');
   const [checklistSubmitted, setChecklistSubmitted] = useState(false);
+  const [showClosingConfirmModal, setShowClosingConfirmModal] = useState(false);
+  const [closingPendingReport, setClosingPendingReport] = useState(null);
 
   // Price Edit State (FR-P4)
   const [editingItem, setEditingItem] = useState(null);
@@ -115,17 +120,34 @@ export default function CounterView({
     try {
       const saved = localStorage.getItem('counter_active_staff_id');
       if (saved && activeStaffList.some((s) => s.id === saved)) return saved;
+      if (saved === '__owner_admin__' && canReturnToAdmin) return '__owner_admin__';
     } catch {}
-    return activeStaffList[0]?.id || '';
+    return activeStaffList[0]?.id || (canReturnToAdmin ? '__owner_admin__' : '');
   });
 
-  // Effective staff member currently operating Counter POS
-  const currentStaff = activeStaffList.find((s) => s.id === activeStaffId) || activeStaffList[0];
+  // Effective operator and staff member currently operating Counter POS
+  const isOwnerOverride = canReturnToAdmin && activeStaffId === '__owner_admin__';
+  const currentStaff = activeStaffList.find((s) => s.id === activeStaffId) || activeStaffList[0] || null;
 
+  // Strict enforcement: when operating as a staff member, the owner-assigned permissions are strictly honored
   const effectivePermissions = {
-    canEditPrice: canReturnToAdmin ? true : Boolean(currentStaff?.permissions?.canEditPrice),
-    canCreateDiscounts: canReturnToAdmin ? true : Boolean(currentStaff?.permissions?.canCreateDiscounts)
+    canEditPrice: isOwnerOverride ? true : Boolean(currentStaff?.permissions?.canEditPrice),
+    canCreateDiscounts: isOwnerOverride ? true : Boolean(currentStaff?.permissions?.canCreateDiscounts)
   };
+
+  // Re-sync active operator if staff list updates and selected operator no longer exists
+  useEffect(() => {
+    if (activeStaffId === '__owner_admin__' && canReturnToAdmin) return;
+    if (activeStaffList.length > 0 && !activeStaffList.some((s) => s.id === activeStaffId)) {
+      const fallbackId = activeStaffList[0].id;
+      setActiveStaffId(fallbackId);
+      try {
+        localStorage.setItem('counter_active_staff_id', fallbackId);
+      } catch {}
+    }
+  }, [staff, activeStaffId, canReturnToAdmin]);
+
+  const [permissionsToast, setPermissionsToast] = useState('');
 
   // Listen for real-time events from customers and owner admin
   useEffect(() => {
@@ -136,6 +158,8 @@ export default function CounterView({
       } else if (msg.type === SYNC_EVENTS.STAFF_UPDATED) {
         if (Array.isArray(msg.payload) && setStaff) {
           setStaff(msg.payload);
+          setPermissionsToast('⚡ Terminal Permissions Updated: Staff permissions synchronized live from Owner Admin.');
+          setTimeout(() => setPermissionsToast(''), 4500);
         }
       }
     });
@@ -302,31 +326,73 @@ export default function CounterView({
     }
   };
 
-  // Submit Daily Closing Checklist (FR-P8 & 5.4)
-  const handleSubmitClosingChecklist = (e) => {
+  // Validate and Open Re-confirmation Pop-up Modal (FR-P8 & 5.4)
+  const handleOpenClosingConfirmModal = (e) => {
     e.preventDefault();
     playTapSound();
 
-    if (hasVarianceAlert && !varianceReason.trim()) {
+    const cashNum = Number(actualCash);
+    const cardNum = Number(actualCard);
+    const upiNum = Number(actualUpi);
+
+    if (
+      actualCash.trim() === '' ||
+      actualCard.trim() === '' ||
+      actualUpi.trim() === '' ||
+      isNaN(cashNum) ||
+      isNaN(cardNum) ||
+      isNaN(upiNum)
+    ) {
       playAlertChime();
-      alert('Variance exceeds ₹200 threshold. Please provide an audit explanation note.');
+      alert('Please enter valid numerical amounts for physical cash, card POS batch total, and UPI settlements.');
       return;
     }
 
-    const report = createClosingChecklistReport({
+    if (cashNum < 0 || cardNum < 0 || upiNum < 0) {
+      playAlertChime();
+      alert('Entered amounts cannot be negative.');
+      return;
+    }
+
+    if (hasVarianceAlert && !varianceReason.trim()) {
+      playAlertChime();
+      alert('Discrepancy exceeds ₹200 threshold. Please provide an audit explanation note before confirming submission.');
+      return;
+    }
+
+    const calculatedTotal = cashNum + cardNum + upiNum;
+    const pending = {
       expected: { cash: expectedCash, card: expectedCard, upi: expectedUpi, total: totalExpected },
-      actual: {
-        cash: Number(actualCash || 0),
-        card: Number(actualCard || 0),
-        upi: Number(actualUpi || 0),
-        total: Number(actualCash || 0) + Number(actualCard || 0) + Number(actualUpi || 0)
-      },
+      actual: { cash: cashNum, card: cardNum, upi: upiNum, total: calculatedTotal },
       variance: totalVariance,
-      varianceReason
+      varianceReason: varianceReason.trim() || 'Balanced settlement within threshold',
+      submittedBy: isOwnerOverride ? 'Owner (Direct)' : (currentStaff?.name || 'Counter Staff'),
+      staffRole: isOwnerOverride ? 'Owner Admin' : (currentStaff?.role || 'Counter POS Lead')
+    };
+
+    setClosingPendingReport(pending);
+    setShowClosingConfirmModal(true);
+  };
+
+  // Final Confirmed Submission - only executes after staff re-confirms calculations in pop-up
+  const handleConfirmAndSubmitClosing = () => {
+    playTapSound();
+    if (!closingPendingReport) return;
+
+    const report = createClosingChecklistReport({
+      expected: closingPendingReport.expected,
+      actual: closingPendingReport.actual,
+      variance: closingPendingReport.variance,
+      varianceReason: closingPendingReport.varianceReason,
+      submittedBy: closingPendingReport.submittedBy,
+      staffRole: closingPendingReport.staffRole
     });
 
-    setChecklists((prev) => [report, ...prev]);
+    if (setChecklists) {
+      setChecklists((prev) => [report, ...(Array.isArray(prev) ? prev : [])]);
+    }
     broadcastSyncEvent(SYNC_EVENTS.CHECKLIST_SUBMITTED, report);
+    setShowClosingConfirmModal(false);
     setChecklistSubmitted(true);
     playSuccessChime();
   };
@@ -454,6 +520,44 @@ export default function CounterView({
         </div>
       )}
 
+      {/* Real-time Permissions Sync Notification Toast */}
+      {permissionsToast && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '9px 14px',
+            background: '#F0FDF4',
+            border: '1px solid #86EFAC',
+            borderRadius: 12,
+            marginBottom: 10,
+            color: '#15803D',
+            fontSize: 12,
+            fontWeight: 600,
+            animation: 'fadeIn 0.2s ease-in-out'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <CheckCircle2 size={16} color="#16A34A" />
+            <span>{permissionsToast}</span>
+          </div>
+          <button
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#15803D',
+              cursor: 'pointer',
+              padding: 2,
+              fontWeight: 700
+            }}
+            onClick={() => setPermissionsToast('')}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Terminal Operator & Permissions Status Bar */}
       <div
         style={{
@@ -475,38 +579,48 @@ export default function CounterView({
           <span style={{ fontSize: 12, fontWeight: 700, color: '#1E293B' }}>
             Terminal Operator:
           </span>
-          {canReturnToAdmin ? (
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: '#7C3AED',
-                background: '#F5F3FF',
-                padding: '2px 8px',
-                borderRadius: 8,
-                border: '1px solid #DDD6FE'
-              }}
-            >
-              Owner Admin (Full Permissions)
-            </span>
-          ) : activeStaffList.length > 0 ? (
+          {activeStaffList.length > 0 || canReturnToAdmin ? (
             <select
               className="ios-select"
-              value={activeStaffId || activeStaffList[0]?.id}
+              value={isOwnerOverride ? '__owner_admin__' : (activeStaffId || activeStaffList[0]?.id)}
               onChange={(e) => {
-                setActiveStaffId(e.target.value);
+                const val = e.target.value;
+                setActiveStaffId(val);
                 try {
-                  localStorage.setItem('counter_active_staff_id', e.target.value);
+                  localStorage.setItem('counter_active_staff_id', val);
                 } catch {}
                 playTapSound();
               }}
-              style={{ padding: '3px 8px', fontSize: 11.5, fontWeight: 600, minWidth: 150 }}
+              style={{
+                padding: '4px 10px',
+                fontSize: 12,
+                fontWeight: 600,
+                minWidth: 180,
+                borderColor: isOwnerOverride ? '#DDD6FE' : '#CBD5E1',
+                background: isOwnerOverride ? '#F5F3FF' : '#FFFFFF',
+                color: isOwnerOverride ? '#6D28D9' : '#1E293B'
+              }}
             >
-              {activeStaffList.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.name} ({emp.role})
+              {canReturnToAdmin && (
+                <option value="__owner_admin__">
+                  👑 Owner Admin (Master Override)
                 </option>
-              ))}
+              )}
+              {canReturnToAdmin && activeStaffList.length > 0 ? (
+                <optgroup label="Active Counter Staff">
+                  {activeStaffList.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.role})
+                    </option>
+                  ))}
+                </optgroup>
+              ) : (
+                activeStaffList.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name} ({emp.role})
+                  </option>
+                ))
+              )}
             </select>
           ) : (
             <span style={{ fontSize: 11.5, color: '#64748B' }}>Default Floor Staff</span>
@@ -521,14 +635,18 @@ export default function CounterView({
               alignItems: 'center',
               gap: 4,
               fontSize: 10.5,
-              padding: '2px 8px',
+              padding: '3px 9px',
               borderRadius: 8,
               fontWeight: 600,
-              background: effectivePermissions.canEditPrice ? '#DCFCE7' : '#F1F5F9',
-              color: effectivePermissions.canEditPrice ? '#15803D' : '#94A3B8',
-              border: `1px solid ${effectivePermissions.canEditPrice ? '#BBF7D0' : '#E2E8F0'}`
+              background: effectivePermissions.canEditPrice ? '#DCFCE7' : '#FEF2F2',
+              color: effectivePermissions.canEditPrice ? '#15803D' : '#DC2626',
+              border: `1px solid ${effectivePermissions.canEditPrice ? '#BBF7D0' : '#FECACA'}`
             }}
-            title={effectivePermissions.canEditPrice ? "Price editing permitted by owner" : "Price editing locked by owner"}
+            title={
+              effectivePermissions.canEditPrice
+                ? `Price editing permitted for ${isOwnerOverride ? 'Owner Admin' : currentStaff?.name || 'Staff'}`
+                : `Price editing locked by Owner for ${currentStaff?.name || 'Staff'}`
+            }
           >
             {effectivePermissions.canEditPrice ? '✓ Price Edit Allowed' : '🔒 Price Edit Locked'}
           </span>
@@ -539,14 +657,18 @@ export default function CounterView({
               alignItems: 'center',
               gap: 4,
               fontSize: 10.5,
-              padding: '2px 8px',
+              padding: '3px 9px',
               borderRadius: 8,
               fontWeight: 600,
-              background: effectivePermissions.canCreateDiscounts ? '#DCFCE7' : '#F1F5F9',
-              color: effectivePermissions.canCreateDiscounts ? '#15803D' : '#94A3B8',
-              border: `1px solid ${effectivePermissions.canCreateDiscounts ? '#BBF7D0' : '#E2E8F0'}`
+              background: effectivePermissions.canCreateDiscounts ? '#DCFCE7' : '#FEF2F2',
+              color: effectivePermissions.canCreateDiscounts ? '#15803D' : '#DC2626',
+              border: `1px solid ${effectivePermissions.canCreateDiscounts ? '#BBF7D0' : '#FECACA'}`
             }}
-            title={effectivePermissions.canCreateDiscounts ? "Offers creation permitted by owner" : "Offers creation locked by owner"}
+            title={
+              effectivePermissions.canCreateDiscounts
+                ? `Offers creation permitted for ${isOwnerOverride ? 'Owner Admin' : currentStaff?.name || 'Staff'}`
+                : `Offers creation locked by Owner for ${currentStaff?.name || 'Staff'}`
+            }
           >
             {effectivePermissions.canCreateDiscounts ? '✓ Offers Allowed' : '🔒 Offers Locked'}
           </span>
@@ -1225,14 +1347,16 @@ export default function CounterView({
 
                       <button
                         onClick={() => handleDeleteOffer(off.id)}
+                        disabled={!effectivePermissions.canCreateDiscounts}
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: '#DC2626',
-                          cursor: 'pointer',
-                          padding: 6
+                          color: effectivePermissions.canCreateDiscounts ? '#DC2626' : '#94A3B8',
+                          cursor: effectivePermissions.canCreateDiscounts ? 'pointer' : 'not-allowed',
+                          padding: 6,
+                          opacity: effectivePermissions.canCreateDiscounts ? 1 : 0.4
                         }}
-                        title="Delete coupon"
+                        title={effectivePermissions.canCreateDiscounts ? "Delete coupon" : `Coupon deletion locked by Owner for ${currentStaff?.name || 'Staff'}`}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -1299,7 +1423,7 @@ export default function CounterView({
             </div>
 
             {/* Data Entry Fields */}
-            <form onSubmit={handleSubmitClosingChecklist}>
+            <form onSubmit={handleOpenClosingConfirmModal}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
@@ -1393,7 +1517,7 @@ export default function CounterView({
 
               <button type="submit" className="btn-primary-pill full-width">
                 <CheckCircle2 size={16} />
-                <span>Submit Closing Report & Save to Owner P&L</span>
+                <span>Verify Calculations & Submit Closing EOD</span>
               </button>
             </form>
 
@@ -1403,20 +1527,312 @@ export default function CounterView({
                   marginTop: 14,
                   background: '#DCFCE7',
                   border: '1px solid #86EFAC',
-                  padding: 12,
+                  padding: 14,
                   borderRadius: 14,
-                  color: '#16A34A',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8
+                  color: '#15803D'
                 }}
               >
-                <Check size={16} strokeWidth={3} />
-                <span>Daily Sales Closing Report successfully recorded for Owner!</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13 }}>
+                  <CheckCircle2 size={18} />
+                  <span>Daily Sales Closing EOD Reconciled & Successfully Recorded!</span>
+                </div>
+                <div style={{ marginTop: 4, fontSize: 12, color: '#166534', lineHeight: 1.4 }}>
+                  Calculated filled total of <strong>₹{(Number(actualCash || 0) + Number(actualCard || 0) + Number(actualUpi || 0)).toFixed(0)}</strong> has been synchronized and is now reflected live on the Owner Admin Dashboard.
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary-pill"
+                  style={{ marginTop: 10, padding: '6px 14px', fontSize: 11 }}
+                  onClick={() => {
+                    playTapSound();
+                    setChecklistSubmitted(false);
+                  }}
+                >
+                  Enter New EOD Count / Revise
+                </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMATION POP-UP MODAL (FR-P8 & Double-Check Prompt Before Final Lock) */}
+      {showClosingConfirmModal && closingPendingReport && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 1200 }}
+          onClick={() => setShowClosingConfirmModal(false)}
+        >
+          <div
+            className="modal-content-sheet"
+            style={{ maxWidth: 540 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-drag-pill" />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 12,
+                  background: '#FEF3C7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#D97706'
+                }}
+              >
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <div className="card-heading" style={{ fontSize: 17 }}>
+                  Re-confirm EOD Numbers & Calculations
+                </div>
+                <div className="card-meta-text" style={{ fontSize: 11 }}>
+                  Double-check your physical counts before submitting to Owner Dashboard
+                </div>
+              </div>
+            </div>
+
+            {/* Double Check Warning & Prompt */}
+            <div
+              style={{
+                background: '#FFFBEB',
+                border: '1px solid #FDE68A',
+                borderRadius: 12,
+                padding: '10px 12px',
+                fontSize: 12,
+                color: '#92400E',
+                marginBottom: 14,
+                lineHeight: 1.45
+              }}
+            >
+              <strong>⚠️ Please Double Check:</strong> Ensure that your physical cash tally, Pine Labs batch settlement slips, and UPI Merchant App summaries are 100% verified. When you click <strong>"Confirm & Submit EOD"</strong>, this calculated report will be locked and reflected immediately on the Owner's Dashboard.
+            </div>
+
+            {/* Operator Submitting Pill */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#F3F4F6',
+                borderRadius: 10,
+                padding: '8px 12px',
+                fontSize: 12,
+                marginBottom: 14
+              }}
+            >
+              <span style={{ color: 'var(--text-muted)' }}>Submitting Staff:</span>
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {closingPendingReport.submittedBy} ({closingPendingReport.staffRole})
+              </strong>
+            </div>
+
+            {/* Comparison Reconciliation Table */}
+            <div
+              style={{
+                border: '1px solid #E5E7EB',
+                borderRadius: 14,
+                overflow: 'hidden',
+                marginBottom: 14
+              }}
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                  padding: '8px 12px',
+                  background: '#F9FAFB',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: 'var(--text-secondary)',
+                  borderBottom: '1px solid #E5E7EB'
+                }}
+              >
+                <span>Channel</span>
+                <span style={{ textAlign: 'right' }}>Entered/Filled</span>
+                <span style={{ textAlign: 'right' }}>Expected</span>
+                <span style={{ textAlign: 'right' }}>Difference</span>
+              </div>
+
+              {/* Cash row */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                  padding: '9px 12px',
+                  fontSize: 12,
+                  borderBottom: '1px solid #F3F4F6',
+                  alignItems: 'center'
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>💵 Cash at Counter</span>
+                <span style={{ textAlign: 'right', fontWeight: 700, color: '#16A34A' }}>
+                  ₹{closingPendingReport.actual.cash.toFixed(0)}
+                </span>
+                <span style={{ textAlign: 'right', color: 'var(--text-muted)' }}>
+                  ₹{closingPendingReport.expected.cash.toFixed(0)}
+                </span>
+                <span
+                  style={{
+                    textAlign: 'right',
+                    fontWeight: 600,
+                    color: closingPendingReport.actual.cash - closingPendingReport.expected.cash >= 0 ? '#16A34A' : '#EF4444'
+                  }}
+                >
+                  {closingPendingReport.actual.cash - closingPendingReport.expected.cash >= 0
+                    ? `+₹${(closingPendingReport.actual.cash - closingPendingReport.expected.cash).toFixed(0)}`
+                    : `-₹${Math.abs(closingPendingReport.actual.cash - closingPendingReport.expected.cash).toFixed(0)}`}
+                </span>
+              </div>
+
+              {/* Card row */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                  padding: '9px 12px',
+                  fontSize: 12,
+                  borderBottom: '1px solid #F3F4F6',
+                  alignItems: 'center'
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>💳 Card POS Batch</span>
+                <span style={{ textAlign: 'right', fontWeight: 700, color: 'var(--primary-blue)' }}>
+                  ₹{closingPendingReport.actual.card.toFixed(0)}
+                </span>
+                <span style={{ textAlign: 'right', color: 'var(--text-muted)' }}>
+                  ₹{closingPendingReport.expected.card.toFixed(0)}
+                </span>
+                <span
+                  style={{
+                    textAlign: 'right',
+                    fontWeight: 600,
+                    color: closingPendingReport.actual.card - closingPendingReport.expected.card >= 0 ? '#16A34A' : '#EF4444'
+                  }}
+                >
+                  {closingPendingReport.actual.card - closingPendingReport.expected.card >= 0
+                    ? `+₹${(closingPendingReport.actual.card - closingPendingReport.expected.card).toFixed(0)}`
+                    : `-₹${Math.abs(closingPendingReport.actual.card - closingPendingReport.expected.card).toFixed(0)}`}
+                </span>
+              </div>
+
+              {/* UPI row */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                  padding: '9px 12px',
+                  fontSize: 12,
+                  borderBottom: '1px solid #F3F4F6',
+                  alignItems: 'center'
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>📱 UPI Settlement</span>
+                <span style={{ textAlign: 'right', fontWeight: 700, color: '#8B5CF6' }}>
+                  ₹{closingPendingReport.actual.upi.toFixed(0)}
+                </span>
+                <span style={{ textAlign: 'right', color: 'var(--text-muted)' }}>
+                  ₹{closingPendingReport.expected.upi.toFixed(0)}
+                </span>
+                <span
+                  style={{
+                    textAlign: 'right',
+                    fontWeight: 600,
+                    color: closingPendingReport.actual.upi - closingPendingReport.expected.upi >= 0 ? '#16A34A' : '#EF4444'
+                  }}
+                >
+                  {closingPendingReport.actual.upi - closingPendingReport.expected.upi >= 0
+                    ? `+₹${(closingPendingReport.actual.upi - closingPendingReport.expected.upi).toFixed(0)}`
+                    : `-₹${Math.abs(closingPendingReport.actual.upi - closingPendingReport.expected.upi).toFixed(0)}`}
+                </span>
+              </div>
+
+              {/* TOTAL CALCULATED FILLED ROW */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                  padding: '10px 12px',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  background: '#F0FDF4',
+                  borderTop: '2px solid #86EFAC',
+                  alignItems: 'center'
+                }}
+              >
+                <span>CALCULATED TOTAL:</span>
+                <span style={{ textAlign: 'right', color: '#15803D' }}>
+                  ₹{closingPendingReport.actual.total.toFixed(0)}
+                </span>
+                <span style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                  ₹{closingPendingReport.expected.total.toFixed(0)}
+                </span>
+                <span
+                  style={{
+                    textAlign: 'right',
+                    color: closingPendingReport.variance >= 0 ? '#15803D' : '#DC2626'
+                  }}
+                >
+                  {closingPendingReport.variance >= 0
+                    ? `+₹${closingPendingReport.variance.toFixed(0)}`
+                    : `-₹${Math.abs(closingPendingReport.variance).toFixed(0)}`}
+                </span>
+              </div>
+            </div>
+
+            {/* Variance Note if provided */}
+            {closingPendingReport.varianceReason && (
+              <div
+                style={{
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: 10,
+                  padding: '8px 12px',
+                  fontSize: 12,
+                  marginBottom: 14
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 2 }}>
+                  Audit Explanation Note:
+                </div>
+                <div style={{ fontStyle: 'italic', color: 'var(--text-primary)' }}>
+                  "{closingPendingReport.varianceReason}"
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                className="btn-secondary-pill"
+                style={{ flex: 1, padding: '12px 14px', fontSize: 13 }}
+                onClick={() => {
+                  playTapSound();
+                  setShowClosingConfirmModal(false);
+                }}
+              >
+                ← Edit Numbers
+              </button>
+              <button
+                type="button"
+                className="btn-primary-pill"
+                style={{
+                  flex: 1.5,
+                  padding: '12px 14px',
+                  fontSize: 13,
+                  background: '#16A34A',
+                  color: '#FFFFFF'
+                }}
+                onClick={handleConfirmAndSubmitClosing}
+              >
+                <CheckCircle2 size={16} />
+                <span>Confirm & Submit EOD</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

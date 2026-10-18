@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Receipt,
   Users,
@@ -29,13 +29,18 @@ import {
   UserPlus,
   UserCheck,
   UserX,
-  X
+  X,
+  DollarSign,
+  Clock,
+  AlertTriangle,
+  FileSpreadsheet,
+  CheckSquare
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import BankReconciliationView from './BankReconciliationView';
 import InventoryView from './InventoryView';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
-import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
+import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
 import { STORAGE_KEYS, saveData } from '../utils/storage';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 import { getActiveBusiness, updateBusiness } from '../utils/businessManager';
@@ -60,7 +65,8 @@ export default function AdminView({
   setTheme,
   chef,
   setChef,
-  checklists: _checklists,
+  checklists = [],
+  setChecklists,
   offers = [],
   setOffers,
   activeAdminTab: externalActiveAdminTab,
@@ -73,6 +79,33 @@ export default function AdminView({
   const [orderSearch, setOrderSearch] = useState('');
   const [showWalkInPunch, setShowWalkInPunch] = useState(false);
   const [payrollDisbursed, setPayrollDisbursed] = useState(false);
+  const [liveEodToast, setLiveEodToast] = useState('');
+
+  // Real-time synchronization: listen for live EOD checklist submissions from Counter Staff
+  useEffect(() => {
+    const unsubscribe = subscribeSyncEvents((msg) => {
+      if (msg.type === SYNC_EVENTS.CHECKLIST_SUBMITTED && msg.payload) {
+        if (setChecklists) {
+          setChecklists((prev) => {
+            const list = Array.isArray(prev) ? prev : [];
+            const exists = list.some((item) => item.id === msg.payload.id);
+            if (exists) {
+              return list.map((item) => (item.id === msg.payload.id ? msg.payload : item));
+            }
+            return [msg.payload, ...list];
+          });
+        }
+        const filledAmt = msg.payload.actual?.total ?? 0;
+        const submitter = msg.payload.submittedBy || 'Counter Staff';
+        setLiveEodToast(
+          `⚡ Live EOD Closing Received: ${submitter} submitted calculated filled amount of ₹${Number(filledAmt).toLocaleString('en-IN')}`
+        );
+        playSuccessChime();
+        setTimeout(() => setLiveEodToast(''), 7000);
+      }
+    });
+    return () => unsubscribe();
+  }, [setChecklists]);
 
   // Coupons & Offers Management State
   const [showCouponModal, setShowCouponModal] = useState(false);
@@ -119,6 +152,7 @@ export default function AdminView({
   const [editingPayInput, setEditingPayInput] = useState({}); // { [staffId]: string }
   const [isSavingStaff, setIsSavingStaff] = useState(false);
   const [staffSaveSuccess, setStaffSaveSuccess] = useState(false);
+  const [staffSyncFeedback, setStaffSyncFeedback] = useState('');
 
   // Menu Management Modal State
   const [showAddDishModal, setShowAddDishModal] = useState(false);
@@ -351,7 +385,7 @@ export default function AdminView({
     setTimeout(() => setCustomizerSaveSuccess(false), 3500);
   };
 
-  // Sales KPIs calculation in ₹
+  // Sales KPIs calculation in ₹ (System Expected Numbers)
   const totalOrdersCount = orders.length;
   const todayGrossSales = orders.reduce((sum, o) => sum + o.total, 0);
   const weekSales = todayGrossSales * 5.4;
@@ -361,9 +395,29 @@ export default function AdminView({
   const cardSplit = orders.filter((o) => o.paymentMode.toLowerCase().includes('card')).reduce((s, o) => s + o.total, 0);
   const upiSplit = orders.filter((o) => o.paymentMode.toLowerCase().includes('upi')).reduce((s, o) => s + o.total, 0);
 
+  // EOD Closing Reconciliation & Staff Calculated Filled Amounts
+  const todayDateStr = new Date().toLocaleDateString();
+  const latestEodReport = useMemo(() => {
+    if (!Array.isArray(checklists) || checklists.length === 0) return null;
+    const todayReport = checklists.find((c) => c.date === todayDateStr);
+    return todayReport || checklists[0] || null;
+  }, [checklists, todayDateStr]);
+
+  const hasEodSubmitted = Boolean(latestEodReport);
+  const filledCash = latestEodReport?.actual?.cash ?? null;
+  const filledCard = latestEodReport?.actual?.card ?? null;
+  const filledUpi = latestEodReport?.actual?.upi ?? null;
+  const filledTotalRevenue = latestEodReport?.actual?.total ?? null;
+  const expectedTotalReport = latestEodReport?.expected?.total ?? todayGrossSales;
+  const eodVariance = latestEodReport?.variance ?? (hasEodSubmitted && filledTotalRevenue !== null ? filledTotalRevenue - expectedTotalReport : 0);
+
+  // Effective revenue reflecting staff-calculated filled amounts if submitted
+  const effectiveGrossSales = hasEodSubmitted && filledTotalRevenue !== null ? filledTotalRevenue : todayGrossSales;
+
   // P&L Calculations (FR-A3 & 5.4) in ₹
   const totalRecordedExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-  const netDailyProfit = todayGrossSales - totalRecordedExpenses;
+  const netDailyProfit = effectiveGrossSales - totalRecordedExpenses;
+  const expectedNetProfit = todayGrossSales - totalRecordedExpenses;
 
   // Cash vs Obligations in ₹ (Section 5.4)
   const totalUpcomingObligations =
@@ -540,23 +594,51 @@ export default function AdminView({
     }
   };
 
+  // Helper to persist staff to active business record & scoped localStorage, and broadcast live
+  const persistAndBroadcastStaff = (updatedStaff) => {
+    const activeBiz = getActiveBusiness();
+    const scopedStaffKey = activeBiz?.id && activeBiz.id !== 'biz_advait'
+      ? `${STORAGE_KEYS.STAFF}_${activeBiz.id}`
+      : STORAGE_KEYS.STAFF;
+    saveData(scopedStaffKey, updatedStaff);
+    broadcastSyncEvent(SYNC_EVENTS.STAFF_UPDATED, updatedStaff);
+  };
+
   // User Management & Permissions
   const handleToggleStaffPermission = (staffId, permKey) => {
     playTapSound();
-    setStaffSaveSuccess(false);
-    setStaff((prev) =>
-      prev.map((s) =>
-        s.id === staffId
-          ? {
-              ...s,
-              permissions: {
-                ...s.permissions,
-                [permKey]: !s.permissions?.[permKey]
-              }
-            }
-          : s
-      )
-    );
+    let targetName = 'Staff member';
+    let newPermVal = false;
+    const updatedStaff = staff.map((s) => {
+      if (s.id === staffId) {
+        targetName = s.name;
+        newPermVal = !s.permissions?.[permKey];
+        return {
+          ...s,
+          permissions: {
+            ...s.permissions,
+            [permKey]: newPermVal
+          }
+        };
+      }
+      return s;
+    });
+
+    // 1. Update parent state
+    setStaff(updatedStaff);
+
+    // 2. Persist to storage & broadcast immediately to open POS terminals
+    persistAndBroadcastStaff(updatedStaff);
+
+    // 3. Clear, immediate feedback
+    const permLabel = permKey === 'canEditPrice' ? 'POS Price Edit' : 'Issue Promo Offers';
+    const statusLabel = newPermVal ? '✓ Permission Granted' : '🔒 Permission Locked (Revoked)';
+    setStaffSyncFeedback(`${statusLabel}: "${permLabel}" for ${targetName}. Synced live to Counter POS.`);
+    setStaffSaveSuccess(true);
+    setTimeout(() => {
+      setStaffSaveSuccess(false);
+      setStaffSyncFeedback('');
+    }, 4000);
   };
 
   // Explicit Save & Broadcast Handler for Staff and Terminal Permissions
@@ -568,21 +650,18 @@ export default function AdminView({
     const updatedStaff = [...staff];
     setStaff(updatedStaff);
 
-    // 2. Persist in active business record & scoped localStorage
-    const activeBiz = getActiveBusiness();
-    const scopedStaffKey = activeBiz?.id && activeBiz.id !== 'biz_advait'
-      ? `${STORAGE_KEYS.STAFF}_${activeBiz.id}`
-      : STORAGE_KEYS.STAFF;
-    saveData(scopedStaffKey, updatedStaff);
+    // 2. Persist in active business record & scoped localStorage & broadcast
+    persistAndBroadcastStaff(updatedStaff);
 
-    // 3. Real-time broadcast to all open POS terminals / windows
-    broadcastSyncEvent(SYNC_EVENTS.STAFF_UPDATED, updatedStaff);
-
-    // 4. Success feedback
+    // 3. Success feedback
     playSuccessChime();
     setIsSavingStaff(false);
+    setStaffSyncFeedback('✓ All staff permissions and roles successfully broadcasted to Counter POS.');
     setStaffSaveSuccess(true);
-    setTimeout(() => setStaffSaveSuccess(false), 4000);
+    setTimeout(() => {
+      setStaffSaveSuccess(false);
+      setStaffSyncFeedback('');
+    }, 4000);
   };
 
   // Staff Payroll Net Pay Calculation (without attendance)
@@ -649,29 +728,28 @@ export default function AdminView({
       ? Number(staffFormData.monthEndPay) || 0
       : wage;
 
+    let updatedStaff;
     if (editingStaffId) {
       // Update existing staff
-      setStaff((prev) =>
-        prev.map((s) =>
-          s.id === editingStaffId
-            ? {
-                ...s,
-                name: staffFormData.name.trim(),
-                role: staffFormData.role.trim() || 'Restaurant Associate',
-                phone: staffFormData.phone.trim() || 'N/A',
-                monthlyWage: wage,
-                monthEndPay: endPay,
-                status: staffFormData.status || 'active',
-                bankAccount: staffFormData.bankAccount.trim() || s.bankAccount,
-                ifsc: staffFormData.ifsc.trim() || s.ifsc || 'HDFC0000128',
-                permissions: {
-                  ...s.permissions,
-                  canEditPrice: Boolean(staffFormData.canEditPrice),
-                  canCreateDiscounts: Boolean(staffFormData.canCreateDiscounts)
-                }
+      updatedStaff = staff.map((s) =>
+        s.id === editingStaffId
+          ? {
+              ...s,
+              name: staffFormData.name.trim(),
+              role: staffFormData.role.trim() || 'Restaurant Associate',
+              phone: staffFormData.phone.trim() || 'N/A',
+              monthlyWage: wage,
+              monthEndPay: endPay,
+              status: staffFormData.status || 'active',
+              bankAccount: staffFormData.bankAccount.trim() || s.bankAccount,
+              ifsc: staffFormData.ifsc.trim() || s.ifsc || 'HDFC0000128',
+              permissions: {
+                ...s.permissions,
+                canEditPrice: Boolean(staffFormData.canEditPrice),
+                canCreateDiscounts: Boolean(staffFormData.canCreateDiscounts)
               }
-            : s
-        )
+            }
+          : s
       );
     } else {
       // Add new staff member
@@ -691,11 +769,19 @@ export default function AdminView({
           canViewPnL: false
         }
       };
-      setStaff((prev) => [newStaffMember, ...prev]);
+      updatedStaff = [newStaffMember, ...staff];
     }
 
+    setStaff(updatedStaff);
+    persistAndBroadcastStaff(updatedStaff);
     setShowStaffModal(false);
     playSuccessChime();
+    setStaffSyncFeedback('✓ Staff records & permissions saved and synced live to Counter POS.');
+    setStaffSaveSuccess(true);
+    setTimeout(() => {
+      setStaffSaveSuccess(false);
+      setStaffSyncFeedback('');
+    }, 4000);
   };
 
   const handleToggleResignStaff = (emp) => {
@@ -703,9 +789,9 @@ export default function AdminView({
     const newStatus = emp.status === 'resigned' ? 'active' : 'resigned';
     const actionLabel = newStatus === 'resigned' ? 'mark as resigned' : 'reactivate';
     if (window.confirm(`Are you sure you want to ${actionLabel} ${emp.name}?`)) {
-      setStaff((prev) =>
-        prev.map((s) => (s.id === emp.id ? { ...s, status: newStatus } : s))
-      );
+      const updated = staff.map((s) => (s.id === emp.id ? { ...s, status: newStatus } : s));
+      setStaff(updated);
+      persistAndBroadcastStaff(updated);
       playSuccessChime();
     }
   };
@@ -713,7 +799,9 @@ export default function AdminView({
   const handleDeleteStaff = (emp) => {
     playTapSound();
     if (window.confirm(`Are you sure you want to permanently delete ${emp.name} from staff records?`)) {
-      setStaff((prev) => prev.filter((s) => s.id !== emp.id));
+      const updated = staff.filter((s) => s.id !== emp.id);
+      setStaff(updated);
+      persistAndBroadcastStaff(updated);
       playAlertChime();
     }
   };
@@ -911,6 +999,41 @@ export default function AdminView({
         <div className="screen-subtitle">Indian Restaurant Analytics, P&L, Operations & Payroll</div>
       </div>
 
+      {/* Live EOD Submission Notification Toast */}
+      {liveEodToast && (
+        <div
+          style={{
+            background: 'linear-gradient(90deg, #15803D 0%, #16A34A 100%)',
+            color: '#FFFFFF',
+            padding: '10px 14px',
+            borderRadius: 14,
+            marginBottom: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 4px 14px rgba(22, 163, 74, 0.3)',
+            animation: 'fadeIn 0.25s ease-in-out'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+            <CheckCircle2 size={18} />
+            <span>{liveEodToast}</span>
+          </div>
+          <button
+            onClick={() => setLiveEodToast('')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#FFFFFF',
+              cursor: 'pointer',
+              padding: 4
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Admin Tabs */}
       <div className="filter-tabs-container" style={{ padding: '0 0 12px' }}>
         {[
@@ -918,6 +1041,7 @@ export default function AdminView({
           { id: 'orders', label: 'Orders & CSV', inFooter: true },
           { id: 'punch', label: '+ Punch Walk-in', inFooter: false },
           { id: 'pnl', label: 'P&L & Cash Check', inFooter: true },
+          { id: 'eod-checklists', label: hasEodSubmitted ? 'EOD Closing Audit (Filled)' : 'EOD Closing Audit', inFooter: false },
           { id: 'offers', label: 'Coupons & Offers', inFooter: true },
           { id: 'bank-rec', label: 'Bank CSV Rec', inFooter: false },
           { id: 'payroll', label: 'Staff Payroll', inFooter: true },
@@ -997,14 +1121,356 @@ export default function AdminView({
             </button>
           </div>
 
+          {/* DAILY CLOSING EOD RECONCILIATION CARD (Staff Count vs System Expected) */}
+          <div
+            className="ios-card"
+            style={{
+              marginBottom: 16,
+              border: hasEodSubmitted ? '1.5px solid #86EFAC' : '1.5px dashed #CBD5E1',
+              background: hasEodSubmitted
+                ? 'linear-gradient(180deg, #F0FDF4 0%, #FFFFFF 100%)'
+                : '#FFFFFF',
+              boxShadow: hasEodSubmitted
+                ? '0 4px 16px rgba(22, 163, 74, 0.08)'
+                : 'none'
+            }}
+          >
+            <div className="card-top-row" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              <div className="card-title-group">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span className="card-heading" style={{ fontSize: 16 }}>
+                    Daily Closing EOD (Staff Filled vs Expected)
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      borderRadius: 20,
+                      background: hasEodSubmitted ? '#DCFCE7' : '#FEF3C7',
+                      color: hasEodSubmitted ? '#15803D' : '#B45309',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    {hasEodSubmitted ? (
+                      <>
+                        <CheckCircle2 size={12} />
+                        <span>✓ EOD Filled & Audited</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock size={12} />
+                        <span>⏳ Awaiting Staff Submission</span>
+                      </>
+                    )}
+                  </span>
+                </div>
+                <span className="card-meta-text">
+                  {hasEodSubmitted
+                    ? `Counted and submitted by ${latestEodReport.submittedBy || 'Counter Staff'} (${latestEodReport.staffRole || 'Operator'}) on ${latestEodReport.date} at ${latestEodReport.timestamp || ''}`
+                    : 'Actual physical cash in register, Pine Labs card batch, and UPI settlements'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn-secondary-pill"
+                  style={{ padding: '5px 10px', fontSize: 11 }}
+                  onClick={() => {
+                    playTapSound();
+                    setActiveAdminTab('eod-checklists');
+                  }}
+                >
+                  <FileSpreadsheet size={13} />
+                  <span>Audit History</span>
+                </button>
+              </div>
+            </div>
+
+            {hasEodSubmitted ? (
+              <div>
+                {/* 3 Prominent Metrics Boxes */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: 10,
+                    marginBottom: 14
+                  }}
+                >
+                  <div
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1.5px solid #86EFAC',
+                      borderRadius: 14,
+                      padding: '10px 12px',
+                      boxShadow: '0 2px 6px rgba(22, 163, 74, 0.05)'
+                    }}
+                  >
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#15803D' }}>
+                      Calculated Filled Amount
+                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#15803D', marginTop: 2 }}>
+                      ₹{filledTotalRevenue.toLocaleString('en-IN')}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                      Physical count + settled
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1px solid #E5E7EB',
+                      borderRadius: 14,
+                      padding: '10px 12px'
+                    }}
+                  >
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
+                      System Expected Total
+                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--primary-blue)', marginTop: 2 }}>
+                      ₹{expectedTotalReport.toLocaleString('en-IN')}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                      From orders ({totalOrdersCount})
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      background: '#FFFFFF',
+                      border: `1px solid ${eodVariance >= 0 ? '#BBF7D0' : '#FECACA'}`,
+                      borderRadius: 14,
+                      padding: '10px 12px'
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: eodVariance >= 0 ? '#15803D' : '#DC2626'
+                      }}
+                    >
+                      Reconciliation Net Variance
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 20,
+                        fontWeight: 800,
+                        color: eodVariance >= 0 ? '#15803D' : '#DC2626',
+                        marginTop: 2
+                      }}
+                    >
+                      {eodVariance >= 0
+                        ? `+₹${eodVariance.toLocaleString('en-IN')}`
+                        : `-₹${Math.abs(eodVariance).toLocaleString('en-IN')}`}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {eodVariance === 0
+                        ? 'Balanced 1:1 match'
+                        : eodVariance > 0
+                        ? 'Surplus physical cash'
+                        : 'Discrepancy shortfall'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Channel-by-Channel Breakdown Grid */}
+                <div
+                  style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    marginBottom: latestEodReport.varianceReason ? 10 : 0
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                      padding: '8px 12px',
+                      background: '#F9FAFB',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: 'var(--text-secondary)',
+                      borderBottom: '1px solid #E5E7EB'
+                    }}
+                  >
+                    <span>Channel</span>
+                    <span style={{ textAlign: 'right' }}>Calculated Filled</span>
+                    <span style={{ textAlign: 'right' }}>Expected</span>
+                    <span style={{ textAlign: 'right' }}>Difference</span>
+                  </div>
+
+                  {/* Cash */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                      padding: '8px 12px',
+                      fontSize: 12,
+                      borderBottom: '1px solid #F3F4F6',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>💵 Counter Cash</span>
+                    <span style={{ textAlign: 'right', fontWeight: 700, color: '#16A34A' }}>
+                      ₹{filledCash.toFixed(0)}
+                    </span>
+                    <span style={{ textAlign: 'right', color: 'var(--text-muted)' }}>
+                      ₹{(latestEodReport.expected?.cash ?? cashSplit).toFixed(0)}
+                    </span>
+                    <span
+                      style={{
+                        textAlign: 'right',
+                        fontWeight: 600,
+                        color: filledCash - (latestEodReport.expected?.cash ?? cashSplit) >= 0 ? '#16A34A' : '#EF4444'
+                      }}
+                    >
+                      {filledCash - (latestEodReport.expected?.cash ?? cashSplit) >= 0
+                        ? `+₹${(filledCash - (latestEodReport.expected?.cash ?? cashSplit)).toFixed(0)}`
+                        : `-₹${Math.abs(filledCash - (latestEodReport.expected?.cash ?? cashSplit)).toFixed(0)}`}
+                    </span>
+                  </div>
+
+                  {/* Card */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                      padding: '8px 12px',
+                      fontSize: 12,
+                      borderBottom: '1px solid #F3F4F6',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>💳 Card POS Batch</span>
+                    <span style={{ textAlign: 'right', fontWeight: 700, color: 'var(--primary-blue)' }}>
+                      ₹{filledCard.toFixed(0)}
+                    </span>
+                    <span style={{ textAlign: 'right', color: 'var(--text-muted)' }}>
+                      ₹{(latestEodReport.expected?.card ?? cardSplit).toFixed(0)}
+                    </span>
+                    <span
+                      style={{
+                        textAlign: 'right',
+                        fontWeight: 600,
+                        color: filledCard - (latestEodReport.expected?.card ?? cardSplit) >= 0 ? '#16A34A' : '#EF4444'
+                      }}
+                    >
+                      {filledCard - (latestEodReport.expected?.card ?? cardSplit) >= 0
+                        ? `+₹${(filledCard - (latestEodReport.expected?.card ?? cardSplit)).toFixed(0)}`
+                        : `-₹${Math.abs(filledCard - (latestEodReport.expected?.card ?? cardSplit)).toFixed(0)}`}
+                    </span>
+                  </div>
+
+                  {/* UPI */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                      padding: '8px 12px',
+                      fontSize: 12,
+                      alignItems: 'center'
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>📱 UPI Settlement</span>
+                    <span style={{ textAlign: 'right', fontWeight: 700, color: '#8B5CF6' }}>
+                      ₹{filledUpi.toFixed(0)}
+                    </span>
+                    <span style={{ textAlign: 'right', color: 'var(--text-muted)' }}>
+                      ₹{(latestEodReport.expected?.upi ?? upiSplit).toFixed(0)}
+                    </span>
+                    <span
+                      style={{
+                        textAlign: 'right',
+                        fontWeight: 600,
+                        color: filledUpi - (latestEodReport.expected?.upi ?? upiSplit) >= 0 ? '#16A34A' : '#EF4444'
+                      }}
+                    >
+                      {filledUpi - (latestEodReport.expected?.upi ?? upiSplit) >= 0
+                        ? `+₹${(filledUpi - (latestEodReport.expected?.upi ?? upiSplit)).toFixed(0)}`
+                        : `-₹${Math.abs(filledUpi - (latestEodReport.expected?.upi ?? upiSplit)).toFixed(0)}`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Audit explanation note if provided */}
+                {latestEodReport.varianceReason && (
+                  <div
+                    style={{
+                      background: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: 10,
+                      padding: '8px 12px',
+                      fontSize: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}
+                  >
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>
+                      Staff Audit Note:
+                    </span>
+                    <span style={{ fontStyle: 'italic', color: 'var(--text-primary)' }}>
+                      "{latestEodReport.varianceReason}"
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: '#F9FAFB',
+                  border: '1px dashed #D1D5DB',
+                  borderRadius: 12,
+                  padding: '14px',
+                  fontSize: 12,
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.5
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: '#B45309', marginBottom: 4 }}>
+                  <AlertTriangle size={15} />
+                  <span>Closing EOD count has not been submitted by counter staff yet today.</span>
+                </div>
+                Currently, the sales dashboard displays <strong>System Expected Orders Total (₹{todayGrossSales.toFixed(0)})</strong>. As soon as the counter staff fills their physical count, re-confirms in the pop-up modal, and submits, the <strong>Calculated Filled Amount</strong> will be reflected here automatically in real time.
+              </div>
+            )}
+          </div>
+
           {/* Top 3 KPI Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
             <div className="ios-card active-gradient" style={{ padding: '12px 10px' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Today's Sales</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
-                ₹{todayGrossSales.toFixed(0)}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Today's Sales</div>
+                {hasEodSubmitted && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: 6,
+                      background: '#DCFCE7',
+                      color: '#15803D'
+                    }}
+                  >
+                    EOD Filled
+                  </span>
+                )}
               </div>
-              <div style={{ fontSize: 10, color: '#16A34A', marginTop: 4 }}>{totalOrdersCount} orders</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
+                ₹{(hasEodSubmitted ? filledTotalRevenue : todayGrossSales).toFixed(0)}
+              </div>
+              <div style={{ fontSize: 10, color: hasEodSubmitted ? '#15803D' : '#16A34A', marginTop: 4 }}>
+                {hasEodSubmitted
+                  ? `Filled (Expected: ₹${todayGrossSales.toFixed(0)})`
+                  : `${totalOrdersCount} orders (Expected)`}
+              </div>
             </div>
 
             <div className="ios-card" style={{ padding: '12px 10px' }}>
@@ -1029,7 +1495,11 @@ export default function AdminView({
             <div className="card-top-row">
               <div className="card-title-group">
                 <span className="card-heading">Payment Channel Split</span>
-                <span className="card-meta-text">Settlements distribution for today</span>
+                <span className="card-meta-text">
+                  {hasEodSubmitted
+                    ? 'Comparing Staff Filled Actuals vs System Expected Orders'
+                    : 'Settlements distribution for today'}
+                </span>
               </div>
               <Receipt size={18} color="#007AFF" />
             </div>
@@ -1038,7 +1508,16 @@ export default function AdminView({
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                   <span>Cash at Counter</span>
-                  <strong>₹{cashSplit.toFixed(0)} ({todayGrossSales ? ((cashSplit / todayGrossSales) * 100).toFixed(0) : 0}%)</strong>
+                  <div>
+                    {hasEodSubmitted && (
+                      <span style={{ color: '#16A34A', fontWeight: 700, marginRight: 8 }}>
+                        Filled: ₹{filledCash.toFixed(0)}
+                      </span>
+                    )}
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      Expected: ₹{cashSplit.toFixed(0)} ({todayGrossSales ? ((cashSplit / todayGrossSales) * 100).toFixed(0) : 0}%)
+                    </span>
+                  </div>
                 </div>
                 <div style={{ height: 6, background: '#E5E7EB', borderRadius: 4, overflow: 'hidden' }}>
                   <div
@@ -1054,7 +1533,16 @@ export default function AdminView({
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                   <span>Card POS Swipe (Pine Labs)</span>
-                  <strong>₹{cardSplit.toFixed(0)} ({todayGrossSales ? ((cardSplit / todayGrossSales) * 100).toFixed(0) : 0}%)</strong>
+                  <div>
+                    {hasEodSubmitted && (
+                      <span style={{ color: 'var(--primary-blue)', fontWeight: 700, marginRight: 8 }}>
+                        Filled: ₹{filledCard.toFixed(0)}
+                      </span>
+                    )}
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      Expected: ₹{cardSplit.toFixed(0)} ({todayGrossSales ? ((cardSplit / todayGrossSales) * 100).toFixed(0) : 0}%)
+                    </span>
+                  </div>
                 </div>
                 <div style={{ height: 6, background: '#E5E7EB', borderRadius: 4, overflow: 'hidden' }}>
                   <div
@@ -1070,7 +1558,16 @@ export default function AdminView({
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                   <span>Instant UPI QR (GPay / PhonePe / Paytm)</span>
-                  <strong>₹{upiSplit.toFixed(0)} ({todayGrossSales ? ((upiSplit / todayGrossSales) * 100).toFixed(0) : 0}%)</strong>
+                  <div>
+                    {hasEodSubmitted && (
+                      <span style={{ color: '#8B5CF6', fontWeight: 700, marginRight: 8 }}>
+                        Filled: ₹{filledUpi.toFixed(0)}
+                      </span>
+                    )}
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      Expected: ₹{upiSplit.toFixed(0)} ({todayGrossSales ? ((upiSplit / todayGrossSales) * 100).toFixed(0) : 0}%)
+                    </span>
+                  </div>
                 </div>
                 <div style={{ height: 6, background: '#E5E7EB', borderRadius: 4, overflow: 'hidden' }}>
                   <div
@@ -1081,6 +1578,32 @@ export default function AdminView({
                     }}
                   />
                 </div>
+              </div>
+
+              {/* Total Reconciled Inflow Strip */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: '#F9FAFB',
+                  borderRadius: 10,
+                  padding: '8px 12px',
+                  fontSize: 12,
+                  marginTop: 4,
+                  borderTop: '1px solid #E5E7EB'
+                }}
+              >
+                <span>
+                  {hasEodSubmitted ? (
+                    <strong style={{ color: '#15803D' }}>Total Reconciled Filled: ₹{filledTotalRevenue.toFixed(0)}</strong>
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)' }}>EOD Reconciliation Pending</span>
+                  )}
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  Total Expected Orders: <strong>₹{todayGrossSales.toFixed(0)}</strong>
+                </span>
               </div>
             </div>
           </div>
@@ -1371,9 +1894,14 @@ export default function AdminView({
               }}
             >
               <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Gross Revenue</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {hasEodSubmitted ? 'Calculated Gross Revenue' : 'Gross Revenue'}
+                </div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary-blue)' }}>
-                  +₹{todayGrossSales.toFixed(0)}
+                  +₹{effectiveGrossSales.toFixed(0)}
+                </div>
+                <div style={{ fontSize: 9, color: hasEodSubmitted ? '#15803D' : 'var(--text-muted)', marginTop: 2 }}>
+                  {hasEodSubmitted ? `EOD Filled (Exp: ₹${todayGrossSales.toFixed(0)})` : '(System Expected)'}
                 </div>
               </div>
               <div>
@@ -1381,11 +1909,17 @@ export default function AdminView({
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#DC2626' }}>
                   -₹{totalRecordedExpenses.toFixed(0)}
                 </div>
+                <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>
+                  ({expenses.length} entries)
+                </div>
               </div>
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Net Real Profit</div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: netDailyProfit >= 0 ? '#16A34A' : '#DC2626' }}>
                   ₹{netDailyProfit.toFixed(0)}
+                </div>
+                <div style={{ fontSize: 9, color: netDailyProfit >= 0 ? '#15803D' : '#DC2626', marginTop: 2 }}>
+                  {hasEodSubmitted ? 'Reconciled from count' : `(Expected: ₹${expectedNetProfit.toFixed(0)})`}
                 </div>
               </div>
             </div>
@@ -1393,6 +1927,67 @@ export default function AdminView({
             <div className="card-bottom-progress" style={{ marginTop: 12 }}>
               <div className="card-bottom-progress-fill done" style={{ width: '100%' }} />
             </div>
+          </div>
+
+          {/* EOD CASH & SETTLEMENTS RECONCILIATION SUMMARY (P&L Level) */}
+          <div className="ios-card" style={{ marginBottom: 16 }}>
+            <div className="card-top-row">
+              <div className="card-title-group">
+                <span className="card-heading">Closing EOD Settlement Reconciliation</span>
+                <span className="card-meta-text">
+                  {hasEodSubmitted
+                    ? `Audited report submitted by ${latestEodReport.submittedBy || 'Counter Staff'} on ${latestEodReport.date} at ${latestEodReport.timestamp || ''}`
+                    : 'Physical cash drawer & digital inflow verification status'}
+                </span>
+              </div>
+              <DollarSign size={18} color={hasEodSubmitted ? '#16A34A' : '#64748B'} />
+            </div>
+
+            {hasEodSubmitted ? (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+                  <div style={{ background: '#F0FDF4', padding: '10px 12px', borderRadius: 12, border: '1px solid #86EFAC' }}>
+                    <div style={{ fontSize: 11, color: '#15803D', fontWeight: 600 }}>Counted Drawer Cash</div>
+                    <div style={{ fontSize: 17, fontWeight: 800, color: '#15803D', marginTop: 2 }}>
+                      ₹{(filledCash ?? 0).toLocaleString('en-IN')}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                      Expected: ₹{(latestEodReport.expected?.cash ?? cashSplit).toFixed(0)}
+                    </div>
+                  </div>
+
+                  <div style={{ background: '#EFF6FF', padding: '10px 12px', borderRadius: 12, border: '1px solid #93C5FD' }}>
+                    <div style={{ fontSize: 11, color: 'var(--primary-blue)', fontWeight: 600 }}>Bank Digital Settled</div>
+                    <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--primary-blue)', marginTop: 2 }}>
+                      ₹{((filledCard ?? 0) + (filledUpi ?? 0)).toLocaleString('en-IN')}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                      Card: ₹{(filledCard ?? 0).toFixed(0)} | UPI: ₹{(filledUpi ?? 0).toFixed(0)}
+                    </div>
+                  </div>
+
+                  <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: 12, border: '1px solid #CBD5E1' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>Total Reconciled Inflow</div>
+                    <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>
+                      ₹{(filledTotalRevenue ?? 0).toLocaleString('en-IN')}
+                    </div>
+                    <div style={{ fontSize: 10, color: eodVariance >= 0 ? '#15803D' : '#DC2626', marginTop: 2 }}>
+                      Variance: {eodVariance >= 0 ? `+₹${eodVariance.toFixed(0)}` : `-₹${Math.abs(eodVariance).toFixed(0)}`}
+                    </div>
+                  </div>
+                </div>
+
+                {latestEodReport.varianceReason && (
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', background: '#F9FAFB', padding: '6px 10px', borderRadius: 8, fontStyle: 'italic' }}>
+                    Audit Note: "{latestEodReport.varianceReason}"
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                ⏳ Awaiting today's Closing EOD submission from counter staff. Once staff double-checks and confirms the numbers on the counter terminal, physical cash in drawer and verified settled revenue will be locked and audited here.
+              </div>
+            )}
           </div>
 
           {/* Manual Expense Entry Logger (FR-A3) */}
@@ -1492,6 +2087,294 @@ export default function AdminView({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 3A. EOD CLOSING AUDIT & HISTORICAL RECONCILIATIONS TAB */}
+      {activeAdminTab === 'eod-checklists' && (
+        <div>
+          {/* Header Card */}
+          <div className="ios-card active-gradient" style={{ marginBottom: 16 }}>
+            <div className="card-top-row">
+              <div className="card-title-group">
+                <span className="card-heading" style={{ fontSize: 18 }}>
+                  End-of-Day (EOD) Closing Audit Trail
+                </span>
+                <span className="card-meta-text">
+                  Historical log of staff physical cash counts, Pine Labs batch settlement slips & UPI reconciliations
+                </span>
+              </div>
+              <FileSpreadsheet size={22} color="#16A34A" />
+            </div>
+
+            {/* Quick KPI stats */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 8,
+                marginTop: 12
+              }}
+            >
+              <div style={{ background: '#FFFFFF', padding: '10px 12px', borderRadius: 12, border: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total EOD Reports</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
+                  {checklists.length}
+                </div>
+              </div>
+
+              <div style={{ background: '#FFFFFF', padding: '10px 12px', borderRadius: 12, border: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Latest Filled Amount</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: '#15803D', marginTop: 2 }}>
+                  ₹{(filledTotalRevenue ?? 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+
+              <div style={{ background: '#FFFFFF', padding: '10px 12px', borderRadius: 12, border: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Latest Expected Orders</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
+                  ₹{(expectedTotalReport ?? todayGrossSales).toLocaleString('en-IN')}
+                </div>
+              </div>
+
+              <div style={{ background: '#FFFFFF', padding: '10px 12px', borderRadius: 12, border: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Net Variance</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: eodVariance >= 0 ? '#15803D' : '#DC2626', marginTop: 2 }}>
+                  {eodVariance >= 0 ? `+₹${eodVariance.toFixed(0)}` : `-₹${Math.abs(eodVariance).toFixed(0)}`}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* List of EOD Reports */}
+          {Array.isArray(checklists) && checklists.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {checklists.map((report, idx) => {
+                const actualTotal = report.actual?.total ?? 0;
+                const expectedTotal = report.expected?.total ?? 0;
+                const variance = report.variance ?? (actualTotal - expectedTotal);
+                const hasExceeded = Math.abs(variance) > 200;
+
+                return (
+                  <div key={report.id || idx} className="ios-card" style={{ padding: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {report.id}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: 20,
+                              background: '#DCFCE7',
+                              color: '#15803D'
+                            }}
+                          >
+                            ✓ {report.status || 'Audited & Submitted'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                          Date: <strong>{report.date}</strong> at <strong>{report.timestamp}</strong> | Submitter: <strong>{report.submittedBy || 'Staff'}</strong> ({report.staffRole || 'Operator'})
+                        </div>
+                      </div>
+
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Calculated Filled Revenue</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: '#15803D' }}>
+                          ₹{Number(actualTotal).toLocaleString('en-IN')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Breakdown Grid Table */}
+                    <div
+                      style={{
+                        border: '1px solid #E5E7EB',
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        marginBottom: 10
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                          padding: '7px 12px',
+                          background: '#F9FAFB',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: 'var(--text-secondary)',
+                          borderBottom: '1px solid #E5E7EB'
+                        }}
+                      >
+                        <span>Channel</span>
+                        <span style={{ textAlign: 'right' }}>Calculated Filled</span>
+                        <span style={{ textAlign: 'right' }}>System Expected</span>
+                        <span style={{ textAlign: 'right' }}>Variance</span>
+                      </div>
+
+                      {/* Cash */}
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                          padding: '8px 12px',
+                          fontSize: 12,
+                          borderBottom: '1px solid #F3F4F6'
+                        }}
+                      >
+                        <span style={{ fontWeight: 600 }}>💵 Counter Cash</span>
+                        <span style={{ textAlign: 'right', fontWeight: 700, color: '#16A34A' }}>
+                          ₹{(report.actual?.cash ?? 0).toFixed(0)}
+                        </span>
+                        <span style={{ textAlign: 'right', color: 'var(--text-muted)' }}>
+                          ₹{(report.expected?.cash ?? 0).toFixed(0)}
+                        </span>
+                        <span
+                          style={{
+                            textAlign: 'right',
+                            fontWeight: 600,
+                            color: (report.actual?.cash ?? 0) - (report.expected?.cash ?? 0) >= 0 ? '#16A34A' : '#EF4444'
+                          }}
+                        >
+                          {(report.actual?.cash ?? 0) - (report.expected?.cash ?? 0) >= 0
+                            ? `+₹${((report.actual?.cash ?? 0) - (report.expected?.cash ?? 0)).toFixed(0)}`
+                            : `-₹${Math.abs((report.actual?.cash ?? 0) - (report.expected?.cash ?? 0)).toFixed(0)}`}
+                        </span>
+                      </div>
+
+                      {/* Card */}
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                          padding: '8px 12px',
+                          fontSize: 12,
+                          borderBottom: '1px solid #F3F4F6'
+                        }}
+                      >
+                        <span style={{ fontWeight: 600 }}>💳 Card POS Batch</span>
+                        <span style={{ textAlign: 'right', fontWeight: 700, color: 'var(--primary-blue)' }}>
+                          ₹{(report.actual?.card ?? 0).toFixed(0)}
+                        </span>
+                        <span style={{ textAlign: 'right', color: 'var(--text-muted)' }}>
+                          ₹{(report.expected?.card ?? 0).toFixed(0)}
+                        </span>
+                        <span
+                          style={{
+                            textAlign: 'right',
+                            fontWeight: 600,
+                            color: (report.actual?.card ?? 0) - (report.expected?.card ?? 0) >= 0 ? '#16A34A' : '#EF4444'
+                          }}
+                        >
+                          {(report.actual?.card ?? 0) - (report.expected?.card ?? 0) >= 0
+                            ? `+₹${((report.actual?.card ?? 0) - (report.expected?.card ?? 0)).toFixed(0)}`
+                            : `-₹${Math.abs((report.actual?.card ?? 0) - (report.expected?.card ?? 0)).toFixed(0)}`}
+                        </span>
+                      </div>
+
+                      {/* UPI */}
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                          padding: '8px 12px',
+                          fontSize: 12,
+                          borderBottom: '1px solid #F3F4F6'
+                        }}
+                      >
+                        <span style={{ fontWeight: 600 }}>📱 UPI Settlement</span>
+                        <span style={{ textAlign: 'right', fontWeight: 700, color: '#8B5CF6' }}>
+                          ₹{(report.actual?.upi ?? 0).toFixed(0)}
+                        </span>
+                        <span style={{ textAlign: 'right', color: 'var(--text-muted)' }}>
+                          ₹{(report.expected?.upi ?? 0).toFixed(0)}
+                        </span>
+                        <span
+                          style={{
+                            textAlign: 'right',
+                            fontWeight: 600,
+                            color: (report.actual?.upi ?? 0) - (report.expected?.upi ?? 0) >= 0 ? '#16A34A' : '#EF4444'
+                          }}
+                        >
+                          {(report.actual?.upi ?? 0) - (report.expected?.upi ?? 0) >= 0
+                            ? `+₹${((report.actual?.upi ?? 0) - (report.expected?.upi ?? 0)).toFixed(0)}`
+                            : `-₹${Math.abs((report.actual?.upi ?? 0) - (report.expected?.upi ?? 0)).toFixed(0)}`}
+                        </span>
+                      </div>
+
+                      {/* Total Row */}
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
+                          padding: '9px 12px',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          background: '#F0FDF4'
+                        }}
+                      >
+                        <span>TOTAL SETTLEMENT:</span>
+                        <span style={{ textAlign: 'right', color: '#15803D' }}>
+                          ₹{Number(actualTotal).toFixed(0)}
+                        </span>
+                        <span style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                          ₹{Number(expectedTotal).toFixed(0)}
+                        </span>
+                        <span
+                          style={{
+                            textAlign: 'right',
+                            color: variance >= 0 ? '#15803D' : '#DC2626'
+                          }}
+                        >
+                          {variance >= 0 ? `+₹${Number(variance).toFixed(0)}` : `-₹${Math.abs(Number(variance)).toFixed(0)}`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Variance Note if present */}
+                    {report.varianceReason && (
+                      <div
+                        style={{
+                          background: hasExceeded ? '#FEF2F2' : '#F8FAFC',
+                          border: `1px solid ${hasExceeded ? '#FECACA' : '#E2E8F0'}`,
+                          borderRadius: 10,
+                          padding: '8px 12px',
+                          fontSize: 12,
+                          color: hasExceeded ? '#991B1B' : 'var(--text-primary)'
+                        }}
+                      >
+                        <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 2 }}>
+                          {hasExceeded ? '⚠️ Audit Note (Threshold Variance > ₹200):' : 'Audit Note:'}
+                        </div>
+                        <div style={{ fontStyle: 'italic' }}>"{report.varianceReason}"</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div
+              className="ios-card"
+              style={{
+                textAlign: 'center',
+                padding: '40px 20px',
+                color: 'var(--text-muted)'
+              }}
+            >
+              <FileSpreadsheet size={42} color="#9CA3AF" style={{ margin: '0 auto 12px' }} />
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+                No EOD Closing Reports Yet
+              </div>
+              <div style={{ fontSize: 13, maxWidth: 380, margin: '0 auto 16px', lineHeight: 1.4 }}>
+                When counter staff members verify their physical cash drawer, card POS slips, and UPI merchant app settlements at the end of the shift, they will complete the Closing EOD checklist with calculations confirmation. The audited reports will be recorded here permanently.
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1870,7 +2753,9 @@ export default function AdminView({
                 }}
               >
                 <CheckCircle2 size={16} color="#16A34A" />
-                <span>✓ Staff changes &amp; terminal permissions (Price Editing &amp; Offers) saved and broadcast to all live POS terminals!</span>
+                <span>
+                  {staffSyncFeedback || '✓ Staff changes & terminal permissions (Price Editing & Offers) saved and broadcast to all live POS terminals!'}
+                </span>
               </div>
             )}
 

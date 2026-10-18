@@ -8,10 +8,14 @@ import {
   syncServerCallToCloud,
   syncOffersToCloud,
   syncMenuToCloud,
+  syncStaffToCloud,
+  syncChecklistToCloud,
   subscribeToCloudOrders,
   subscribeToCloudServerCalls,
   subscribeToCloudOffers,
   subscribeToCloudMenu,
+  subscribeToCloudStaff,
+  subscribeToCloudChecklists,
   isCloudSyncEnabled,
   getCloudSyncState,
   subscribeCloudSyncState
@@ -84,6 +88,10 @@ export function broadcastSyncEvent(type, payload = {}) {
     syncOffersToCloud(payload).catch(() => {});
   } else if (type === SYNC_EVENTS.MENU_UPDATED && Array.isArray(payload)) {
     syncMenuToCloud(payload).catch(() => {});
+  } else if (type === SYNC_EVENTS.STAFF_UPDATED && Array.isArray(payload)) {
+    syncStaffToCloud(payload).catch(() => {});
+  } else if (type === SYNC_EVENTS.CHECKLIST_SUBMITTED && payload) {
+    syncChecklistToCloud(payload).catch(() => {});
   }
 }
 
@@ -120,6 +128,30 @@ export function subscribeSyncEvents(callback) {
       } catch (err) {
         console.error('Error parsing direct orders sync:', err);
       }
+    } else if (e.key && e.key.startsWith('flowscape_staff_inr_v2') && e.newValue) {
+      try {
+        const parsedStaff = JSON.parse(e.newValue);
+        if (Array.isArray(parsedStaff) && callback) {
+          callback({
+            type: SYNC_EVENTS.STAFF_UPDATED,
+            payload: parsedStaff
+          });
+        }
+      } catch (err) {
+        console.error('Error parsing direct staff storage sync:', err);
+      }
+    } else if (e.key && e.key.startsWith('flowscape_checklists_inr_v2') && e.newValue) {
+      try {
+        const parsedChecklists = JSON.parse(e.newValue);
+        if (Array.isArray(parsedChecklists) && parsedChecklists.length > 0 && callback) {
+          callback({
+            type: SYNC_EVENTS.CHECKLIST_SUBMITTED,
+            payload: parsedChecklists[0]
+          });
+        }
+      } catch (err) {
+        console.error('Error parsing direct checklist storage sync:', err);
+      }
     }
   };
 
@@ -133,6 +165,8 @@ export function subscribeSyncEvents(callback) {
   let unsubscribeCloudServerCalls = null;
   let unsubscribeCloudOffers = null;
   let unsubscribeCloudMenu = null;
+  let unsubscribeCloudStaff = null;
+  let unsubscribeCloudChecklists = null;
 
   if (isCloudSyncEnabled()) {
     unsubscribeCloudOrders = subscribeToCloudOrders(
@@ -181,6 +215,24 @@ export function subscribeSyncEvents(callback) {
         });
       }
     });
+
+    unsubscribeCloudStaff = subscribeToCloudStaff((cloudStaff) => {
+      if (callback && Array.isArray(cloudStaff)) {
+        callback({
+          type: SYNC_EVENTS.STAFF_UPDATED,
+          payload: cloudStaff
+        });
+      }
+    });
+
+    unsubscribeCloudChecklists = subscribeToCloudChecklists((cloudChecklist) => {
+      if (callback && cloudChecklist && cloudChecklist.id) {
+        callback({
+          type: SYNC_EVENTS.CHECKLIST_SUBMITTED,
+          payload: cloudChecklist
+        });
+      }
+    });
   }
 
   // Return unsubscribe cleanup function
@@ -200,6 +252,12 @@ export function subscribeSyncEvents(callback) {
     }
     if (unsubscribeCloudMenu) {
       unsubscribeCloudMenu();
+    }
+    if (unsubscribeCloudStaff) {
+      unsubscribeCloudStaff();
+    }
+    if (unsubscribeCloudChecklists) {
+      unsubscribeCloudChecklists();
     }
   };
 }
