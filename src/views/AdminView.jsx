@@ -25,7 +25,11 @@ import {
   ShieldCheck,
   Utensils,
   Eye,
-  EyeOff
+  EyeOff,
+  UserPlus,
+  UserCheck,
+  UserX,
+  X
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import BankReconciliationView from './BankReconciliationView';
@@ -94,6 +98,25 @@ export default function AdminView({
 
   // Payslip Modal State
   const [viewingPayslip, setViewingPayslip] = useState(null);
+
+  // Staff Payroll & Team Management State
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [editingStaffId, setEditingStaffId] = useState(null);
+  const [staffFormData, setStaffFormData] = useState({
+    name: '',
+    role: 'Counter Captain & POS Lead',
+    phone: '',
+    monthlyWage: '',
+    monthEndPay: '',
+    status: 'active',
+    bankAccount: '',
+    ifsc: 'HDFC0000128',
+    canEditPrice: false,
+    canCreateDiscounts: false
+  });
+  const [staffFilter, setStaffFilter] = useState('all'); // 'all' | 'active' | 'resigned'
+  const [staffSearch, setStaffSearch] = useState('');
+  const [editingPayInput, setEditingPayInput] = useState({}); // { [staffId]: string }
 
   // Menu Management Modal State
   const [showAddDishModal, setShowAddDishModal] = useState(false);
@@ -533,17 +556,158 @@ export default function AdminView({
     );
   };
 
-  // Phase 2: Total Net Payroll Calculation
-  const totalNetPayroll = staff.reduce((sum, emp) => {
-    const dailyRate = emp.monthlyWage / 28;
-    const earnedBasic = Number((dailyRate * emp.daysPresent).toFixed(0));
-    const overtimePay = Math.round(emp.overtimeHours * (dailyRate / 8) * 1.5);
-    const grossPay = Number((earnedBasic + overtimePay).toFixed(0));
-    const pfDeduction = Math.round((grossPay * emp.pfRate) / 100);
-    const esiDeduction = Math.round((grossPay * emp.esiRate) / 100);
-    const tdsDeduction = Math.round((grossPay * emp.tdsRate) / 100);
-    return sum + (grossPay - pfDeduction - esiDeduction - tdsDeduction);
-  }, 0);
+  // Staff Payroll Net Pay Calculation (without attendance)
+  const getStaffNetPay = (emp) => {
+    if (emp.monthEndPay !== undefined && emp.monthEndPay !== null && emp.monthEndPay !== '') {
+      return Number(emp.monthEndPay) || 0;
+    }
+    return Number(emp.monthlyWage) || 0;
+  };
+
+  const activeStaffList = staff.filter((emp) => emp.status !== 'resigned');
+  const totalNetPayroll = activeStaffList.reduce((sum, emp) => sum + getStaffNetPay(emp), 0);
+
+  const handleOpenAddStaff = () => {
+    playTapSound();
+    setEditingStaffId(null);
+    setStaffFormData({
+      name: '',
+      role: 'Service Captain & Floor Lead',
+      phone: '',
+      monthlyWage: '',
+      monthEndPay: '',
+      status: 'active',
+      bankAccount: '',
+      ifsc: 'HDFC0000128',
+      canEditPrice: false,
+      canCreateDiscounts: false
+    });
+    setShowStaffModal(true);
+  };
+
+  const handleOpenEditStaff = (emp) => {
+    playTapSound();
+    setEditingStaffId(emp.id);
+    setStaffFormData({
+      name: emp.name || '',
+      role: emp.role || '',
+      phone: emp.phone || '',
+      monthlyWage: emp.monthlyWage || '',
+      monthEndPay: emp.monthEndPay !== undefined && emp.monthEndPay !== null ? emp.monthEndPay : emp.monthlyWage || '',
+      status: emp.status || 'active',
+      bankAccount: emp.bankAccount || '',
+      ifsc: emp.ifsc || 'HDFC0000128',
+      canEditPrice: Boolean(emp.permissions?.canEditPrice),
+      canCreateDiscounts: Boolean(emp.permissions?.canCreateDiscounts)
+    });
+    setShowStaffModal(true);
+  };
+
+  const handleSaveStaff = (e) => {
+    e?.preventDefault();
+    if (!staffFormData.name.trim()) {
+      alert('Please enter staff member name');
+      return;
+    }
+    const wage = Number(staffFormData.monthlyWage) || 0;
+    if (wage <= 0) {
+      alert('Please enter a valid monthly base salary');
+      return;
+    }
+    playTapSound();
+
+    const endPay = staffFormData.monthEndPay !== '' && staffFormData.monthEndPay !== null
+      ? Number(staffFormData.monthEndPay) || 0
+      : wage;
+
+    if (editingStaffId) {
+      // Update existing staff
+      setStaff((prev) =>
+        prev.map((s) =>
+          s.id === editingStaffId
+            ? {
+                ...s,
+                name: staffFormData.name.trim(),
+                role: staffFormData.role.trim() || 'Restaurant Associate',
+                phone: staffFormData.phone.trim() || 'N/A',
+                monthlyWage: wage,
+                monthEndPay: endPay,
+                status: staffFormData.status || 'active',
+                bankAccount: staffFormData.bankAccount.trim() || s.bankAccount,
+                ifsc: staffFormData.ifsc.trim() || s.ifsc || 'HDFC0000128',
+                permissions: {
+                  ...s.permissions,
+                  canEditPrice: Boolean(staffFormData.canEditPrice),
+                  canCreateDiscounts: Boolean(staffFormData.canCreateDiscounts)
+                }
+              }
+            : s
+        )
+      );
+    } else {
+      // Add new staff member
+      const newStaffMember = {
+        id: `st-${Date.now()}`,
+        name: staffFormData.name.trim(),
+        role: staffFormData.role.trim() || 'Restaurant Associate',
+        phone: staffFormData.phone.trim() || 'N/A',
+        monthlyWage: wage,
+        monthEndPay: endPay,
+        status: staffFormData.status || 'active',
+        bankAccount: staffFormData.bankAccount.trim() || `9821004812${Math.floor(100 + Math.random() * 900)}`,
+        ifsc: staffFormData.ifsc.trim() || 'HDFC0000128',
+        permissions: {
+          canEditPrice: Boolean(staffFormData.canEditPrice),
+          canCreateDiscounts: Boolean(staffFormData.canCreateDiscounts),
+          canViewPnL: false
+        }
+      };
+      setStaff((prev) => [newStaffMember, ...prev]);
+    }
+
+    setShowStaffModal(false);
+    playSuccessChime();
+  };
+
+  const handleToggleResignStaff = (emp) => {
+    playTapSound();
+    const newStatus = emp.status === 'resigned' ? 'active' : 'resigned';
+    const actionLabel = newStatus === 'resigned' ? 'mark as resigned' : 'reactivate';
+    if (window.confirm(`Are you sure you want to ${actionLabel} ${emp.name}?`)) {
+      setStaff((prev) =>
+        prev.map((s) => (s.id === emp.id ? { ...s, status: newStatus } : s))
+      );
+      playSuccessChime();
+    }
+  };
+
+  const handleDeleteStaff = (emp) => {
+    playTapSound();
+    if (window.confirm(`Are you sure you want to permanently delete ${emp.name} from staff records?`)) {
+      setStaff((prev) => prev.filter((s) => s.id !== emp.id));
+      playAlertChime();
+    }
+  };
+
+  const handleSaveInlineMonthEndPay = (staffId) => {
+    playTapSound();
+    const rawVal = editingPayInput[staffId];
+    if (rawVal === undefined || rawVal === '') return;
+    const val = Number(rawVal);
+    if (isNaN(val) || val < 0) {
+      alert('Please enter a valid amount');
+      return;
+    }
+    setStaff((prev) =>
+      prev.map((s) => (s.id === staffId ? { ...s, monthEndPay: val } : s))
+    );
+    setEditingPayInput((prev) => {
+      const copy = { ...prev };
+      delete copy[staffId];
+      return copy;
+    });
+    playSuccessChime();
+  };
 
   const handleExecuteBankPayrollBatch = () => {
     playTapSound();
@@ -553,29 +717,27 @@ export default function AdminView({
 
   const handleExportPayrollCsv = () => {
     playTapSound();
-    const headers = ['Employee ID', 'Employee Name', 'Role', 'Monthly Wage (INR)', 'Days Present', 'Gross Pay (INR)', 'PF (12%)', 'ESI (0.75%)', 'TDS', 'Net Salary (INR)', 'Bank IFSC', 'Beneficiary Account'];
+    const headers = [
+      'Employee ID',
+      'Employee Name',
+      'Role',
+      'Status',
+      'Monthly Base Salary (INR)',
+      'Month-End Payout (INR)',
+      'Bank IFSC',
+      'Beneficiary Account'
+    ];
     const rows = staff.map((emp) => {
-      const dailyRate = emp.monthlyWage / 28;
-      const earnedBasic = Number((dailyRate * emp.daysPresent).toFixed(0));
-      const overtimePay = Math.round(emp.overtimeHours * (dailyRate / 8) * 1.5);
-      const grossPay = Number((earnedBasic + overtimePay).toFixed(0));
-      const pfDeduction = Math.round((grossPay * emp.pfRate) / 100);
-      const esiDeduction = Math.round((grossPay * emp.esiRate) / 100);
-      const tdsDeduction = Math.round((grossPay * emp.tdsRate) / 100);
-      const netPay = grossPay - pfDeduction - esiDeduction - tdsDeduction;
+      const netPay = getStaffNetPay(emp);
       return [
         emp.id,
         `"${emp.name}"`,
         `"${emp.role}"`,
+        emp.status === 'resigned' ? 'Resigned' : 'Active',
         emp.monthlyWage,
-        emp.daysPresent,
-        grossPay,
-        pfDeduction,
-        esiDeduction,
-        tdsDeduction,
         netPay,
-        'HDFC0000128',
-        `"9821004812${emp.id.replace('s', '')}"`
+        emp.ifsc || 'HDFC0000128',
+        `"${emp.bankAccount || `9821004812${emp.id.replace('st-', '').replace('s', '')}`}"`
       ];
     });
 
@@ -1618,128 +1780,308 @@ export default function AdminView({
         </div>
       )}
 
-      {/* 4. STAFF PAYROLL ASSISTANT (Section 5.4) */}
+      {/* 4. STAFF PAYROLL & TEAM MANAGEMENT */}
       {activeAdminTab === 'payroll' && (
         <div>
           <div className="ios-card" style={{ marginBottom: 16 }}>
-            <div className="card-top-row">
+            {/* Header row with Add Staff Button */}
+            <div className="card-top-row" style={{ flexWrap: 'wrap', gap: 10 }}>
               <div className="card-title-group">
-                <span className="card-heading">Monthly Payroll & Attendance (INR)</span>
-                <span className="card-meta-text">Statutory deductions (PF 12%, ESI 0.75%, TDS) & Payslips</span>
+                <span className="card-heading">Staff Payroll &amp; Team Management (INR)</span>
+                <span className="card-meta-text">Manage staff profiles, base salaries, resignations &amp; customizable month-end payouts</span>
               </div>
-              <Users size={18} color="#007AFF" />
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn-primary-pill"
+                  onClick={handleOpenAddStaff}
+                  style={{ fontSize: 12, padding: '7px 14px' }}
+                >
+                  <UserPlus size={14} />
+                  <span>+ Add New Staff</span>
+                </button>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {staff.map((emp) => {
-                const totalWorkingDays = 28;
-                const dailyRate = emp.monthlyWage / totalWorkingDays;
-                const earnedBasic = Number((dailyRate * emp.daysPresent).toFixed(0));
-                const overtimePay = Math.round(emp.overtimeHours * (dailyRate / 8) * 1.5);
-                const grossPay = Number((earnedBasic + overtimePay).toFixed(0));
-                const pfDeduction = Math.round((grossPay * emp.pfRate) / 100);
-                const esiDeduction = Math.round((grossPay * emp.esiRate) / 100);
-                const tdsDeduction = Math.round((grossPay * emp.tdsRate) / 100);
-                const netPay = grossPay - pfDeduction - esiDeduction - tdsDeduction;
-
-                return (
-                  <div
-                    key={emp.id}
-                    style={{
-                      padding: '12px',
-                      background: '#F9FAFB',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: 14
+            {/* Filter and Search Bar */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between', margin: '14px 0 12px' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[
+                  { id: 'all', label: `All (${staff.length})` },
+                  { id: 'active', label: `Active (${staff.filter((s) => s.status !== 'resigned').length})` },
+                  { id: 'resigned', label: `Resigned (${staff.filter((s) => s.status === 'resigned').length})` }
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    className={`capsule-tab ${staffFilter === f.id ? 'active' : ''}`}
+                    style={{ fontSize: 11.5, padding: '4px 12px' }}
+                    onClick={() => {
+                      playTapSound();
+                      setStaffFilter(f.id);
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 700 }}>{emp.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                          {emp.role} • Base: ₹{emp.monthlyWage.toLocaleString('en-IN')}/mo
-                        </div>
-                      </div>
-                      <button
-                        className="btn-secondary-pill"
-                        style={{ padding: '4px 8px', fontSize: 11 }}
-                        onClick={() => {
-                          playTapSound();
-                          setViewingPayslip({
-                            ...emp,
-                            earnedBasic,
-                            grossPay,
-                            pfDeduction,
-                            esiDeduction,
-                            tdsDeduction,
-                            netPay
-                          });
-                        }}
-                      >
-                        View Payslip
-                      </button>
-                    </div>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
 
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(3, 1fr)',
-                        gap: 6,
-                        marginTop: 10,
-                        background: '#FFFFFF',
-                        padding: 8,
-                        borderRadius: 10,
-                        fontSize: 11,
-                        textAlign: 'center'
-                      }}
-                    >
-                      <div>
-                        <div style={{ color: 'var(--text-muted)' }}>Attendance</div>
-                        <div style={{ fontWeight: 700 }}>{emp.daysPresent}/28 days</div>
-                      </div>
-                      <div>
-                        <div style={{ color: 'var(--text-muted)' }}>Gross Pay</div>
-                        <div style={{ fontWeight: 700 }}>₹{grossPay.toLocaleString('en-IN')}</div>
-                      </div>
-                      <div>
-                        <div style={{ color: 'var(--text-muted)' }}>Net Bank Transfer</div>
-                        <div style={{ fontWeight: 700, color: '#16A34A' }}>₹{netPay.toLocaleString('en-IN')}</div>
-                      </div>
-                    </div>
-
-                    {/* Permissions Toggles (FR-A6) */}
-                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                      <button
-                        className="status-pill tag"
-                        style={{
-                          background: emp.permissions?.canEditPrice ? '#DCFCE7' : '#F3F4F6',
-                          color: emp.permissions?.canEditPrice ? '#16A34A' : '#6B7280',
-                          border: 'none',
-                          cursor: 'pointer'
-                        }}
-                        onClick={() => handleToggleStaffPermission(emp.id, 'canEditPrice')}
-                      >
-                        {emp.permissions?.canEditPrice ? '✓ Can Edit Price' : 'No Price Edit'}
-                      </button>
-
-                      <button
-                        className="status-pill tag"
-                        style={{
-                          background: emp.permissions?.canCreateDiscounts ? '#DCFCE7' : '#F3F4F6',
-                          color: emp.permissions?.canCreateDiscounts ? '#16A34A' : '#6B7280',
-                          border: 'none',
-                          cursor: 'pointer'
-                        }}
-                        onClick={() => handleToggleStaffPermission(emp.id, 'canCreateDiscounts')}
-                      >
-                        {emp.permissions?.canCreateDiscounts ? '✓ Can Issue Offers' : 'No Offers'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              <input
+                type="text"
+                className="ios-input"
+                placeholder="Search staff by name or role..."
+                value={staffSearch}
+                onChange={(e) => setStaffSearch(e.target.value)}
+                style={{ maxWidth: 240, fontSize: 12, padding: '6px 12px' }}
+              />
             </div>
 
-            {/* Phase 2: Automated Bank Disbursal & Batch CSV Export */}
+            {/* Staff Cards List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {staff
+                .filter((emp) => {
+                  if (staffFilter === 'active' && emp.status === 'resigned') return false;
+                  if (staffFilter === 'resigned' && emp.status !== 'resigned') return false;
+                  if (staffSearch.trim()) {
+                    const q = staffSearch.toLowerCase();
+                    return (
+                      (emp.name && emp.name.toLowerCase().includes(q)) ||
+                      (emp.role && emp.role.toLowerCase().includes(q)) ||
+                      (emp.phone && emp.phone.includes(q))
+                    );
+                  }
+                  return true;
+                })
+                .map((emp) => {
+                  const isResigned = emp.status === 'resigned';
+                  const netPay = getStaffNetPay(emp);
+                  const isCustomPay = emp.monthEndPay !== undefined && emp.monthEndPay !== null && Number(emp.monthEndPay) !== Number(emp.monthlyWage);
+                  const isEditingInline = editingPayInput[emp.id] !== undefined;
+
+                  return (
+                    <div
+                      key={emp.id}
+                      style={{
+                        padding: '14px',
+                        background: isResigned ? '#F8FAFC' : '#FFFFFF',
+                        border: `1.5px solid ${isResigned ? '#CBD5E1' : '#E2E8F0'}`,
+                        borderRadius: 14,
+                        opacity: isResigned ? 0.8 : 1,
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {/* Top Row: Name, Role, Status & Action Buttons */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>{emp.name}</span>
+                            <span
+                              className={`status-pill ${isResigned ? 'rejected' : 'done'}`}
+                              style={{ fontSize: 9.5, padding: '2px 8px' }}
+                            >
+                              {isResigned ? 'Resigned' : 'Active'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
+                            {emp.role} {emp.phone && `• ${emp.phone}`}
+                          </div>
+                        </div>
+
+                        {/* Top-Right Action Buttons */}
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn-secondary-pill"
+                            style={{ padding: '4px 10px', fontSize: 11, gap: 4 }}
+                            onClick={() => {
+                              playTapSound();
+                              setViewingPayslip({
+                                ...emp,
+                                grossPay: emp.monthlyWage,
+                                netPay
+                              });
+                            }}
+                            title="View / Print Salary Payslip"
+                          >
+                            <Receipt size={12} />
+                            <span>Payslip</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn-secondary-pill"
+                            style={{ padding: '4px 10px', fontSize: 11, gap: 4 }}
+                            onClick={() => handleOpenEditStaff(emp)}
+                            title="Edit staff details and base salary"
+                          >
+                            <Edit2 size={12} />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn-secondary-pill"
+                            style={{
+                              padding: '4px 10px',
+                              fontSize: 11,
+                              gap: 4,
+                              color: isResigned ? '#16A34A' : '#D97706',
+                              borderColor: isResigned ? '#BBF7D0' : '#FDE68A',
+                              background: isResigned ? '#F0FDF4' : '#FFFBEB'
+                            }}
+                            onClick={() => handleToggleResignStaff(emp)}
+                            title={isResigned ? "Reactivate staff member" : "Mark as resigned"}
+                          >
+                            {isResigned ? <UserCheck size={12} /> : <UserX size={12} />}
+                            <span>{isResigned ? 'Reactivate' : 'Resign'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn-secondary-pill"
+                            style={{ padding: '4px 8px', fontSize: 11, color: '#DC2626', borderColor: '#FECACA' }}
+                            onClick={() => handleDeleteStaff(emp)}
+                            title="Permanently delete staff record"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Financial Row: Base Salary & Month-End Payout */}
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                          gap: 10,
+                          marginTop: 12,
+                          background: '#F8FAFC',
+                          border: '1px solid #E2E8F0',
+                          padding: 10,
+                          borderRadius: 12
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 11, color: '#64748B', fontWeight: 600 }}>Monthly Base Salary</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', marginTop: 2 }}>
+                            ₹{Number(emp.monthlyWage || 0).toLocaleString('en-IN')}
+                            <span style={{ fontSize: 10, fontWeight: 500, color: '#94A3B8' }}> /month</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div style={{ fontSize: 11, color: '#64748B', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span>Month-End Final Payout</span>
+                            {isCustomPay && (
+                              <span style={{ fontSize: 9.5, padding: '1px 6px', background: '#FEF3C7', color: '#B45309', borderRadius: 6, fontWeight: 700 }}>
+                                Custom Payout
+                              </span>
+                            )}
+                          </div>
+
+                          {!isEditingInline ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                              <span style={{ fontSize: 16, fontWeight: 800, color: isResigned ? '#64748B' : '#16A34A' }}>
+                                ₹{netPay.toLocaleString('en-IN')}
+                              </span>
+                              <button
+                                type="button"
+                                className="btn-secondary-pill"
+                                style={{ padding: '3px 8px', fontSize: 10.5, gap: 4 }}
+                                onClick={() => {
+                                  playTapSound();
+                                  setEditingPayInput((prev) => ({
+                                    ...prev,
+                                    [emp.id]: String(netPay)
+                                  }));
+                                }}
+                                title="Edit the exact amount this staff member receives at month-end"
+                              >
+                                <Edit2 size={11} />
+                                <span>Edit Pay</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>₹</span>
+                              <input
+                                type="number"
+                                className="ios-input"
+                                value={editingPayInput[emp.id] || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setEditingPayInput((prev) => ({ ...prev, [emp.id]: val }));
+                                }}
+                                placeholder="e.g. 28000"
+                                style={{ maxWidth: 130, padding: '4px 8px', fontSize: 13, fontWeight: 700 }}
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                className="btn-primary-pill"
+                                style={{ padding: '5px 10px', fontSize: 11, background: '#16A34A', borderColor: '#16A34A' }}
+                                onClick={() => handleSaveInlineMonthEndPay(emp.id)}
+                              >
+                                <Check size={12} />
+                                <span>Save</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-secondary-pill"
+                                style={{ padding: '5px 8px', fontSize: 11 }}
+                                onClick={() => {
+                                  playTapSound();
+                                  setEditingPayInput((prev) => {
+                                    const copy = { ...prev };
+                                    delete copy[emp.id];
+                                    return copy;
+                                  });
+                                }}
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Permissions Toggles (FR-A6) */}
+                      <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="status-pill tag"
+                          style={{
+                            background: emp.permissions?.canEditPrice ? '#DCFCE7' : '#F1F5F9',
+                            color: emp.permissions?.canEditPrice ? '#16A34A' : '#64748B',
+                            border: '1px solid',
+                            borderColor: emp.permissions?.canEditPrice ? '#BBF7D0' : '#E2E8F0',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => handleToggleStaffPermission(emp.id, 'canEditPrice')}
+                        >
+                          {emp.permissions?.canEditPrice ? '✓ Can Edit POS Price' : 'No Price Edit'}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="status-pill tag"
+                          style={{
+                            background: emp.permissions?.canCreateDiscounts ? '#DCFCE7' : '#F1F5F9',
+                            color: emp.permissions?.canCreateDiscounts ? '#16A34A' : '#64748B',
+                            border: '1px solid',
+                            borderColor: emp.permissions?.canCreateDiscounts ? '#BBF7D0' : '#E2E8F0',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => handleToggleStaffPermission(emp.id, 'canCreateDiscounts')}
+                        >
+                          {emp.permissions?.canCreateDiscounts ? '✓ Can Issue Offers' : 'No Offers'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Corporate Bank Salary Disbursal Card */}
             <div
               style={{
                 marginTop: 14,
@@ -1749,11 +2091,11 @@ export default function AdminView({
                 border: '1px solid #E5E7EB'
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700 }}>Corporate Bank Payroll Batch Disbursal</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    Direct NEFT/IMPS Salary Transmission via ICICI/HDFC Corporate CMS (Phase 2)
+                    Direct NEFT/IMPS Salary Transmission via ICICI/HDFC Corporate CMS • {activeStaffList.length} Active Staff
                   </div>
                 </div>
                 <span className="status-pill done" style={{ fontSize: 10 }}>
@@ -1761,7 +2103,7 @@ export default function AdminView({
                 </span>
               </div>
 
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                 <button
                   className="btn-primary-pill"
                   style={{ fontSize: 12, padding: '7px 14px', background: '#0284C7' }}
@@ -3037,93 +3379,385 @@ export default function AdminView({
         </div>
       )}
 
-      {/* Payslip Modal (Section 5.4 in INR) */}
-      {viewingPayslip && (
-        <div className="modal-overlay" onClick={() => setViewingPayslip(null)}>
-          <div className="modal-content-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-drag-pill" />
-            <div style={{ textAlign: 'center', marginBottom: 14 }}>
-              <div className="card-heading" style={{ fontSize: 18 }}>Monthly Salary Payslip</div>
-              <div className="card-meta-text">Advait Artisanal Indian Kitchen • Period: October 2026</div>
-            </div>
+      {/* Payslip Modal (INR) without attendance */}
+      {viewingPayslip && (() => {
+        const baseWage = Number(viewingPayslip.monthlyWage || 0);
+        const finalNetPay = Number(viewingPayslip.netPay ?? viewingPayslip.monthEndPay ?? baseWage);
+        const adjustment = finalNetPay - baseWage;
+        const isResigned = viewingPayslip.status === 'resigned';
 
-            <div
-              style={{
-                background: '#F9FAFB',
-                border: '1px solid #E5E7EB',
-                borderRadius: 14,
-                padding: 14,
-                fontSize: 12,
-                marginBottom: 16
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ color: 'var(--text-muted)' }}>Employee Name:</span>
-                <strong>{viewingPayslip.name}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ color: 'var(--text-muted)' }}>Designation:</span>
-                <span>{viewingPayslip.role}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ color: 'var(--text-muted)' }}>Monthly Attendance:</span>
-                <span>{viewingPayslip.daysPresent} / 28 working days</span>
-              </div>
-
-              <div style={{ borderTop: '1px solid #E5E7EB', margin: '8px 0' }} />
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span>Earned Basic Pay:</span>
-                <strong>₹{viewingPayslip.grossPay.toLocaleString('en-IN')}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: '#DC2626' }}>
-                <span>Employee Provident Fund PF ({viewingPayslip.pfRate}%):</span>
-                <span>-₹{viewingPayslip.pfDeduction.toLocaleString('en-IN')}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: '#DC2626' }}>
-                <span>ESI State Health Insurance ({viewingPayslip.esiRate}%):</span>
-                <span>-₹{viewingPayslip.esiDeduction.toLocaleString('en-IN')}</span>
-              </div>
-              {viewingPayslip.tdsDeduction > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: '#DC2626' }}>
-                  <span>TDS Withholding Tax ({viewingPayslip.tdsRate}%):</span>
-                  <span>-₹{viewingPayslip.tdsDeduction.toLocaleString('en-IN')}</span>
+        return (
+          <div className="modal-overlay" onClick={() => setViewingPayslip(null)}>
+            <div className="modal-content-sheet" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, width: '92%' }}>
+              <div className="modal-drag-pill" />
+              <div style={{ textAlign: 'center', marginBottom: 14 }}>
+                <div className="card-heading" style={{ fontSize: 18 }}>Monthly Salary Payslip</div>
+                <div className="card-meta-text">
+                  {theme?.restaurantName || 'Advait Artisanal Kitchen'} • Period: {new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' })}
                 </div>
-              )}
+              </div>
 
               <div
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  borderTop: '1px solid #E5E7EB',
-                  paddingTop: 8,
-                  marginTop: 6,
-                  fontSize: 15,
-                  fontWeight: 700
+                  background: '#F9FAFB',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: 14,
+                  padding: 14,
+                  fontSize: 12,
+                  marginBottom: 16
                 }}
               >
-                <span>Net Bank Transfer (INR):</span>
-                <span style={{ color: '#16A34A' }}>₹{viewingPayslip.netPay.toLocaleString('en-IN')}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Employee Name:</span>
+                  <strong>{viewingPayslip.name}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Designation:</span>
+                  <span>{viewingPayslip.role}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Employment Status:</span>
+                  <span
+                    className={`status-pill ${isResigned ? 'rejected' : 'done'}`}
+                    style={{ fontSize: 9.5, padding: '2px 8px' }}
+                  >
+                    {isResigned ? 'Resigned' : 'Active Staff'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Bank Account:</span>
+                  <span style={{ fontFamily: 'monospace' }}>{viewingPayslip.bankAccount || 'Direct Bank NEFT'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: 'var(--text-muted)' }}>IFSC Code:</span>
+                  <span style={{ fontFamily: 'monospace' }}>{viewingPayslip.ifsc || 'HDFC0000128'}</span>
+                </div>
+
+                <div style={{ borderTop: '1px solid #E5E7EB', margin: '8px 0' }} />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span>Monthly Base Salary:</span>
+                  <strong>₹{baseWage.toLocaleString('en-IN')}</strong>
+                </div>
+
+                {adjustment !== 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: 6,
+                      color: adjustment > 0 ? '#16A34A' : '#DC2626'
+                    }}
+                  >
+                    <span>{adjustment > 0 ? 'Month-End Incentive / Bonus:' : 'Month-End Adjustment / Deduction:'}</span>
+                    <span style={{ fontWeight: 700 }}>
+                      {adjustment > 0 ? `+₹${adjustment.toLocaleString('en-IN')}` : `-₹${Math.abs(adjustment).toLocaleString('en-IN')}`}
+                    </span>
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    borderTop: '1px solid #E5E7EB',
+                    paddingTop: 8,
+                    marginTop: 6,
+                    fontSize: 15,
+                    fontWeight: 700
+                  }}
+                >
+                  <span>Net Month-End Payout (INR):</span>
+                  <span style={{ color: isResigned ? '#64748B' : '#16A34A' }}>₹{finalNetPay.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="btn-primary-pill full-width"
+                  onClick={() => {
+                    playTapSound();
+                    window.print();
+                  }}
+                >
+                  <span>Print / Download Payslip</span>
+                </button>
+                <button
+                  className="btn-secondary-pill"
+                  onClick={() => setViewingPayslip(null)}
+                >
+                  Close
+                </button>
               </div>
             </div>
+          </div>
+        );
+      })()}
 
-            <div style={{ display: 'flex', gap: 8 }}>
+      {/* ADD / EDIT STAFF MODAL SHEET */}
+      {showStaffModal && (
+        <div className="modal-overlay" onClick={() => setShowStaffModal(false)} style={{ zIndex: 9999 }}>
+          <div
+            className="modal-content-sheet"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 480, width: '92%', borderRadius: 20, padding: 20, maxHeight: '90vh', overflowY: 'auto' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <UserPlus size={18} color="#007AFF" />
+                <span className="card-heading" style={{ fontSize: 17 }}>
+                  {editingStaffId ? 'Edit Staff Member' : 'Add New Staff Member'}
+                </span>
+              </div>
               <button
-                className="btn-primary-pill full-width"
-                onClick={() => {
-                  playTapSound();
-                  window.print();
-                }}
+                type="button"
+                onClick={() => setShowStaffModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}
               >
-                <span>Print / Download Payslip</span>
-              </button>
-              <button
-                className="btn-secondary-pill"
-                onClick={() => setViewingPayslip(null)}
-              >
-                Close
+                <X size={18} />
               </button>
             </div>
+
+            <form onSubmit={handleSaveStaff}>
+              {/* Full Name */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 4 }}>
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  className="ios-input"
+                  placeholder="e.g. Rahul Sharma"
+                  value={staffFormData.name}
+                  onChange={(e) => setStaffFormData({ ...staffFormData, name: e.target.value })}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              {/* Designation / Role */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 4 }}>
+                  Role / Designation *
+                </label>
+                <input
+                  type="text"
+                  className="ios-input"
+                  placeholder="e.g. Service Captain & Floor Lead"
+                  value={staffFormData.role}
+                  onChange={(e) => setStaffFormData({ ...staffFormData, role: e.target.value })}
+                  required
+                />
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+                  {[
+                    'Executive Chef',
+                    'Sous Chef',
+                    'Service Captain & Floor Lead',
+                    'Cashier & Counter POS Lead',
+                    'Steward & Server',
+                    'Kitchen Helper'
+                  ].map((roleTitle) => (
+                    <button
+                      key={roleTitle}
+                      type="button"
+                      onClick={() => setStaffFormData({ ...staffFormData, role: roleTitle })}
+                      style={{
+                        fontSize: 10,
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        border: '1px solid #CBD5E1',
+                        background: staffFormData.role === roleTitle ? '#007AFF' : '#F8FAFC',
+                        color: staffFormData.role === roleTitle ? '#FFFFFF' : '#475569',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {roleTitle}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Phone & Status row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 4 }}>
+                    Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    className="ios-input"
+                    placeholder="+91 98765 43210"
+                    value={staffFormData.phone}
+                    onChange={(e) => setStaffFormData({ ...staffFormData, phone: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 4 }}>
+                    Employment Status
+                  </label>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      type="button"
+                      onClick={() => setStaffFormData({ ...staffFormData, status: 'active' })}
+                      style={{
+                        flex: 1,
+                        padding: '8px 4px',
+                        borderRadius: 10,
+                        border: '1px solid',
+                        borderColor: staffFormData.status === 'active' ? '#16A34A' : '#E2E8F0',
+                        background: staffFormData.status === 'active' ? '#DCFCE7' : '#F8FAFC',
+                        color: staffFormData.status === 'active' ? '#15803D' : '#64748B',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Active
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStaffFormData({ ...staffFormData, status: 'resigned' })}
+                      style={{
+                        flex: 1,
+                        padding: '8px 4px',
+                        borderRadius: 10,
+                        border: '1px solid',
+                        borderColor: staffFormData.status === 'resigned' ? '#DC2626' : '#E2E8F0',
+                        background: staffFormData.status === 'resigned' ? '#FEE2E2' : '#F8FAFC',
+                        color: staffFormData.status === 'resigned' ? '#B91C1C' : '#64748B',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Resigned
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Salary Section: Base Salary & Month-End Pay */}
+              <div
+                style={{
+                  padding: 12,
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: 12,
+                  marginBottom: 12
+                }}
+              >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#0F172A', display: 'block', marginBottom: 4 }}>
+                      Monthly Base Salary (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      className="ios-input"
+                      placeholder="e.g. 28000"
+                      value={staffFormData.monthlyWage}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setStaffFormData((prev) => ({
+                          ...prev,
+                          monthlyWage: val,
+                          monthEndPay: prev.monthEndPay === '' || prev.monthEndPay === prev.monthlyWage ? val : prev.monthEndPay
+                        }));
+                      }}
+                      required
+                      min="0"
+                    />
+                    <span style={{ fontSize: 10, color: '#64748B', marginTop: 2, display: 'block' }}>Regular monthly wage</span>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#16A34A', display: 'block', marginBottom: 4 }}>
+                      Month-End Payout (₹)
+                    </label>
+                    <input
+                      type="number"
+                      className="ios-input"
+                      placeholder="e.g. 30000"
+                      value={staffFormData.monthEndPay}
+                      onChange={(e) => setStaffFormData({ ...staffFormData, monthEndPay: e.target.value })}
+                      min="0"
+                    />
+                    <span style={{ fontSize: 10, color: '#64748B', marginTop: 2, display: 'block' }}>Custom payout this month</span>
+                  </div>
+                </div>
+                <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 8 }}>
+                  💡 Owner can edit how much pay any staff member receives at month-end. Leave Month-End Payout equal to Base Salary if no adjustment.
+                </div>
+              </div>
+
+              {/* Bank Details */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 4 }}>
+                    Bank Account No.
+                  </label>
+                  <input
+                    type="text"
+                    className="ios-input"
+                    placeholder="e.g. 982100481239"
+                    value={staffFormData.bankAccount}
+                    onChange={(e) => setStaffFormData({ ...staffFormData, bankAccount: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 4 }}>
+                    IFSC Code
+                  </label>
+                  <input
+                    type="text"
+                    className="ios-input"
+                    placeholder="e.g. HDFC0000128"
+                    value={staffFormData.ifsc}
+                    onChange={(e) => setStaffFormData({ ...staffFormData, ifsc: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* POS Permissions */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 6 }}>
+                  Role &amp; Terminal Permissions:
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={staffFormData.canEditPrice}
+                      onChange={(e) => setStaffFormData({ ...staffFormData, canEditPrice: e.target.checked })}
+                    />
+                    <span>Allow staff to edit item prices on Counter POS</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={staffFormData.canCreateDiscounts}
+                      onChange={(e) => setStaffFormData({ ...staffFormData, canCreateDiscounts: e.target.checked })}
+                    />
+                    <span>Allow staff to issue custom offers &amp; discounts</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                <button type="submit" className="btn-primary-pill full-width">
+                  {editingStaffId ? 'Save Changes' : 'Add Staff to Payroll'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary-pill"
+                  onClick={() => setShowStaffModal(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

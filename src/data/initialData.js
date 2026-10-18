@@ -310,12 +310,10 @@ export const initialStaff = [
     role: "Counter Captain & POS Lead",
     phone: "+91 98112-40192",
     monthlyWage: 26000,
-    daysPresent: 26,
-    daysAbsent: 2,
-    overtimeHours: 6,
-    pfRate: 12,
-    esiRate: 0.75,
-    tdsRate: 0,
+    monthEndPay: 26000,
+    status: "active",
+    bankAccount: "982100481201",
+    ifsc: "HDFC0000128",
     permissions: { canEditPrice: true, canCreateDiscounts: true, canViewPnL: false }
   },
   {
@@ -324,12 +322,10 @@ export const initialStaff = [
     role: "Head Barista & Cashier",
     phone: "+91 98450-88122",
     monthlyWage: 24000,
-    daysPresent: 27,
-    daysAbsent: 1,
-    overtimeHours: 4,
-    pfRate: 12,
-    esiRate: 0.75,
-    tdsRate: 0,
+    monthEndPay: 24000,
+    status: "active",
+    bankAccount: "982100481202",
+    ifsc: "HDFC0000128",
     permissions: { canEditPrice: false, canCreateDiscounts: true, canViewPnL: false }
   },
   {
@@ -338,12 +334,10 @@ export const initialStaff = [
     role: "Sous Chef & Tandoor Master",
     phone: "+91 98771-33100",
     monthlyWage: 36000,
-    daysPresent: 28,
-    daysAbsent: 0,
-    overtimeHours: 10,
-    pfRate: 12,
-    esiRate: 0.75,
-    tdsRate: 5,
+    monthEndPay: 36000,
+    status: "active",
+    bankAccount: "982100481203",
+    ifsc: "HDFC0000128",
     permissions: { canEditPrice: true, canCreateDiscounts: false, canViewPnL: false }
   },
   {
@@ -352,12 +346,10 @@ export const initialStaff = [
     role: "Service & Inventory Associate",
     phone: "+91 98220-77411",
     monthlyWage: 20000,
-    daysPresent: 25,
-    daysAbsent: 3,
-    overtimeHours: 0,
-    pfRate: 12,
-    esiRate: 0.75,
-    tdsRate: 0,
+    monthEndPay: 20000,
+    status: "active",
+    bankAccount: "982100481204",
+    ifsc: "HDFC0000128",
     permissions: { canEditPrice: false, canCreateDiscounts: false, canViewPnL: false }
   }
 ];
