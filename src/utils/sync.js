@@ -20,6 +20,8 @@ import {
   getCloudSyncState,
   subscribeCloudSyncState
 } from './firebaseSync';
+import { getActiveBusiness } from './businessManager';
+import { getScopedKey, STORAGE_KEYS } from './storage';
 
 export { getCloudSyncState, subscribeCloudSyncState, isCloudSyncEnabled };
 
@@ -52,11 +54,14 @@ export const SYNC_EVENTS = {
 const currentClientId = Math.random().toString(36).substring(2, 9);
 
 /**
- * Broadcast an event to all open tabs, windows and cross-device cloud
+ * Broadcast an event to all open tabs, windows and cross-device cloud (Strictly Scoped by Business)
  */
-export function broadcastSyncEvent(type, payload = {}) {
+export function broadcastSyncEvent(type, payload = {}, targetBusinessId = null) {
+  const currentBizId = targetBusinessId || payload?.businessId || getActiveBusiness()?.id || 'biz_advait';
+
   const eventMessage = {
     type,
+    businessId: currentBizId,
     payload,
     timestamp: Date.now(),
     senderId: currentClientId
@@ -78,75 +83,77 @@ export function broadcastSyncEvent(type, payload = {}) {
     // Ignore storage quota warnings
   }
 
-  // 3. Cross-Device Cloud Sync (Firebase Firestore)
+  // 3. Cross-Device Cloud Sync (Firebase Firestore - Scoped to Business)
   if (type === SYNC_EVENTS.NEW_ORDER && payload) {
-    syncOrderToCloud(payload).catch(() => {});
+    syncOrderToCloud(payload, currentBizId).catch(() => {});
   } else if (type === SYNC_EVENTS.ORDER_STATUS_UPDATED && payload && payload.id) {
-    syncStatusToCloud(payload.id, payload).catch(() => {});
+    syncStatusToCloud(payload.id, payload, currentBizId).catch(() => {});
   } else if (type === SYNC_EVENTS.CALL_SERVER && payload) {
-    syncServerCallToCloud(payload).catch(() => {});
+    syncServerCallToCloud(payload, currentBizId).catch(() => {});
   } else if (type === SYNC_EVENTS.OFFERS_UPDATED && Array.isArray(payload)) {
-    syncOffersToCloud(payload).catch(() => {});
+    syncOffersToCloud(payload, currentBizId).catch(() => {});
   } else if (type === SYNC_EVENTS.MENU_UPDATED && Array.isArray(payload)) {
-    syncMenuToCloud(payload).catch(() => {});
+    syncMenuToCloud(payload, currentBizId).catch(() => {});
   } else if (type === SYNC_EVENTS.STAFF_UPDATED && Array.isArray(payload)) {
-    syncStaffToCloud(payload).catch(() => {});
+    syncStaffToCloud(payload, currentBizId).catch(() => {});
   } else if (type === SYNC_EVENTS.CHECKLIST_SUBMITTED && payload) {
-    syncChecklistToCloud(payload).catch(() => {});
+    syncChecklistToCloud(payload, currentBizId).catch(() => {});
   }
 }
 
 /**
- * Subscribe to real-time events across windows and cross-device cloud
+ * Subscribe to real-time events across windows and cross-device cloud for a specific business
  */
-export function subscribeSyncEvents(callback) {
+export function subscribeSyncEvents(callback, filterBusinessId = null) {
   if (typeof window === 'undefined') return () => {};
 
   const handleBroadcast = (event) => {
     if (event && event.data && callback) {
-      // Don't echo own events if sent locally
-      callback(event.data);
+      const msg = event.data;
+      const targetBizId = filterBusinessId || getActiveBusiness()?.id;
+
+      // STRICT MULTI-TENANT ISOLATION:
+      // Drop any event originating from a different business account!
+      if (msg.businessId && targetBizId && msg.businessId !== targetBizId && msg.type !== SYNC_EVENTS.BUSINESS_DELETED) {
+        return;
+      }
+      callback(msg);
     }
   };
 
   const handleStorage = (e) => {
+    const targetBizId = filterBusinessId || getActiveBusiness()?.id;
+
     if (e.key === 'flowscape_sync_event_ping' && e.newValue) {
       try {
         const parsed = JSON.parse(e.newValue);
+        if (parsed.businessId && targetBizId && parsed.businessId !== targetBizId && parsed.type !== SYNC_EVENTS.BUSINESS_DELETED) {
+          return;
+        }
         if (callback) callback(parsed);
       } catch (err) {
         console.error('Error parsing storage sync message:', err);
       }
-    } else if (e.key === 'flowscape_orders_v2' && e.newValue) {
-      try {
-        const parsedOrders = JSON.parse(e.newValue);
-        if (Array.isArray(parsedOrders) && callback) {
-          callback({
-            type: 'DIRECT_ORDERS_SYNC',
-            payload: parsedOrders
-          });
-        }
-      } catch (err) {
-        console.error('Error parsing direct orders sync:', err);
-      }
-    } else if (e.key && e.key.startsWith('flowscape_staff_inr_v2') && e.newValue) {
+    } else if (targetBizId && e.key === getScopedKey(STORAGE_KEYS.STAFF, targetBizId) && e.newValue) {
       try {
         const parsedStaff = JSON.parse(e.newValue);
         if (Array.isArray(parsedStaff) && callback) {
           callback({
             type: SYNC_EVENTS.STAFF_UPDATED,
+            businessId: targetBizId,
             payload: parsedStaff
           });
         }
       } catch (err) {
         console.error('Error parsing direct staff storage sync:', err);
       }
-    } else if (e.key && e.key.startsWith('flowscape_checklists_inr_v2') && e.newValue) {
+    } else if (targetBizId && e.key === getScopedKey(STORAGE_KEYS.CHECKLISTS, targetBizId) && e.newValue) {
       try {
         const parsedChecklists = JSON.parse(e.newValue);
         if (Array.isArray(parsedChecklists) && parsedChecklists.length > 0 && callback) {
           callback({
             type: SYNC_EVENTS.CHECKLIST_SUBMITTED,
+            businessId: targetBizId,
             payload: parsedChecklists[0]
           });
         }
@@ -161,7 +168,7 @@ export function subscribeSyncEvents(callback) {
   }
   window.addEventListener('storage', handleStorage);
 
-  // Subscribe to Cloud Sync if configured
+  // Subscribe to Cloud Sync if configured (strictly for the active business)
   let unsubscribeCloudOrders = null;
   let unsubscribeCloudServerCalls = null;
   let unsubscribeCloudOffers = null;
@@ -169,12 +176,16 @@ export function subscribeSyncEvents(callback) {
   let unsubscribeCloudStaff = null;
   let unsubscribeCloudChecklists = null;
 
+  const activeBizId = filterBusinessId || getActiveBusiness()?.id || 'biz_advait';
+
   if (isCloudSyncEnabled()) {
     unsubscribeCloudOrders = subscribeToCloudOrders(
+      activeBizId,
       (newOrder, isInitial) => {
         if (callback && newOrder && newOrder.id) {
           callback({
             type: SYNC_EVENTS.NEW_ORDER,
+            businessId: activeBizId,
             payload: newOrder,
             isInitial
           });
@@ -184,52 +195,58 @@ export function subscribeSyncEvents(callback) {
         if (callback && updatedOrder && updatedOrder.id) {
           callback({
             type: SYNC_EVENTS.ORDER_STATUS_UPDATED,
+            businessId: activeBizId,
             payload: updatedOrder
           });
         }
       }
     );
 
-    unsubscribeCloudServerCalls = subscribeToCloudServerCalls((callData) => {
+    unsubscribeCloudServerCalls = subscribeToCloudServerCalls(activeBizId, (callData) => {
       if (callback && callData) {
         callback({
           type: SYNC_EVENTS.CALL_SERVER,
+          businessId: activeBizId,
           payload: callData
         });
       }
     });
 
-    unsubscribeCloudOffers = subscribeToCloudOffers((cloudOffers) => {
+    unsubscribeCloudOffers = subscribeToCloudOffers(activeBizId, (cloudOffers) => {
       if (callback && Array.isArray(cloudOffers)) {
         callback({
           type: SYNC_EVENTS.OFFERS_UPDATED,
+          businessId: activeBizId,
           payload: cloudOffers
         });
       }
     });
 
-    unsubscribeCloudMenu = subscribeToCloudMenu((cloudMenu) => {
+    unsubscribeCloudMenu = subscribeToCloudMenu(activeBizId, (cloudMenu) => {
       if (callback && Array.isArray(cloudMenu)) {
         callback({
           type: SYNC_EVENTS.MENU_UPDATED,
+          businessId: activeBizId,
           payload: cloudMenu
         });
       }
     });
 
-    unsubscribeCloudStaff = subscribeToCloudStaff((cloudStaff) => {
+    unsubscribeCloudStaff = subscribeToCloudStaff(activeBizId, (cloudStaff) => {
       if (callback && Array.isArray(cloudStaff)) {
         callback({
           type: SYNC_EVENTS.STAFF_UPDATED,
+          businessId: activeBizId,
           payload: cloudStaff
         });
       }
     });
 
-    unsubscribeCloudChecklists = subscribeToCloudChecklists((cloudChecklist) => {
+    unsubscribeCloudChecklists = subscribeToCloudChecklists(activeBizId, (cloudChecklist) => {
       if (callback && cloudChecklist && cloudChecklist.id) {
         callback({
           type: SYNC_EVENTS.CHECKLIST_SUBMITTED,
+          businessId: activeBizId,
           payload: cloudChecklist
         });
       }

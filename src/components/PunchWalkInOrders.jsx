@@ -13,6 +13,7 @@ import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
 
 export default function PunchWalkInOrders({
+  activeBusinessId = 'biz_advait',
   orders,
   setOrders,
   menu = [],
@@ -145,6 +146,7 @@ export default function PunchWalkInOrders({
     const uniqueOrderId = `ORD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const newOrder = {
       id: uniqueOrderId,
+      businessId: activeBusinessId,
       customerName: (grid.customer || '').trim() || 'Walk-in Diner',
       table: grid.table,
       phone: 'Walk-in POS',
@@ -166,15 +168,7 @@ export default function PunchWalkInOrders({
       setOrders((prev) => [newOrder, ...prev]);
     }
 
-    // Persist directly to localStorage
-    try {
-      const currentOrders = JSON.parse(localStorage.getItem('flowscape_orders_v2') || '[]');
-      localStorage.setItem('flowscape_orders_v2', JSON.stringify([newOrder, ...currentOrders]));
-    } catch {
-      // ignore
-    }
-
-    broadcastSyncEvent(SYNC_EVENTS.NEW_ORDER, newOrder);
+    broadcastSyncEvent(SYNC_EVENTS.NEW_ORDER, newOrder, activeBusinessId);
     playSuccessChime();
 
     setSuccessToast(`Order ${newOrder.id} (${newOrder.table}) punched successfully!`);

@@ -410,38 +410,54 @@ export function isAuthenticated(role, activeSessionRole = null) {
   const sessions = getStoredSessions();
   if (!sessions) return false;
 
-  // Admin Master session can access both Admin and Counter
+  const activeBiz = getActiveBusiness();
+  const currentBizId = activeBiz?.id || 'biz_advait';
+
+  // Admin Master session can access both Admin and Counter for their own business ONLY
   if (sessions[ROLES.ADMIN] && sessions[ROLES.ADMIN].token) {
-    return true;
+    if (sessions[ROLES.ADMIN].businessId === currentBizId) {
+      return true;
+    }
   }
 
-  // If session switched from Admin, require an active admin session token
+  // If session switched from Admin, require an active admin session token matching this business
   if (
     role === ROLES.ADMIN &&
     typeof sessionStorage !== 'undefined' &&
     sessionStorage.getItem('flowscape_switched_from_admin') === 'true' &&
-    Boolean(sessions[ROLES.ADMIN]?.token)
+    Boolean(sessions[ROLES.ADMIN]?.token) &&
+    sessions[ROLES.ADMIN]?.businessId === currentBizId
   ) {
     return true;
   }
 
   if (role === ROLES.COUNTER && sessions[ROLES.COUNTER] && sessions[ROLES.COUNTER].token) {
-    return true;
+    if (sessions[ROLES.COUNTER].businessId === currentBizId) {
+      return true;
+    }
   }
 
   if (sessions[role] && sessions[role].token) {
-    return true;
+    if (!sessions[role].businessId || sessions[role].businessId === currentBizId) {
+      return true;
+    }
   }
 
   return false;
 }
 
 /**
- * Retrieve active session data for a specific role
+ * Retrieve active session data for a specific role (strictly isolated by business)
  */
 export function getSession(role) {
   const sessions = getStoredSessions();
-  return sessions ? sessions[role] : null;
+  if (!sessions || !sessions[role]) return null;
+  const activeBiz = getActiveBusiness();
+  const currentBizId = activeBiz?.id || 'biz_advait';
+  if (sessions[role].businessId && sessions[role].businessId !== currentBizId) {
+    return null;
+  }
+  return sessions[role];
 }
 
 /**

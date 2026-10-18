@@ -30,6 +30,7 @@ import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 
 export default function CustomerView({
+  activeBusinessId = 'biz_advait',
   menu,
   chef,
   theme,
@@ -55,34 +56,37 @@ export default function CustomerView({
   const [customizingItem, setCustomizingItem] = useState(null);
   const [itemNoteInput, setItemNoteInput] = useState('');
   
-  // Diner Identification State (Mandatory Pop-up on Menu Landing)
+  // Diner Identification State (Mandatory Pop-up on Menu Landing - Tenant Scoped)
+  const dinerNameKey = `flowscape_diner_name_${activeBusinessId}`;
+  const dinerPhoneKey = `flowscape_diner_phone_${activeBusinessId}`;
+
   const [customerName, setCustomerName] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('advait_customer_name') || '';
+      return localStorage.getItem(dinerNameKey) || (activeBusinessId === 'biz_advait' ? localStorage.getItem('advait_customer_name') : '') || '';
     }
     return '';
   });
   const [customerPhone, setCustomerPhone] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('advait_customer_phone') || '';
+      return localStorage.getItem(dinerPhoneKey) || (activeBusinessId === 'biz_advait' ? localStorage.getItem('advait_customer_phone') : '') || '';
     }
     return '';
   });
   const [showNameModal, setShowNameModal] = useState(() => {
     if (typeof window !== 'undefined') {
-      return !localStorage.getItem('advait_customer_name');
+      return !(localStorage.getItem(dinerNameKey) || (activeBusinessId === 'biz_advait' ? localStorage.getItem('advait_customer_name') : ''));
     }
     return true;
   });
   const [customerNameInput, setCustomerNameInput] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('advait_customer_name') || '';
+      return localStorage.getItem(dinerNameKey) || (activeBusinessId === 'biz_advait' ? localStorage.getItem('advait_customer_name') : '') || '';
     }
     return '';
   });
   const [customerPhoneInput, setCustomerPhoneInput] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('advait_customer_phone') || '';
+      return localStorage.getItem(dinerPhoneKey) || (activeBusinessId === 'biz_advait' ? localStorage.getItem('advait_customer_phone') : '') || '';
     }
     return '';
   });
@@ -187,9 +191,9 @@ export default function CustomerView({
 
     setCustomerName(cleanName);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('advait_customer_name', cleanName);
+      localStorage.setItem(dinerNameKey, cleanName);
       if (customerPhoneInput.trim()) {
-        localStorage.setItem('advait_customer_phone', customerPhoneInput.trim());
+        localStorage.setItem(dinerPhoneKey, customerPhoneInput.trim());
       }
     }
     setCustomerPhone(customerPhoneInput.trim());
@@ -333,6 +337,7 @@ export default function CustomerView({
     const newOrder = {
       id: newOrderId,
       orderNumber: orderNum,
+      businessId: activeBusinessId,
       customerName: finalCustomerName,
       table: activeTable,
       phone: customerPhone.trim() || 'Walk-in',
@@ -355,7 +360,7 @@ export default function CustomerView({
     onPlaceOrder(newOrder);
 
     // 2. Broadcast cross-tab instant sync to Counter POS & Admin!
-    broadcastSyncEvent(SYNC_EVENTS.NEW_ORDER, newOrder);
+    broadcastSyncEvent(SYNC_EVENTS.NEW_ORDER, newOrder, activeBusinessId);
 
     setCart([]);
     setAppliedPromo(null);
@@ -374,10 +379,11 @@ export default function CustomerView({
   const handleCallServer = () => {
     playTapSound();
     broadcastSyncEvent(SYNC_EVENTS.CALL_SERVER, {
+      businessId: activeBusinessId,
       table: activeTable,
       customerName: customerName || 'Guest Diner',
       timestamp: new Date().toLocaleTimeString()
-    });
+    }, activeBusinessId);
     setServerCalledAlert(true);
     playSuccessChime();
     setTimeout(() => setServerCalledAlert(false), 5000);

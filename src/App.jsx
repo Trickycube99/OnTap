@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import AuthModal from './components/AuthModal';
@@ -18,7 +18,7 @@ import {
   initialOffers,
   initialTheme
 } from './data/initialData';
-import { loadData, saveData, resetAllDataToDefault, STORAGE_KEYS } from './utils/storage';
+import { loadData, saveData, resetAllDataToDefault, getScopedKey, STORAGE_KEYS } from './utils/storage';
 import {
   getStoredSessions,
   saveStoredSessions,
@@ -35,11 +35,6 @@ import {
 import { playNewOrderChime, playTapSound } from './utils/audio';
 import { subscribeSyncEvents, SYNC_EVENTS } from './utils/sync';
 import confetti from 'canvas-confetti';
-
-const getScopedKey = (baseKey, bizId) => {
-  if (!bizId || bizId === 'biz_advait') return baseKey;
-  return `${baseKey}_${bizId}`;
-};
 
 export const normalizeStaffCredentials = (staffList) => {
   if (!Array.isArray(staffList)) return [];
@@ -60,6 +55,7 @@ export default function App() {
   const isDefaultBiz = initialBizId === 'biz_advait';
 
   const [activeBusinessId, setActiveBusinessId] = useState(initialBizId);
+  const loadedBusinessIdRef = useRef(initialBizId);
 
   // Global Shared States (Persisted in localStorage scoped by active business)
   const [menu, setMenu] = useState(() => loadData(getScopedKey(STORAGE_KEYS.MENU, initialBizId), initialMenu));
@@ -191,14 +187,48 @@ export default function App() {
     }
   }, [showAboutChef, activeTab, currentRole]);
 
-  // Save changes to localStorage scoped by active business
-  useEffect(() => { saveData(getScopedKey(STORAGE_KEYS.MENU, activeBusinessId), menu); }, [menu, activeBusinessId]);
-  useEffect(() => { saveData(getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId), orders); }, [orders, activeBusinessId]);
-  useEffect(() => { saveData(getScopedKey(STORAGE_KEYS.EXPENSES, activeBusinessId), expenses); }, [expenses, activeBusinessId]);
-  useEffect(() => { saveData(getScopedKey(STORAGE_KEYS.STAFF, activeBusinessId), staff); }, [staff, activeBusinessId]);
-  useEffect(() => { saveData(getScopedKey(STORAGE_KEYS.OFFERS, activeBusinessId), offers); }, [offers, activeBusinessId]);
-  useEffect(() => { saveData(getScopedKey(STORAGE_KEYS.THEME, activeBusinessId), theme); }, [theme, activeBusinessId]);
-  useEffect(() => { saveData(getScopedKey(STORAGE_KEYS.CHECKLISTS, activeBusinessId), checklists); }, [checklists, activeBusinessId]);
+  // Save changes to localStorage scoped by active business (guarded by loaded business ref to prevent cross-tenant writes)
+  useEffect(() => {
+    if (loadedBusinessIdRef.current === activeBusinessId) {
+      saveData(getScopedKey(STORAGE_KEYS.MENU, activeBusinessId), menu);
+    }
+  }, [menu, activeBusinessId]);
+
+  useEffect(() => {
+    if (loadedBusinessIdRef.current === activeBusinessId) {
+      saveData(getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId), orders);
+    }
+  }, [orders, activeBusinessId]);
+
+  useEffect(() => {
+    if (loadedBusinessIdRef.current === activeBusinessId) {
+      saveData(getScopedKey(STORAGE_KEYS.EXPENSES, activeBusinessId), expenses);
+    }
+  }, [expenses, activeBusinessId]);
+
+  useEffect(() => {
+    if (loadedBusinessIdRef.current === activeBusinessId) {
+      saveData(getScopedKey(STORAGE_KEYS.STAFF, activeBusinessId), staff);
+    }
+  }, [staff, activeBusinessId]);
+
+  useEffect(() => {
+    if (loadedBusinessIdRef.current === activeBusinessId) {
+      saveData(getScopedKey(STORAGE_KEYS.OFFERS, activeBusinessId), offers);
+    }
+  }, [offers, activeBusinessId]);
+
+  useEffect(() => {
+    if (loadedBusinessIdRef.current === activeBusinessId) {
+      saveData(getScopedKey(STORAGE_KEYS.THEME, activeBusinessId), theme);
+    }
+  }, [theme, activeBusinessId]);
+
+  useEffect(() => {
+    if (loadedBusinessIdRef.current === activeBusinessId) {
+      saveData(getScopedKey(STORAGE_KEYS.CHECKLISTS, activeBusinessId), checklists);
+    }
+  }, [checklists, activeBusinessId]);
 
   // Dynamic CSS variables for tenant branding (strictly isolated from developer superadmin console)
   useEffect(() => {
@@ -215,10 +245,16 @@ export default function App() {
     }
   }, [theme?.accentColor, currentRole]);
 
-  // Real-Time Cross-Tab / Cross-Device Synchronization Listener
+  // Real-Time Cross-Tab / Cross-Device Synchronization Listener (Tenant-Scoped)
   useEffect(() => {
     const unsubscribe = subscribeSyncEvents((msg) => {
       if (!msg || !msg.type) return;
+
+      // STRICT MULTI-TENANT ISOLATION:
+      // Drop any event scoped to a different business!
+      if (msg.businessId && msg.businessId !== activeBusinessId && msg.type !== SYNC_EVENTS.BUSINESS_DELETED) {
+        return;
+      }
 
       if (msg.type === SYNC_EVENTS.NEW_ORDER) {
         setOrders((prev) => {
@@ -236,10 +272,6 @@ export default function App() {
           }
           return [msg.payload, ...prev];
         });
-      } else if (msg.type === 'DIRECT_ORDERS_SYNC') {
-        if (Array.isArray(msg.payload)) {
-          setOrders(msg.payload);
-        }
       } else if (msg.type === SYNC_EVENTS.MENU_UPDATED) {
         setMenu(msg.payload);
       } else if (msg.type === SYNC_EVENTS.OFFERS_UPDATED) {
@@ -270,10 +302,10 @@ export default function App() {
           window.location.reload();
         }
       }
-    });
+    }, activeBusinessId);
 
     return unsubscribe;
-  }, [currentRole, isSoundMuted]);
+  }, [activeBusinessId, currentRole, isSoundMuted]);
 
 
   // URL Hash & Parameter Routing Guard
@@ -378,7 +410,8 @@ export default function App() {
 
   // Handle Order Placement from Customer
   const handlePlaceOrder = (newOrder) => {
-    setOrders((prev) => [newOrder, ...prev]);
+    const orderWithBiz = { ...newOrder, businessId: activeBusinessId };
+    setOrders((prev) => [orderWithBiz, ...prev]);
     // Celebratory confetti
     confetti({
       particleCount: 80,
@@ -396,15 +429,15 @@ export default function App() {
   const handleResetDemo = () => {
     playTapSound();
     if (window.confirm('Reset all demo data (menu, orders, expenses, staff & sessions) to fresh defaults?')) {
-      resetAllDataToDefault();
+      resetAllDataToDefault(activeBusinessId);
       resetAllSessions();
       setAuthSessions(getStoredSessions());
       setMenu(initialMenu);
       setChef(verifiedChefData);
-      setOrders(initialOrders);
-      setExpenses(initialExpenses);
-      setStaff(initialStaff);
-      setOffers(initialOffers);
+      setOrders(activeBusinessId === 'biz_advait' ? initialOrders : []);
+      setExpenses(activeBusinessId === 'biz_advait' ? initialExpenses : []);
+      setStaff(activeBusinessId === 'biz_advait' ? initialStaff : []);
+      setOffers(activeBusinessId === 'biz_advait' ? initialOffers : []);
       setTheme(initialTheme);
       setChecklists([]);
       setCart([]);
@@ -413,8 +446,17 @@ export default function App() {
 
   // Helper to load scoped tenant business data
   const loadBusinessData = (bizId, bizObj = null) => {
+    loadedBusinessIdRef.current = bizId;
+    setCart([]); // Clear any items left in cart from another restaurant
+
     const isDefault = !bizId || bizId === 'biz_advait';
     const biz = bizObj || getBusinesses().find((b) => b.id === bizId);
+
+    if (biz && Array.isArray(biz.tables) && biz.tables.length > 0) {
+      if (!biz.tables.includes(activeTable)) {
+        setActiveTable(biz.tables[0]);
+      }
+    }
 
     const loadedMenu = loadData(getScopedKey(STORAGE_KEYS.MENU, bizId), initialMenu);
     const loadedOrders = loadData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), isDefault ? initialOrders : []);
@@ -730,6 +772,7 @@ export default function App() {
               />
             ) : (
               <CustomerView
+                activeBusinessId={activeBusinessId}
                 menu={menu}
                 chef={chef}
                 theme={theme}
@@ -752,6 +795,7 @@ export default function App() {
 
           {currentRole === 'counter' && (
             <CounterView
+              activeBusinessId={activeBusinessId}
               orders={orders}
               setOrders={setOrders}
               menu={menu}
@@ -774,6 +818,7 @@ export default function App() {
 
           {currentRole === 'admin' && (
             <AdminView
+              activeBusinessId={activeBusinessId}
               orders={orders}
               setOrders={setOrders}
               menu={menu}

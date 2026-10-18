@@ -64,6 +64,7 @@ function createClosingChecklistReport({ expected, actual, variance, varianceReas
 }
 
 export default function CounterView({
+  activeBusinessId = 'biz_advait',
   orders,
   setOrders,
   menu,
@@ -127,7 +128,10 @@ export default function CounterView({
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('counter_active_staff_id');
       }
-      const saved = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('counter_active_staff_id') : null;
+      const scopedKey = `counter_active_staff_id_${activeBusinessId}`;
+      const saved = typeof sessionStorage !== 'undefined'
+        ? (sessionStorage.getItem(scopedKey) || sessionStorage.getItem('counter_active_staff_id'))
+        : null;
       if (saved && activeStaffList.some((s) => s.id === saved)) return saved;
       if (saved === '__owner_admin__' && canReturnToAdmin) return '__owner_admin__';
     } catch {}
@@ -233,6 +237,7 @@ export default function CounterView({
       try {
         if (typeof sessionStorage !== 'undefined') {
           sessionStorage.setItem('counter_active_staff_id', targetStaff.id);
+          sessionStorage.setItem(`counter_active_staff_id_${activeBusinessId}`, targetStaff.id);
         }
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem('counter_active_staff_id');
@@ -249,9 +254,12 @@ export default function CounterView({
     }
   };
 
-  // Listen for real-time events from customers and owner admin
+  // Listen for real-time events from customers and owner admin (Strictly Scoped by Business)
   useEffect(() => {
     const unsubscribe = subscribeSyncEvents((msg) => {
+      if (!msg) return;
+      if (msg.businessId && msg.businessId !== activeBusinessId) return;
+
       if (msg.type === SYNC_EVENTS.CALL_SERVER) {
         setServerAlert(msg.payload);
         playAlertChime();
@@ -262,9 +270,9 @@ export default function CounterView({
           setTimeout(() => setPermissionsToast(''), 4500);
         }
       }
-    });
+    }, activeBusinessId);
     return unsubscribe;
-  }, [setStaff]);
+  }, [setStaff, activeBusinessId]);
 
   // Calculate Expected Totals from recorded orders for today
   const expectedCash = orders
@@ -296,6 +304,7 @@ export default function CounterView({
 
     const updatedOrder = {
       ...target,
+      businessId: activeBusinessId,
       status: newStatus,
       statusLabel: newLabel,
       progressPercent: progressPercent
@@ -305,17 +314,8 @@ export default function CounterView({
       prev.map((ord) => (ord.id === orderId ? updatedOrder : ord))
     );
 
-    // Save directly to localStorage immediately so cross-window and storage listeners fire instantly
-    try {
-      const currentOrders = JSON.parse(localStorage.getItem('flowscape_orders_v2') || '[]');
-      const updatedList = currentOrders.map((ord) => (ord.id === orderId ? updatedOrder : ord));
-      localStorage.setItem('flowscape_orders_v2', JSON.stringify(updatedList));
-    } catch {
-      // ignore
-    }
-
     // Broadcast status change in real time to the customer via BroadcastChannel & sync event ping
-    broadcastSyncEvent(SYNC_EVENTS.ORDER_STATUS_UPDATED, updatedOrder);
+    broadcastSyncEvent(SYNC_EVENTS.ORDER_STATUS_UPDATED, updatedOrder, activeBusinessId);
 
     if (newStatus === 'done' || newStatus === 'served') {
       playSuccessChime();
@@ -329,6 +329,7 @@ export default function CounterView({
 
     const rejectedOrder = {
       ...target,
+      businessId: activeBusinessId,
       status: 'rejected',
       statusLabel: `Rejected: ${rejectReason}`,
       progressPercent: 0
@@ -338,15 +339,7 @@ export default function CounterView({
       prev.map((ord) => (ord.id === rejectOrderId ? rejectedOrder : ord))
     );
 
-    try {
-      const currentOrders = JSON.parse(localStorage.getItem('flowscape_orders_v2') || '[]');
-      const updatedList = currentOrders.map((ord) => (ord.id === rejectOrderId ? rejectedOrder : ord));
-      localStorage.setItem('flowscape_orders_v2', JSON.stringify(updatedList));
-    } catch {
-      // ignore
-    }
-
-    broadcastSyncEvent(SYNC_EVENTS.ORDER_STATUS_UPDATED, rejectedOrder);
+    broadcastSyncEvent(SYNC_EVENTS.ORDER_STATUS_UPDATED, rejectedOrder, activeBusinessId);
     setRejectOrderId(null);
   };
 
@@ -355,7 +348,7 @@ export default function CounterView({
     playTapSound();
     const updated = menu.map((item) => (item.id === itemId ? { ...item, isAvailable: !item.isAvailable } : item));
     setMenu(updated);
-    broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated);
+    broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated, activeBusinessId);
   };
 
   // Save Price Edit (FR-P4)
@@ -400,8 +393,7 @@ export default function CounterView({
 
     const updated = [offerObj, ...offers];
     setOffers(updated);
-    saveData(STORAGE_KEYS.OFFERS, updated);
-    broadcastSyncEvent(SYNC_EVENTS.OFFERS_UPDATED, updated);
+    broadcastSyncEvent(SYNC_EVENTS.OFFERS_UPDATED, updated, activeBusinessId);
     setNewOfferCode('');
     setNewOfferValue('');
     setNewOfferMin('');
@@ -420,8 +412,7 @@ export default function CounterView({
     if (window.confirm('Are you sure you want to delete this coupon?')) {
       const updated = offers.filter((o) => o.id !== offerId);
       setOffers(updated);
-      saveData(STORAGE_KEYS.OFFERS, updated);
-      broadcastSyncEvent(SYNC_EVENTS.OFFERS_UPDATED, updated);
+      broadcastSyncEvent(SYNC_EVENTS.OFFERS_UPDATED, updated, activeBusinessId);
       playAlertChime();
     }
   };
@@ -479,19 +470,22 @@ export default function CounterView({
     playTapSound();
     if (!closingPendingReport) return;
 
-    const report = createClosingChecklistReport({
-      expected: closingPendingReport.expected,
-      actual: closingPendingReport.actual,
-      variance: closingPendingReport.variance,
-      varianceReason: closingPendingReport.varianceReason,
-      submittedBy: closingPendingReport.submittedBy,
-      staffRole: closingPendingReport.staffRole
-    });
+    const report = {
+      ...createClosingChecklistReport({
+        expected: closingPendingReport.expected,
+        actual: closingPendingReport.actual,
+        variance: closingPendingReport.variance,
+        varianceReason: closingPendingReport.varianceReason,
+        submittedBy: closingPendingReport.submittedBy,
+        staffRole: closingPendingReport.staffRole
+      }),
+      businessId: activeBusinessId
+    };
 
     if (setChecklists) {
       setChecklists((prev) => [report, ...(Array.isArray(prev) ? prev : [])]);
     }
-    broadcastSyncEvent(SYNC_EVENTS.CHECKLIST_SUBMITTED, report);
+    broadcastSyncEvent(SYNC_EVENTS.CHECKLIST_SUBMITTED, report, activeBusinessId);
     setShowClosingConfirmModal(false);
     setChecklistSubmitted(true);
     playSuccessChime();
@@ -1160,6 +1154,7 @@ export default function CounterView({
       {activeSubTab === 'manual' && (
         <div style={{ marginBottom: 16 }}>
           <PunchWalkInOrders
+            activeBusinessId={activeBusinessId}
             orders={orders}
             setOrders={setOrders}
             menu={menu}

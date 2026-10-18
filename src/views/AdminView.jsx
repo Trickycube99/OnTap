@@ -55,6 +55,7 @@ const isOfferExpired = (offer) => {
 };
 
 export default function AdminView({
+  activeBusinessId = 'biz_advait',
   orders,
   setOrders,
   menu,
@@ -83,9 +84,12 @@ export default function AdminView({
   const [payrollDisbursed, setPayrollDisbursed] = useState(false);
   const [liveEodToast, setLiveEodToast] = useState('');
 
-  // Real-time synchronization: listen for live EOD checklist submissions from Counter Staff
+  // Real-time synchronization: listen for live EOD checklist submissions from Counter Staff (Tenant Scoped)
   useEffect(() => {
     const unsubscribe = subscribeSyncEvents((msg) => {
+      if (!msg) return;
+      if (msg.businessId && msg.businessId !== activeBusinessId) return;
+
       if (msg.type === SYNC_EVENTS.CHECKLIST_SUBMITTED && msg.payload) {
         if (setChecklists) {
           setChecklists((prev) => {
@@ -105,9 +109,9 @@ export default function AdminView({
         playSuccessChime();
         setTimeout(() => setLiveEodToast(''), 7000);
       }
-    });
+    }, activeBusinessId);
     return () => unsubscribe();
-  }, [setChecklists]);
+  }, [setChecklists, activeBusinessId]);
 
   // Coupons & Offers Management State
   const [showCouponModal, setShowCouponModal] = useState(false);
@@ -1727,6 +1731,7 @@ export default function AdminView({
           {showWalkInPunch && (
             <div style={{ marginBottom: 16 }}>
               <PunchWalkInOrders
+                activeBusinessId={activeBusinessId}
                 orders={orders}
                 setOrders={setOrders}
                 menu={menu}
@@ -1841,6 +1846,7 @@ export default function AdminView({
       {activeAdminTab === 'punch' && (
         <div style={{ marginBottom: 16 }}>
           <PunchWalkInOrders
+            activeBusinessId={activeBusinessId}
             orders={orders}
             setOrders={setOrders}
             menu={menu}

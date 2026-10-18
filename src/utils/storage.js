@@ -19,6 +19,11 @@ const STORAGE_KEYS = {
   CHECKLISTS: 'flowscape_checklists_inr_v2'
 };
 
+export function getScopedKey(baseKey, bizId) {
+  const cleanId = bizId || 'biz_advait';
+  return cleanId === 'biz_advait' ? baseKey : `${baseKey}_${cleanId}`;
+}
+
 export function loadData(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -38,15 +43,15 @@ export function saveData(key, value) {
   }
 }
 
-export function resetAllDataToDefault() {
-  saveData(STORAGE_KEYS.MENU, initialMenu);
-  saveData(STORAGE_KEYS.CHEF, verifiedChefData);
-  saveData(STORAGE_KEYS.ORDERS, initialOrders);
-  saveData(STORAGE_KEYS.EXPENSES, initialExpenses);
-  saveData(STORAGE_KEYS.STAFF, initialStaff);
-  saveData(STORAGE_KEYS.OFFERS, initialOffers);
-  saveData(STORAGE_KEYS.THEME, initialTheme);
-  saveData(STORAGE_KEYS.CHECKLISTS, []);
+export function resetAllDataToDefault(bizId = 'biz_advait') {
+  saveData(getScopedKey(STORAGE_KEYS.MENU, bizId), initialMenu);
+  saveData(getScopedKey(STORAGE_KEYS.CHEF, bizId), verifiedChefData);
+  saveData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), bizId === 'biz_advait' ? initialOrders : []);
+  saveData(getScopedKey(STORAGE_KEYS.EXPENSES, bizId), bizId === 'biz_advait' ? initialExpenses : []);
+  saveData(getScopedKey(STORAGE_KEYS.STAFF, bizId), bizId === 'biz_advait' ? initialStaff : []);
+  saveData(getScopedKey(STORAGE_KEYS.OFFERS, bizId), bizId === 'biz_advait' ? initialOffers : []);
+  saveData(getScopedKey(STORAGE_KEYS.THEME, bizId), initialTheme);
+  saveData(getScopedKey(STORAGE_KEYS.CHECKLISTS, bizId), []);
 }
 
 export { STORAGE_KEYS };

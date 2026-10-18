@@ -17,6 +17,7 @@ import {
   where,
   limit
 } from 'firebase/firestore';
+import { getActiveBusiness } from './businessManager';
 
 // Read config from Vite environment variables or localStorage override
 export const getFirebaseConfig = () => {
@@ -141,17 +142,22 @@ export function isCloudSyncEnabled() {
 }
 
 /**
- * Upload or sync a new order to Firebase Firestore (Cross-Device)
+ * Upload or sync a new order to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
-export async function syncOrderToCloud(order) {
+export async function syncOrderToCloud(order, businessId = null) {
   const database = initFirebase();
   if (!database || !order || !order.id) return false;
 
+  const targetBizId = businessId || order.businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
     const cleanOrder = sanitizeForFirestore(order);
-    const orderDocRef = doc(database, 'restaurant_orders', order.id);
+    const cloudDocId = `${targetBizId}_${order.id}`;
+    const orderDocRef = doc(database, 'restaurant_orders', cloudDocId);
     await setDoc(orderDocRef, {
       ...cleanOrder,
+      businessId: targetBizId,
+      originalOrderId: order.id,
       _cloudSyncedAt: Date.now()
     }, { merge: true });
 
@@ -173,19 +179,23 @@ export async function syncOrderToCloud(order) {
 }
 
 /**
- * Update order status in Firebase Firestore (Cross-Device)
+ * Update order status in Firebase Firestore (Cross-Device, Multi-Tenant)
  */
-export async function syncStatusToCloud(orderId, updateData) {
+export async function syncStatusToCloud(orderId, updateData, businessId = null) {
   const database = initFirebase();
   if (!database || !orderId) return false;
 
+  const targetBizId = businessId || updateData?.businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
     const cleanUpdate = sanitizeForFirestore(updateData);
-    const orderDocRef = doc(database, 'restaurant_orders', orderId);
-    await updateDoc(orderDocRef, {
+    const cloudDocId = orderId.startsWith(`${targetBizId}_`) ? orderId : `${targetBizId}_${orderId}`;
+    const orderDocRef = doc(database, 'restaurant_orders', cloudDocId);
+    await setDoc(orderDocRef, {
       ...cleanUpdate,
+      businessId: targetBizId,
       _cloudStatusUpdatedAt: Date.now()
-    });
+    }, { merge: true });
 
     updateSyncState({ status: 'connected', error: null, errorCode: null });
     return true;
@@ -207,15 +217,18 @@ export async function syncStatusToCloud(orderId, updateData) {
 /**
  * Sync server call alert (e.g. customer requesting assistance)
  */
-export async function syncServerCallToCloud(callData) {
+export async function syncServerCallToCloud(callData, businessId = null) {
   const database = initFirebase();
   if (!database) return false;
 
+  const targetBizId = businessId || callData?.businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
     const cleanCall = sanitizeForFirestore(callData);
-    const alertRef = doc(database, 'restaurant_alerts', 'latest_call_server');
+    const alertRef = doc(database, 'restaurant_alerts', `${targetBizId}_latest_call_server`);
     await setDoc(alertRef, {
       ...cleanCall,
+      businessId: targetBizId,
       _cloudAlertAt: Date.now()
     });
     return true;
@@ -225,19 +238,23 @@ export async function syncServerCallToCloud(callData) {
 }
 
 /**
- * Subscribe to server call alerts
+ * Subscribe to server call alerts for a specific business
  */
-export function subscribeToCloudServerCalls(onCallReceived) {
+export function subscribeToCloudServerCalls(businessId, onCallReceived) {
   const database = initFirebase();
   if (!database) return () => {};
 
+  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
-    const alertRef = doc(database, 'restaurant_alerts', 'latest_call_server');
+    const alertRef = doc(database, 'restaurant_alerts', `${targetBizId}_latest_call_server`);
     let isInitial = true;
     const unsubscribe = onSnapshot(alertRef, (snapshot) => {
       if (!isInitial && snapshot.exists()) {
         const data = snapshot.data();
-        if (onCallReceived) onCallReceived(data);
+        if (data && (!data.businessId || data.businessId === targetBizId)) {
+          if (onCallReceived) onCallReceived(data);
+        }
       }
       isInitial = false;
     });
@@ -248,18 +265,21 @@ export function subscribeToCloudServerCalls(onCallReceived) {
 }
 
 /**
- * Subscribe to real-time order updates from all devices
+ * Subscribe to real-time order updates for a specific business (Strict Isolation)
  */
-export function subscribeToCloudOrders(onOrdersUpdated, onStatusUpdated) {
+export function subscribeToCloudOrders(businessId, onOrdersUpdated, onStatusUpdated) {
   const database = initFirebase();
   if (!database) {
     updateSyncState({ status: 'local_only' });
     return () => {};
   }
 
+  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
     const ordersCol = collection(database, 'restaurant_orders');
-    const q = query(ordersCol, limit(100));
+    // STRICT MULTI-TENANT QUERY: Only fetch orders for target business
+    const q = query(ordersCol, where('businessId', '==', targetBizId), limit(100));
 
     let isInitial = true;
 
@@ -269,10 +289,17 @@ export function subscribeToCloudOrders(onOrdersUpdated, onStatusUpdated) {
         updateSyncState({ status: 'connected', error: null, errorCode: null });
         snapshot.docChanges().forEach((change) => {
           const data = change.doc.data();
+          if (!data || data.businessId !== targetBizId) return;
+
+          const normalizedOrder = {
+            ...data,
+            id: data.originalOrderId || data.id
+          };
+
           if (change.type === 'added') {
-            if (onOrdersUpdated) onOrdersUpdated(data, isInitial);
+            if (onOrdersUpdated) onOrdersUpdated(normalizedOrder, isInitial);
           } else if (change.type === 'modified') {
-            if (onStatusUpdated) onStatusUpdated(data);
+            if (onStatusUpdated) onStatusUpdated(normalizedOrder);
           }
         });
         isInitial = false;
@@ -305,16 +332,19 @@ export function subscribeToCloudOrders(onOrdersUpdated, onStatusUpdated) {
 }
 
 /**
- * Sync coupons & offers to Firebase Firestore (Cross-Device)
+ * Sync coupons & offers to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
-export async function syncOffersToCloud(offers) {
+export async function syncOffersToCloud(offers, businessId = null) {
   const database = initFirebase();
   if (!database || !Array.isArray(offers)) return false;
 
+  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
-    const configDocRef = doc(database, 'restaurant_config', 'offers');
+    const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_offers`);
     await setDoc(configDocRef, {
       offers: sanitizeForFirestore(offers),
+      businessId: targetBizId,
       _cloudSyncedAt: Date.now()
     }, { merge: true });
     return true;
@@ -325,19 +355,21 @@ export async function syncOffersToCloud(offers) {
 }
 
 /**
- * Subscribe to coupons & offers updates across devices
+ * Subscribe to coupons & offers updates for a specific business
  */
-export function subscribeToCloudOffers(onOffersUpdated) {
+export function subscribeToCloudOffers(businessId, onOffersUpdated) {
   const database = initFirebase();
   if (!database) return () => {};
 
+  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
-    const configDocRef = doc(database, 'restaurant_config', 'offers');
+    const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_offers`);
     let isInitial = true;
     const unsubscribe = onSnapshot(configDocRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        if (data && Array.isArray(data.offers)) {
+        if (data && Array.isArray(data.offers) && (!data.businessId || data.businessId === targetBizId)) {
           if (onOffersUpdated) onOffersUpdated(data.offers, isInitial);
         }
       }
@@ -350,19 +382,22 @@ export function subscribeToCloudOffers(onOffersUpdated) {
 }
 
 /**
- * Sync dishes & entire menu to Firebase Firestore (Cross-Device)
+ * Sync dishes & entire menu to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
-export async function syncMenuToCloud(menu) {
+export async function syncMenuToCloud(menu, businessId = null) {
   const database = initFirebase();
   if (!database || !Array.isArray(menu)) return false;
 
+  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
-    const configDocRef = doc(database, 'restaurant_config', 'menu');
+    const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_menu`);
     await setDoc(configDocRef, {
       menu: sanitizeForFirestore(menu),
+      businessId: targetBizId,
       _cloudSyncedAt: Date.now()
     }, { merge: true });
-    console.log(`🔥 [Cloud Sync] Menu successfully synced to Firestore (${menu.length} items)`);
+    console.log(`🔥 [Cloud Sync] Menu successfully synced to Firestore for business ${targetBizId} (${menu.length} items)`);
     return true;
   } catch (err) {
     console.error('🔥 [Cloud Sync] Error uploading menu to Firestore:', err);
@@ -371,20 +406,22 @@ export async function syncMenuToCloud(menu) {
 }
 
 /**
- * Subscribe to dishes & menu updates across devices in real time
+ * Subscribe to dishes & menu updates for a specific business
  */
-export function subscribeToCloudMenu(onMenuUpdated) {
+export function subscribeToCloudMenu(businessId, onMenuUpdated) {
   const database = initFirebase();
   if (!database) return () => {};
 
+  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
-    const configDocRef = doc(database, 'restaurant_config', 'menu');
+    const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_menu`);
     let isInitial = true;
     const unsubscribe = onSnapshot(configDocRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        if (data && Array.isArray(data.menu)) {
-          console.log(`🔥 [Cloud Sync] Received menu update from Firestore (${data.menu.length} items, initial: ${isInitial})`);
+        if (data && Array.isArray(data.menu) && (!data.businessId || data.businessId === targetBizId)) {
+          console.log(`🔥 [Cloud Sync] Received menu update from Firestore for ${targetBizId} (${data.menu.length} items, initial: ${isInitial})`);
           if (onMenuUpdated) onMenuUpdated(data.menu, isInitial);
         }
       }
@@ -399,19 +436,22 @@ export function subscribeToCloudMenu(onMenuUpdated) {
 }
 
 /**
- * Sync staff and POS terminal permissions to Firebase Firestore (Cross-Device)
+ * Sync staff and POS terminal permissions to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
-export async function syncStaffToCloud(staff) {
+export async function syncStaffToCloud(staff, businessId = null) {
   const database = initFirebase();
   if (!database || !Array.isArray(staff)) return false;
 
+  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
-    const configDocRef = doc(database, 'restaurant_config', 'staff');
+    const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_staff`);
     await setDoc(configDocRef, {
       staff: sanitizeForFirestore(staff),
+      businessId: targetBizId,
       _cloudSyncedAt: Date.now()
     }, { merge: true });
-    console.log(`🔥 [Cloud Sync] Staff & Permissions successfully synced to Firestore (${staff.length} staff)`);
+    console.log(`🔥 [Cloud Sync] Staff & Permissions successfully synced to Firestore for business ${targetBizId} (${staff.length} staff)`);
     return true;
   } catch (err) {
     console.error('🔥 [Cloud Sync] Error uploading staff to Firestore:', err);
@@ -420,20 +460,22 @@ export async function syncStaffToCloud(staff) {
 }
 
 /**
- * Subscribe to staff & permissions updates across devices in real time
+ * Subscribe to staff & permissions updates for a specific business
  */
-export function subscribeToCloudStaff(onStaffUpdated) {
+export function subscribeToCloudStaff(businessId, onStaffUpdated) {
   const database = initFirebase();
   if (!database) return () => {};
 
+  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
-    const configDocRef = doc(database, 'restaurant_config', 'staff');
+    const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_staff`);
     let isInitial = true;
     const unsubscribe = onSnapshot(configDocRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        if (data && Array.isArray(data.staff)) {
-          console.log(`🔥 [Cloud Sync] Received staff update from Firestore (${data.staff.length} staff, initial: ${isInitial})`);
+        if (data && Array.isArray(data.staff) && (!data.businessId || data.businessId === targetBizId)) {
+          console.log(`🔥 [Cloud Sync] Received staff update from Firestore for ${targetBizId} (${data.staff.length} staff, initial: ${isInitial})`);
           if (onStaffUpdated) onStaffUpdated(data.staff, isInitial);
         }
       }
@@ -448,19 +490,24 @@ export function subscribeToCloudStaff(onStaffUpdated) {
 }
 
 /**
- * Sync EOD closing checklist reports to Firebase Firestore (Cross-Device)
+ * Sync EOD closing checklist reports to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
-export async function syncChecklistToCloud(report) {
+export async function syncChecklistToCloud(report, businessId = null) {
   const database = initFirebase();
   if (!database || !report || !report.id) return false;
 
+  const targetBizId = businessId || report.businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
-    const reportDocRef = doc(database, 'restaurant_checklists', report.id);
+    const cloudDocId = `${targetBizId}_${report.id}`;
+    const reportDocRef = doc(database, 'restaurant_checklists', cloudDocId);
     await setDoc(reportDocRef, {
       ...sanitizeForFirestore(report),
+      businessId: targetBizId,
+      originalReportId: report.id,
       _cloudSyncedAt: Date.now()
     }, { merge: true });
-    console.log(`🔥 [Cloud Sync] EOD Checklist successfully synced to Firestore (${report.id})`);
+    console.log(`🔥 [Cloud Sync] EOD Checklist successfully synced to Firestore (${report.id}) for business ${targetBizId}`);
     return true;
   } catch (err) {
     console.error('🔥 [Cloud Sync] Error uploading EOD checklist to Firestore:', err);
@@ -469,22 +516,31 @@ export async function syncChecklistToCloud(report) {
 }
 
 /**
- * Subscribe to EOD closing checklist reports across devices in real time
+ * Subscribe to EOD closing checklist reports across devices for a specific business
  */
-export function subscribeToCloudChecklists(onChecklistUpdated) {
+export function subscribeToCloudChecklists(businessId, onChecklistUpdated) {
   const database = initFirebase();
   if (!database) return () => {};
 
+  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+
   try {
     const colRef = collection(database, 'restaurant_checklists');
-    const q = query(colRef, limit(50));
+    const q = query(colRef, where('businessId', '==', targetBizId), limit(50));
     let isInitial = true;
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
         const data = change.doc.data();
+        if (!data || data.businessId !== targetBizId) return;
+
+        const normalized = {
+          ...data,
+          id: data.originalReportId || data.id
+        };
+
         if (change.type === 'added' || change.type === 'modified') {
-          if (onChecklistUpdated && data && data.id) {
-            onChecklistUpdated(data, isInitial);
+          if (onChecklistUpdated && normalized && normalized.id) {
+            onChecklistUpdated(normalized, isInitial);
           }
         }
       });
@@ -499,28 +555,52 @@ export function subscribeToCloudChecklists(onChecklistUpdated) {
 }
 
 /**
- * Permanently delete all cloud orders in Firestore associated with a deleted business
+ * Permanently delete all cloud data in Firestore associated with a deleted business
  */
 export async function deleteCloudOrdersForBusiness(businessId) {
   const database = initFirebase();
   if (!database || !businessId) return false;
 
   try {
+    // 1. Delete all restaurant_orders for this business
     const ordersCol = collection(database, 'restaurant_orders');
-    const q = query(ordersCol, where('businessId', '==', businessId));
-    const snapshot = await getDocs(q);
+    const qOrders = query(ordersCol, where('businessId', '==', businessId));
+    const snapshotOrders = await getDocs(qOrders);
 
-    if (!snapshot.empty) {
+    if (!snapshotOrders.empty) {
       const batch = writeBatch(database);
-      snapshot.forEach((docSnap) => {
+      snapshotOrders.forEach((docSnap) => {
         batch.delete(docSnap.ref);
       });
       await batch.commit();
-      console.log(`🔥 [Cloud Sync] Purged ${snapshot.size} cloud orders for deleted business ${businessId}`);
+      console.log(`🔥 [Cloud Sync] Purged ${snapshotOrders.size} cloud orders for deleted business ${businessId}`);
     }
+
+    // 2. Delete all restaurant_checklists for this business
+    try {
+      const checklistsCol = collection(database, 'restaurant_checklists');
+      const qChecklists = query(checklistsCol, where('businessId', '==', businessId));
+      const snapshotChecklists = await getDocs(qChecklists);
+      if (!snapshotChecklists.empty) {
+        const batchChecklists = writeBatch(database);
+        snapshotChecklists.forEach((docSnap) => {
+          batchChecklists.delete(docSnap.ref);
+        });
+        await batchChecklists.commit();
+      }
+    } catch {}
+
+    // 3. Delete config documents
+    try {
+      await deleteDoc(doc(database, 'restaurant_config', `${businessId}_menu`));
+      await deleteDoc(doc(database, 'restaurant_config', `${businessId}_staff`));
+      await deleteDoc(doc(database, 'restaurant_config', `${businessId}_offers`));
+      await deleteDoc(doc(database, 'restaurant_alerts', `${businessId}_latest_call_server`));
+    } catch {}
+
     return true;
   } catch (err) {
-    console.warn('🔥 [Cloud Sync] Firestore orders cleanup note:', err);
+    console.warn('🔥 [Cloud Sync] Firestore data cleanup note:', err);
     return false;
   }
 }
