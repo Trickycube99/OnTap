@@ -643,8 +643,8 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
               type="button"
               onClick={() => {
                 playTapSound();
-                if (onRoleSwitch) onRoleSwitch('customer');
-                else window.location.hash = 'customer';
+                if (onRoleSwitch) onRoleSwitch('admin');
+                else window.location.hash = 'admin';
               }}
               style={{
                 background: 'transparent',
@@ -821,8 +821,8 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
           <button
             onClick={() => {
               playTapSound();
-              if (onRoleSwitch) onRoleSwitch('customer');
-              else window.location.hash = 'customer';
+              if (onRoleSwitch) onRoleSwitch('admin');
+              else window.location.hash = 'admin';
             }}
             style={{
               padding: '6px 12px',

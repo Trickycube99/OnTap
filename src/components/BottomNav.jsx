@@ -15,6 +15,7 @@ import {
   Tag
 } from 'lucide-react';
 import { playTapSound } from '../utils/audio';
+import { isAuthenticated } from '../utils/auth';
 
 export default function BottomNav({
   currentRole,
@@ -28,7 +29,7 @@ export default function BottomNav({
   chef = null,
   showAboutChef = true
 }) {
-  if (currentRole === 'developer') {
+  if (currentRole === 'developer' || !isAuthenticated(currentRole)) {
     return null;
   }
 

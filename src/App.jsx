@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { BarChart3, QrCode, Lock, Utensils, Layers, ShieldCheck } from 'lucide-react';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import AuthModal from './components/AuthModal';
 import TableQrModal from './components/TableQrModal';
+import { AdminOwnerLoginGate, CounterLoginGate, QrCodeGate } from './components/AccessGates';
 import CustomerView from './views/CustomerView';
 import AboutChefView from './views/AboutChefView';
 import CounterView from './views/CounterView';
@@ -35,6 +37,29 @@ import {
 import { playNewOrderChime, playTapSound } from './utils/audio';
 import { subscribeSyncEvents, SYNC_EVENTS } from './utils/sync';
 import confetti from 'canvas-confetti';
+
+/**
+ * Check if current guest session has valid QR code access
+ * (Customer menu is strictly accessible only via physical table QR codes)
+ */
+export const checkGuestQrAccess = () => {
+  if (typeof window === 'undefined') return false;
+  const urlParams = new URLSearchParams(window.location.search);
+  const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+  const hashParams = new URLSearchParams(hashQuery);
+  const hasTableParam = Boolean(
+    urlParams.get('table') || hashParams.get('table') ||
+    urlParams.get('t') || hashParams.get('t')
+  );
+  const hasQrParam = Boolean(
+    urlParams.get('qr') || hashParams.get('qr')
+  );
+  const hasSessionQr = typeof sessionStorage !== 'undefined' && (
+    sessionStorage.getItem('flowscape_guest_scanned_qr') === 'true' ||
+    Boolean(sessionStorage.getItem('flowscape_guest_table'))
+  );
+  return hasTableParam || hasQrParam || hasSessionQr;
+};
 
 export const normalizeStaffCredentials = (staffList) => {
   if (!Array.isArray(staffList)) return [];
@@ -137,29 +162,57 @@ export default function App() {
     isDeveloperAuthenticated()
   );
 
-  // Cart & Active Table State (Customer specific)
+  // Cart & Active Table State (Customer specific, initialized from scanned QR if present)
   const [cart, setCart] = useState([]);
-  const [activeTable, setActiveTable] = useState('Table 04');
-
-  // Navigation & View State (Dedicated Interfaces: Customer, Counter, Admin, Developer)
-  const [currentRole, setCurrentRole] = useState(() => {
-    if (typeof window === 'undefined') return 'customer';
-    const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
-    const rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
-    const route = rawHash || rawPath;
-    let initialTarget = 'customer';
-    if (route === 'dev' || route === 'developer' || route === 'superadmin') initialTarget = 'developer';
-    else if (route === 'counter' || route === 'pos' || route === 'kds' || route === 'kitchen') initialTarget = 'counter';
-    else if (route === 'admin' || route === 'owner') initialTarget = 'admin';
-    else if (route === 'chef') initialTarget = 'chef';
-
-    // If protected role and no active session in this browser tab/window, require fresh authentication
-    if (initialTarget === 'counter' || initialTarget === 'admin') {
-      if (!isAuthenticated(initialTarget)) {
-        return 'customer';
+  const [activeTable, setActiveTable] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+      const hashParams = new URLSearchParams(hashQuery);
+      const t = urlParams.get('table') || hashParams.get('table') || urlParams.get('t') || hashParams.get('t');
+      if (t) {
+        return t.toLowerCase().startsWith('table') ? t : `Table ${t.padStart(2, '0')}`;
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        const stored = sessionStorage.getItem('flowscape_guest_table');
+        if (stored) return stored;
       }
     }
-    return initialTarget;
+    return 'Table 04';
+  });
+
+  // Navigation & View State
+  // Main/Default link belongs to Admin/Owner; Customer view accessible strictly via QR; Developer Console via #manj
+  const [currentRole, setCurrentRole] = useState(() => {
+    if (typeof window === 'undefined') return 'admin';
+    const urlParams = new URLSearchParams(window.location.search);
+    const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+    const hashParams = new URLSearchParams(hashQuery);
+    const tableParam = urlParams.get('table') || hashParams.get('table') || urlParams.get('t') || hashParams.get('t');
+    const qrParam = urlParams.get('qr') || hashParams.get('qr');
+    const hasSessionQr = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('flowscape_guest_scanned_qr') === 'true';
+
+    const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+    const rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase().split('?')[0];
+    const route = rawHash || rawPath;
+
+    // 1. Guest scanning a table QR code: open customer dining view
+    if (tableParam || qrParam || (route === 'customer' && hasSessionQr)) {
+      return 'customer';
+    }
+
+    // 2. Developer Superadmin dashboard extension (#manj, #dev, #developer, #superadmin)
+    if (route === 'manj' || route === 'dev' || route === 'developer' || route === 'superadmin') {
+      return 'developer';
+    }
+
+    // 3. Counter Staff POS Station
+    if (route === 'counter' || route === 'pos' || route === 'kds' || route === 'kitchen') {
+      return 'counter';
+    }
+
+    // 4. Default / Main link is strictly Owner Admin Back-Office!
+    return 'admin';
   });
   const [activeTab, setActiveTab] = useState('menu'); // customer: 'menu','cart','track','chef'
   const [counterSubTab, setCounterSubTab] = useState('orders'); // counter: 'orders','manual','stock','checklist'
@@ -331,68 +384,86 @@ export default function App() {
         return; // HALT ROUTING! Do NOT redirect to customer interface!
       }
 
-      const tableParam = urlParams.get('table') || urlParams.get('t');
-      if (tableParam) {
-        const cleanTable = tableParam.toLowerCase().startsWith('table')
-          ? tableParam
-          : `Table ${tableParam.padStart(2, '0')}`;
+      const tableParam = urlParams.get('table') || hashParams.get('table') || urlParams.get('t') || hashParams.get('t');
+      const qrParam = urlParams.get('qr') || hashParams.get('qr');
+
+      // 1. If QR parameters are present, initialize guest table session and open customer menu
+      if (tableParam || qrParam) {
+        const rawTable = tableParam || '04';
+        const cleanTable = rawTable.toLowerCase().startsWith('table')
+          ? rawTable
+          : `Table ${rawTable.padStart(2, '0')}`;
         setActiveTable(cleanTable);
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('flowscape_guest_scanned_qr', 'true');
+          sessionStorage.setItem('flowscape_guest_table', cleanTable);
+        }
         setCurrentRole('customer');
         setActiveTab('menu');
+        return;
       }
 
       let targetRole = null;
-      if (route === 'chef') {
-        if (!showAboutChef) {
-          setCurrentRole('customer');
-          setActiveTab('menu');
-          window.location.hash = 'customer';
-          return;
-        }
-        setCurrentRole('customer');
-        setActiveTab('chef');
-        return;
-      } else if (route === 'dev' || route === 'developer' || route === 'superadmin') {
+      if (route === 'manj' || route === 'dev' || route === 'developer' || route === 'superadmin') {
         targetRole = 'developer';
+        if (window.location.hash !== '#manj') {
+          window.location.hash = 'manj';
+        }
       } else if (route === 'counter' || route === 'pos' || route === 'kds' || route === 'kitchen') {
         targetRole = 'counter';
-      } else if (route === 'admin' || route === 'owner') {
-        targetRole = 'admin';
       } else if (route === 'portal' || route === 'staff') {
         // Floor staff portal entry
         setAuthModal({ isOpen: true, targetRole: 'counter' });
         return;
-      } else if (route === 'customer' || route === 'menu' || route === '') {
+      } else if (route === 'chef') {
+        targetRole = 'chef';
+      } else if (route === 'customer' || route === 'menu') {
         targetRole = 'customer';
+      } else {
+        // Main / default link: strictly Admin / Owner!
+        targetRole = 'admin';
       }
 
-      if (targetRole) {
-        if (targetRole === 'customer' || targetRole === 'chef') {
+      if (targetRole === 'developer') {
+        setCurrentRole('developer');
+        return;
+      }
+
+      if (targetRole === 'customer' || targetRole === 'chef') {
+        const hasQrAccess = checkGuestQrAccess() || canReturnToAdmin || isDeveloperAuthenticated();
+        if (hasQrAccess) {
           setCurrentRole(targetRole);
           if (targetRole === 'customer') setActiveTab('menu');
           else if (targetRole === 'chef') setActiveTab('chef');
-          return;
-        }
-
-        if (targetRole === 'developer') {
-          setCurrentRole('developer');
-          return;
-        }
-
-        // Counter POS or Owner Admin: verify session exists in current browser window
-        if (isAuthenticated(targetRole)) {
-          setCurrentRole(targetRole);
-          if (targetRole === 'counter') {
-            setActiveTab('orders');
-            setCounterSubTab('orders');
-          } else if (targetRole === 'admin') {
-            setActiveTab('sales');
-          }
         } else {
-          // No active session in this tab/window: prompt login modal immediately
-          setCurrentRole('customer');
-          setAuthModal({ isOpen: true, targetRole });
+          // Guest menu is only accessible via QR: redirect main/default to admin!
+          setCurrentRole('admin');
+          if (!isAuthenticated('admin')) {
+            setAuthModal({ isOpen: true, targetRole: 'admin' });
+          }
         }
+        return;
+      }
+
+      if (targetRole === 'counter') {
+        setCurrentRole('counter');
+        if (isAuthenticated('counter')) {
+          setActiveTab('orders');
+          setCounterSubTab('orders');
+        } else {
+          setAuthModal({ isOpen: true, targetRole: 'counter' });
+        }
+        return;
+      }
+
+      if (targetRole === 'admin') {
+        setCurrentRole('admin');
+        if (isAuthenticated('admin')) {
+          setActiveTab('sales');
+        } else {
+          setAuthModal({ isOpen: true, targetRole: 'admin' });
+        }
+        return;
       }
     };
 
@@ -403,7 +474,7 @@ export default function App() {
       window.removeEventListener('hashchange', syncFromUrl);
       window.removeEventListener('popstate', syncFromUrl);
     };
-  }, [currentRole, showAboutChef]);
+  }, [currentRole, showAboutChef, canReturnToAdmin]);
 
   // Active in-progress orders count
   const activeOrdersCount = orders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length;
@@ -568,11 +639,20 @@ export default function App() {
       }
     }
 
-    // Developer Superadmin role check (DeveloperAdminView handles its own isolated login screen)
+    // Developer Superadmin role check (#manj)
     if (role === 'developer') {
       setCurrentRole('developer');
-      window.location.hash = 'developer';
+      window.location.hash = 'manj';
       return;
+    }
+
+    // Customer Menu Access Check (Accessible ONLY via QR code or admin preview)
+    if (role === 'customer' || role === 'chef') {
+      const hasQrAccess = checkGuestQrAccess() || canReturnToAdmin || isDeveloperAuthenticated();
+      if (!hasQrAccess) {
+        alert('Access Notice: Guest dining menus are strictly accessible via table QR codes. Please scan a table QR code standee or open from the Admin Back-Office.');
+        return;
+      }
     }
 
     // Check authentication with role hierarchy
@@ -582,7 +662,7 @@ export default function App() {
     }
 
     setCurrentRole(role);
-    window.location.hash = role;
+    window.location.hash = role === 'developer' ? 'manj' : role;
     if (role === 'customer') {
       setActiveTab('menu');
     } else if (role === 'chef') {
@@ -592,8 +672,6 @@ export default function App() {
       setCounterSubTab('orders');
     } else if (role === 'admin') {
       setActiveTab('sales');
-    } else if (role === 'developer') {
-      // stays on developer
     }
   };
 
@@ -670,10 +748,11 @@ export default function App() {
     const updated = getStoredSessions();
     setAuthSessions(updated);
 
-    // Return safely to customer QR dining view
-    setCurrentRole('customer');
-    window.location.hash = 'customer';
-    setActiveTab('menu');
+    // Return safely to default Admin / Owner login view, never customer
+    setCurrentRole('admin');
+    window.location.hash = 'admin';
+    setActiveTab('sales');
+    setAuthModal({ isOpen: true, targetRole: 'admin' });
   };
 
   const cartTotal = cart.reduce((a, b) => a + b.price * b.quantity, 0);
@@ -718,36 +797,40 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Dynamic Header: Clean & Isolated for Customer, Workstation for Staff (Developer has standalone UI) */}
+      {/* Dynamic Header: Clean & Isolated for Customer with QR, Workstation for Authenticated Staff */}
       {currentRole !== 'developer' && (
-        <Header
-          chef={chef}
-          theme={theme}
-          currentRole={currentRole}
-          onRoleSwitch={handleRoleSwitch}
-          activeTable={activeTable}
-          setActiveTable={setActiveTable}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          isSearchOpen={isSearchOpen}
-          setIsSearchOpen={setIsSearchOpen}
-          activeOrdersCount={activeOrdersCount}
-          cartCount={cartCount}
-          cartTotal={cartTotal}
-          onOpenCart={() => {
-            setCurrentRole('customer');
-            setActiveTab('cart');
-          }}
-          onResetDemo={handleResetDemo}
-          authSessions={authSessions}
-          onLogoutRole={handleLogoutRole}
-          onOpenTableQr={() => setIsTableQrOpen(true)}
-          language={language}
-          onToggleLanguage={() => setLanguage((l) => (l === 'en' ? 'hi' : 'en'))}
-          isSoundMuted={isSoundMuted}
-          onToggleSound={() => setIsSoundMuted((m) => !m)}
-          canReturnToAdmin={canReturnToAdmin}
-        />
+        (currentRole === 'customer' || currentRole === 'chef'
+          ? (checkGuestQrAccess() || canReturnToAdmin || isDeveloperAuthenticated())
+          : (isAuthenticated(currentRole) || isDeveloperAuthenticated())) && (
+          <Header
+            chef={chef}
+            theme={theme}
+            currentRole={currentRole}
+            onRoleSwitch={handleRoleSwitch}
+            activeTable={activeTable}
+            setActiveTable={setActiveTable}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isSearchOpen={isSearchOpen}
+            setIsSearchOpen={setIsSearchOpen}
+            activeOrdersCount={activeOrdersCount}
+            cartCount={cartCount}
+            cartTotal={cartTotal}
+            onOpenCart={() => {
+              setCurrentRole('customer');
+              setActiveTab('cart');
+            }}
+            onResetDemo={handleResetDemo}
+            authSessions={authSessions}
+            onLogoutRole={handleLogoutRole}
+            onOpenTableQr={() => setIsTableQrOpen(true)}
+            language={language}
+            onToggleLanguage={() => setLanguage((l) => (l === 'en' ? 'hi' : 'en'))}
+            isSoundMuted={isSoundMuted}
+            onToggleSound={() => setIsSoundMuted((m) => !m)}
+            canReturnToAdmin={canReturnToAdmin}
+          />
+        )
       )}
 
       {/* Main Full-Viewport Content Area */}
@@ -755,7 +838,11 @@ export default function App() {
         <div className="app-content-container">
           {/* Dynamic Views Rendering */}
           {(currentRole === 'customer' || currentRole === 'chef') && (
-            (activeTab === 'chef' || currentRole === 'chef') && showAboutChef ? (
+            !(checkGuestQrAccess() || canReturnToAdmin || isDeveloperAuthenticated()) ? (
+              <QrCodeGate
+                onReturnToAdmin={() => handleRoleSwitch('admin')}
+              />
+            ) : (activeTab === 'chef' || currentRole === 'chef') && showAboutChef ? (
               <AboutChefView
                 chef={chef}
                 menu={menu}
@@ -794,51 +881,66 @@ export default function App() {
           )}
 
           {currentRole === 'counter' && (
-            <CounterView
-              activeBusinessId={activeBusinessId}
-              orders={orders}
-              setOrders={setOrders}
-              menu={menu}
-              setMenu={setMenu}
-              offers={offers}
-              setOffers={setOffers}
-              theme={theme}
-              setTheme={setTheme}
-              chef={chef}
-              checklists={checklists}
-              setChecklists={setChecklists}
-              activeSubTab={counterSubTab}
-              setActiveSubTab={setCounterSubTab}
-              canReturnToAdmin={canReturnToAdmin}
-              onReturnToAdmin={() => handleRoleSwitch('admin')}
-              staff={staff}
-              setStaff={setStaff}
-            />
+            !(isAuthenticated('counter') || canReturnToAdmin || isDeveloperAuthenticated()) ? (
+              <CounterLoginGate
+                onOpenLogin={() => setAuthModal({ isOpen: true, targetRole: 'counter' })}
+                onReturnToAdmin={() => handleRoleSwitch('admin')}
+              />
+            ) : (
+              <CounterView
+                activeBusinessId={activeBusinessId}
+                orders={orders}
+                setOrders={setOrders}
+                menu={menu}
+                setMenu={setMenu}
+                offers={offers}
+                setOffers={setOffers}
+                theme={theme}
+                setTheme={setTheme}
+                chef={chef}
+                checklists={checklists}
+                setChecklists={setChecklists}
+                activeSubTab={counterSubTab}
+                setActiveSubTab={setCounterSubTab}
+                canReturnToAdmin={canReturnToAdmin}
+                onReturnToAdmin={() => handleRoleSwitch('admin')}
+                staff={staff}
+                setStaff={setStaff}
+              />
+            )
           )}
 
           {currentRole === 'admin' && (
-            <AdminView
-              activeBusinessId={activeBusinessId}
-              orders={orders}
-              setOrders={setOrders}
-              menu={menu}
-              setMenu={setMenu}
-              expenses={expenses}
-              setExpenses={setExpenses}
-              staff={staff}
-              setStaff={setStaff}
-              theme={theme}
-              setTheme={setTheme}
-              chef={chef}
-              setChef={setChef}
-              checklists={checklists}
-              setChecklists={setChecklists}
-              offers={offers}
-              setOffers={setOffers}
-              activeAdminTab={adminTab}
-              setActiveAdminTab={setAdminTab}
-              onOpenTableQr={() => setIsTableQrOpen(true)}
-            />
+            !(isAuthenticated('admin') || isDeveloperAuthenticated()) ? (
+              <AdminOwnerLoginGate
+                onOpenLogin={() => setAuthModal({ isOpen: true, targetRole: 'admin' })}
+                onSwitchRole={handleRoleSwitch}
+                theme={theme}
+              />
+            ) : (
+              <AdminView
+                activeBusinessId={activeBusinessId}
+                orders={orders}
+                setOrders={setOrders}
+                menu={menu}
+                setMenu={setMenu}
+                expenses={expenses}
+                setExpenses={setExpenses}
+                staff={staff}
+                setStaff={setStaff}
+                theme={theme}
+                setTheme={setTheme}
+                chef={chef}
+                setChef={setChef}
+                checklists={checklists}
+                setChecklists={setChecklists}
+                offers={offers}
+                setOffers={setOffers}
+                activeAdminTab={adminTab}
+                setActiveAdminTab={setAdminTab}
+                onOpenTableQr={() => setIsTableQrOpen(true)}
+              />
+            )
           )}
 
           {currentRole === 'developer' && (
@@ -851,36 +953,40 @@ export default function App() {
       </main>
 
       {/* Mobile-Only Bottom Navigation Dock (Role-Aware and Cleanly Isolated) */}
-      <BottomNav
-        currentRole={currentRole}
-        activeTab={
-          currentRole === 'customer' || currentRole === 'chef'
-            ? activeTab
-            : currentRole === 'counter'
-            ? counterSubTab
-            : adminTab
-        }
-        setActiveTab={(tabId) => {
-          if (currentRole === 'customer' || currentRole === 'chef') {
-            if (currentRole === 'chef') {
-              setCurrentRole('customer');
-            }
-            setActiveTab(tabId);
-          } else if (currentRole === 'counter') {
-            setCounterSubTab(tabId);
-          } else if (currentRole === 'admin') {
-            setAdminTab(tabId);
+      {(currentRole === 'customer' || currentRole === 'chef'
+        ? (checkGuestQrAccess() || canReturnToAdmin || isDeveloperAuthenticated())
+        : (isAuthenticated(currentRole) || isDeveloperAuthenticated())) && (
+        <BottomNav
+          currentRole={currentRole}
+          activeTab={
+            currentRole === 'customer' || currentRole === 'chef'
+              ? activeTab
+              : currentRole === 'counter'
+              ? counterSubTab
+              : adminTab
           }
-        }}
-        authSessions={authSessions}
-        onRoleSwitch={handleRoleSwitch}
-        cartCount={cartCount}
-        activeOrdersCount={activeOrdersCount}
-        language={language}
-        theme={theme}
-        chef={chef}
-        showAboutChef={showAboutChef}
-      />
+          setActiveTab={(tabId) => {
+            if (currentRole === 'customer' || currentRole === 'chef') {
+              if (currentRole === 'chef') {
+                setCurrentRole('customer');
+              }
+              setActiveTab(tabId);
+            } else if (currentRole === 'counter') {
+              setCounterSubTab(tabId);
+            } else if (currentRole === 'admin') {
+              setAdminTab(tabId);
+            }
+          }}
+          authSessions={authSessions}
+          onRoleSwitch={handleRoleSwitch}
+          cartCount={cartCount}
+          activeOrdersCount={activeOrdersCount}
+          language={language}
+          theme={theme}
+          chef={chef}
+          showAboutChef={showAboutChef}
+        />
+      )}
 
       {/* Interface Specific Authentication Modal / Staff Station Gate */}
       <AuthModal
@@ -891,7 +997,7 @@ export default function App() {
         onClose={() => {
           setAuthModal({ isOpen: false, targetRole: null });
           if (currentRole !== authModal.targetRole) {
-            window.location.hash = currentRole || 'customer';
+            window.location.hash = currentRole === 'developer' ? 'manj' : (currentRole || 'admin');
           }
         }}
         theme={theme}

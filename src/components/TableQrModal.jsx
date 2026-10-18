@@ -33,7 +33,7 @@ export default function TableQrModal({
 
   // Compute table number e.g. "04" from "Table 04"
   const tableNum = (selectedTable || 'Table 04').replace(/\D/g, '').padStart(2, '0');
-  const directMenuUrl = `${baseUrl}/?table=${tableNum}#customer`;
+  const directMenuUrl = `${baseUrl}/?table=${tableNum}&qr=true#customer`;
 
   // Generate QR Code data URL whenever selectedTable or baseUrl changes
   useEffect(() => {

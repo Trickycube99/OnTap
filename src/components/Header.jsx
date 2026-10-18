@@ -333,11 +333,11 @@ export default function Header({
               <button
                 className="nav-role-pill active"
                 onClick={() => onRoleSwitch('developer')}
-                title="Developer Superadmin Console"
+                title="Developer Superadmin Console (#manj)"
                 style={{ background: '#0F172A', color: '#38BDF8', borderColor: '#38BDF8' }}
               >
                 <Server size={14} color="#38BDF8" />
-                <span>Dev Console</span>
+                <span>Dev Console (#manj)</span>
               </button>
 
               <button
