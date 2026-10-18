@@ -22,9 +22,17 @@ import {
   EyeOff,
   Copy,
   Check,
-  X
+  X,
+  Mail,
+  RefreshCw,
+  Send
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
+import {
+  provisionOwnerAccountWithVerification,
+  resendVerificationLink,
+  sendPasswordReset
+} from '../utils/firebaseAuth';
 import {
   getBusinesses,
   getActiveBusiness,
@@ -72,6 +80,9 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
   });
   const [formError, setFormError] = useState('');
   const [createdSuccessBiz, setCreatedSuccessBiz] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [actionStatus, setActionStatus] = useState(null);
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
   // System Logs
   const [logs, setLogs] = useState(() => [
@@ -112,7 +123,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     setLoginPassword('');
   };
 
-  const handleCreateBusiness = (e) => {
+  const handleCreateBusiness = async (e) => {
     e.preventDefault();
     playTapSound();
     setFormError('');
@@ -148,22 +159,46 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       return;
     }
 
+    setIsCreating(true);
+
+    // 1. Provision account in Firebase Auth with automatic Email Verification
+    const provRes = await provisionOwnerAccountWithVerification({
+      email: newBiz.ownerEmail,
+      password: trimmedOwnerPin,
+      ownerName: newBiz.ownerName,
+      businessName: newBiz.name
+    });
+
+    if (!provRes.success) {
+      playAlertChime();
+      setIsCreating(false);
+      setFormError(provRes.error || 'Failed to provision account in Firebase Auth.');
+      return;
+    }
+
     const tables = Array.from({ length: Number(newBiz.tableCount) || 6 }, (_, i) => `Table ${String(i + 1).padStart(2, '0')}`);
     tables.push('Takeaway / Counter');
 
+    // 2. Provision business in local multi-tenant database (marked as pending email verification)
     const res = createBusiness({
       ...newBiz,
       ownerPin: trimmedOwnerPin,
       counterPin: trimmedCounterPin,
-      tables
+      tables,
+      emailVerified: false
     });
+
+    setIsCreating(false);
 
     if (res.success) {
       playSuccessChime();
       refreshBusinesses();
-      setCreatedSuccessBiz(res.business);
+      setCreatedSuccessBiz({
+        ...res.business,
+        verificationNotice: provRes.message || `Verification email dispatched to ${res.business.owner.email}.`
+      });
       setLogs((prev) => [
-        { id: Date.now(), time: 'Just now', type: 'biz', text: `Created new business account "${res.business.name}" (${res.business.owner.email})` },
+        { id: Date.now(), time: 'Just now', type: 'biz', text: `Created business "${res.business.name}" & sent verification link to ${res.business.owner.email}` },
         ...prev
       ]);
       // Reset form
@@ -969,6 +1004,18 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           {isActive ? '● Active' : '○ Suspended'}
                         </span>
 
+                        <span style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          background: biz.emailVerified !== false ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                          color: biz.emailVerified !== false ? '#34D399' : '#FBBF24',
+                          border: '1px solid rgba(255, 255, 255, 0.08)'
+                        }}>
+                          {biz.emailVerified !== false ? '✓ Email Verified' : '✉ Verification Pending'}
+                        </span>
+
                         <span style={{ fontSize: 11, color: '#64748B', marginLeft: 'auto' }}>
                           {biz.tables?.length || 6} Tables
                         </span>
@@ -1305,9 +1352,32 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                 <h4 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 6px', color: '#F8FAFC' }}>
                   Account Created Successfully!
                 </h4>
-                <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 18px' }}>
-                  The business owner and counter staff can now log in using these credentials:
+                <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 16px' }}>
+                  The business account has been provisioned. A verification email has been dispatched to the owner:
                 </p>
+
+                <div style={{
+                  background: 'rgba(14, 165, 233, 0.12)',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  borderRadius: 12,
+                  padding: '12px 14px',
+                  marginBottom: 16,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  textAlign: 'left'
+                }}>
+                  <Mail size={18} color="#38BDF8" style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#38BDF8', marginBottom: 2 }}>
+                      Email Verification Link Sent
+                    </div>
+                    <div style={{ fontSize: 11, color: '#CBD5E1', lineHeight: 1.45 }}>
+                      Verification email sent to <strong style={{ color: '#F8FAFC' }}>{createdSuccessBiz.owner.email}</strong>.
+                      The owner must click the verification link in their inbox before they can access the Owner Back-Office.
+                    </div>
+                  </div>
+                </div>
 
                 <div style={{
                   background: 'rgba(15, 23, 42, 0.8)',
@@ -1626,19 +1696,24 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   </button>
                   <button
                     type="submit"
+                    disabled={isCreating}
                     style={{
                       padding: '10px 20px',
                       borderRadius: 10,
-                      background: 'linear-gradient(135deg, #06B6D4 0%, #0284C7 100%)',
+                      background: isCreating ? 'rgba(6, 182, 212, 0.5)' : 'linear-gradient(135deg, #06B6D4 0%, #0284C7 100%)',
                       border: 'none',
                       color: '#FFFFFF',
                       fontSize: 13,
                       fontWeight: 700,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 14px rgba(6, 182, 212, 0.35)'
+                      cursor: isCreating ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 4px 14px rgba(6, 182, 212, 0.35)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
                     }}
                   >
-                    Create Business Account
+                    {isCreating && <RefreshCw size={13} className="spinning" />}
+                    <span>{isCreating ? 'Provisioning & Sending Verification...' : 'Create Business Account'}</span>
                   </button>
                 </div>
               </form>
@@ -1744,6 +1819,110 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   </button>
                 </div>
               </div>
+
+              {/* Email Verification Status & Actions */}
+              <div style={{
+                background: showCredentialsModal.emailVerified !== false ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                border: `1px solid ${showCredentialsModal.emailVerified !== false ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                padding: '10px 14px',
+                borderRadius: 12,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Mail size={15} color={showCredentialsModal.emailVerified !== false ? '#10B981' : '#F59E0B'} />
+                  <span style={{ fontSize: 12, color: showCredentialsModal.emailVerified !== false ? '#34D399' : '#FBBF24', fontWeight: 600 }}>
+                    {showCredentialsModal.emailVerified !== false ? 'Email Verified' : 'Pending Verification'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled={isActionLoading}
+                  onClick={async () => {
+                    setIsActionLoading(true);
+                    setActionStatus(null);
+                    playTapSound();
+                    const r = await resendVerificationLink({
+                      email: showCredentialsModal.owner.email,
+                      password: showCredentialsModal.owner.pin
+                    });
+                    setIsActionLoading(false);
+                    if (r.success) {
+                      playSuccessChime();
+                      setActionStatus({ type: 'success', text: r.message });
+                    } else {
+                      playAlertChime();
+                      setActionStatus({ type: 'error', text: r.error });
+                    }
+                  }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: 6,
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    color: '#F8FAFC',
+                    cursor: isActionLoading ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}
+                >
+                  <RefreshCw size={11} className={isActionLoading ? 'spinning' : ''} />
+                  <span>Resend Email</span>
+                </button>
+              </div>
+
+              {/* Password Reset Action */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 2 }}>
+                <button
+                  type="button"
+                  disabled={isActionLoading}
+                  onClick={async () => {
+                    setIsActionLoading(true);
+                    setActionStatus(null);
+                    playTapSound();
+                    const r = await sendPasswordReset({ email: showCredentialsModal.owner.email });
+                    setIsActionLoading(false);
+                    if (r.success) {
+                      playSuccessChime();
+                      setActionStatus({ type: 'success', text: r.message });
+                    } else {
+                      playAlertChime();
+                      setActionStatus({ type: 'error', text: r.error });
+                    }
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#38BDF8',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: isActionLoading ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: 0
+                  }}
+                >
+                  <Send size={12} />
+                  <span>Send Password Reset Link to Owner</span>
+                </button>
+              </div>
+
+              {actionStatus && (
+                <div style={{
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  background: actionStatus.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                  color: actionStatus.type === 'success' ? '#34D399' : '#F87171',
+                  border: `1px solid ${actionStatus.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                }}>
+                  {actionStatus.text}
+                </div>
+              )}
             </div>
 
             <button
