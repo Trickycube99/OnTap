@@ -9,8 +9,12 @@ import {
   doc,
   setDoc,
   updateDoc,
+  deleteDoc,
+  getDocs,
+  writeBatch,
   onSnapshot,
   query,
+  where,
   limit
 } from 'firebase/firestore';
 
@@ -491,6 +495,33 @@ export function subscribeToCloudChecklists(onChecklistUpdated) {
     return unsubscribe;
   } catch {
     return () => {};
+  }
+}
+
+/**
+ * Permanently delete all cloud orders in Firestore associated with a deleted business
+ */
+export async function deleteCloudOrdersForBusiness(businessId) {
+  const database = initFirebase();
+  if (!database || !businessId) return false;
+
+  try {
+    const ordersCol = collection(database, 'restaurant_orders');
+    const q = query(ordersCol, where('businessId', '==', businessId));
+    const snapshot = await getDocs(q);
+
+    if (!snapshot.empty) {
+      const batch = writeBatch(database);
+      snapshot.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+      console.log(`🔥 [Cloud Sync] Purged ${snapshot.size} cloud orders for deleted business ${businessId}`);
+    }
+    return true;
+  } catch (err) {
+    console.warn('🔥 [Cloud Sync] Firestore orders cleanup note:', err);
+    return false;
   }
 }
 

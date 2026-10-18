@@ -238,21 +238,97 @@ export function updateBusiness(id, updates) {
 /**
  * Delete a business account
  */
+/**
+ * Permanently delete a business account and wipe all its info, order history,
+ * menu items, staff, checklists, and local database partitions.
+ */
 export function deleteBusiness(id) {
   const businesses = getBusinesses();
   if (businesses.length <= 1) {
     return { success: false, error: 'Cannot delete the only remaining business on the platform.' };
   }
+
+  const targetBiz = businesses.find((b) => b.id === id);
+  if (!targetBiz) {
+    return { success: false, error: 'Business account not found.' };
+  }
+
+  // 1. Purge all scoped database records, order history, menu, staff, and settings from localStorage
+  if (typeof localStorage !== 'undefined') {
+    const keysToRemove = new Set();
+
+    // Standard scoped storage base keys
+    const standardKeys = [
+      'flowscape_menu_inr_v2',
+      'flowscape_chef_inr_v2',
+      'flowscape_orders_inr_v2',
+      'flowscape_expenses_inr_v2',
+      'flowscape_staff_inr_v2',
+      'flowscape_offers_inr_v2',
+      'flowscape_theme_inr_v2',
+      'flowscape_checklists_inr_v2',
+      'flowscape_orders_v2'
+    ];
+
+    standardKeys.forEach((baseKey) => {
+      keysToRemove.add(`${baseKey}_${id}`);
+    });
+
+    // Scan all localStorage keys for any partition or history containing business ID
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.includes(id) || k.endsWith(`_${id}`))) {
+          keysToRemove.add(k);
+        }
+      }
+    } catch {}
+
+    // Special case for default seed partition 'biz_advait' if deleted
+    if (id === 'biz_advait') {
+      standardKeys.forEach((baseKey) => keysToRemove.add(baseKey));
+    }
+
+    // Execute deletion of all collected keys
+    keysToRemove.forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch (err) {
+        console.warn(`[Tenant Cleanup] Could not delete key ${key}:`, err);
+      }
+    });
+
+    // Purge terminal staff tracking
+    try {
+      localStorage.removeItem(`counter_active_staff_id_${id}`);
+      localStorage.removeItem(`counter_active_staff_id`);
+    } catch {}
+  }
+
+  // 2. Invalidate active session if it belonged to this deleted business
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      const sessionsRaw = sessionStorage.getItem('flowscape_sessions_v1');
+      if (sessionsRaw) {
+        const sess = JSON.parse(sessionsRaw);
+        if (sess?.admin?.businessId === id || sess?.counter?.businessId === id) {
+          sessionStorage.removeItem('flowscape_sessions_v1');
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Remove business from the registered business directory
   const filtered = businesses.filter((b) => b.id !== id);
   saveBusinesses(filtered);
 
-  // If deleted business was active, switch to first available
+  // 4. If deleted business was currently active, switch to first available
   const activeId = localStorage.getItem(ACTIVE_BUSINESS_ID_KEY);
   if (activeId === id) {
     setActiveBusiness(filtered[0].id);
   }
 
-  return { success: true };
+  return { success: true, deletedBusiness: targetBiz };
 }
 
 /**

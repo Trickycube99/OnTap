@@ -262,6 +262,13 @@ export default function App() {
         if (msg.payload) setChef(msg.payload);
       } else if (msg.type === SYNC_EVENTS.STAFF_UPDATED) {
         if (Array.isArray(msg.payload)) setStaff(normalizeStaffCredentials(msg.payload));
+      } else if (msg.type === SYNC_EVENTS.BUSINESS_DELETED) {
+        if (msg.payload?.businessId === activeBusinessId) {
+          const fallbackBiz = getActiveBusiness();
+          setActiveBusiness(fallbackBiz.id);
+          setActiveBusinessId(fallbackBiz.id);
+          window.location.reload();
+        }
       }
     });
 

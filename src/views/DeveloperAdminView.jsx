@@ -31,8 +31,11 @@ import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import {
   provisionOwnerAccountWithVerification,
   resendVerificationLink,
-  sendPasswordReset
+  sendPasswordReset,
+  deleteOwnerAccountFromFirebase
 } from '../utils/firebaseAuth';
+import { deleteCloudOrdersForBusiness } from '../utils/firebaseSync';
+import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
 import {
   getBusinesses,
   getActiveBusiness,
@@ -223,20 +226,57 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     }
   };
 
-  const handleDeleteBusiness = (biz) => {
+  const handleDeleteBusiness = async (biz) => {
     playTapSound();
-    if (window.confirm(`Are you sure you want to delete business account "${biz.name}"? This will permanently remove its tenant workspace.`)) {
-      const res = deleteBusiness(biz.id);
-      if (res.success) {
-        playSuccessChime();
-        refreshBusinesses();
-        setLogs((prev) => [
-          { id: Date.now(), time: 'Just now', type: 'biz', text: `Deleted business account "${biz.name}" (${biz.id})` },
-          ...prev
-        ]);
-      } else {
-        alert(res.error);
+    const confirmed = window.confirm(
+      `Permanently delete account "${biz.name}" (${biz.owner.email})?\n\nThis will permanently delete:\n• All restaurant info, profile, and settings\n• Complete order history, revenue, and sales data\n• Menu, inventory, staff credentials, and checklists\n• Firebase Authentication user account\n• Email verification status and any password changes\n\nThis action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setIsActionLoading(true);
+
+    // 1. Delete owner from Firebase Auth (deletes email verification & any password changes)
+    try {
+      await deleteOwnerAccountFromFirebase({
+        email: biz.owner.email,
+        password: biz.owner.pin
+      });
+    } catch (e) {
+      console.warn('Firebase Auth account deletion note:', e);
+    }
+
+    // 2. Delete cloud orders in Firestore if connected
+    try {
+      await deleteCloudOrdersForBusiness(biz.id);
+    } catch (e) {
+      console.warn('Firestore orders cleanup note:', e);
+    }
+
+    // 3. Delete business and purge all local history, orders, and database partitions
+    const res = deleteBusiness(biz.id);
+    setIsActionLoading(false);
+
+    if (res.success) {
+      playSuccessChime();
+      refreshBusinesses();
+      try {
+        broadcastSyncEvent(SYNC_EVENTS.BUSINESS_DELETED, { businessId: biz.id });
+      } catch {}
+      setLogs((prev) => [
+        {
+          id: Date.now(),
+          time: 'Just now',
+          type: 'biz',
+          text: `Permanently deleted business "${biz.name}" — purged all data, order history, email verification, and password records.`
+        },
+        ...prev
+      ]);
+      if (showCredentialsModal && showCredentialsModal.id === biz.id) {
+        setShowCredentialsModal(null);
       }
+    } else {
+      playAlertChime();
+      alert(res.error);
     }
   };
 
@@ -1964,22 +2004,47 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
               )}
             </div>
 
-            <button
-              onClick={() => setShowCredentialsModal(null)}
-              style={{
-                width: '100%',
-                padding: '11px',
-                borderRadius: 10,
-                background: '#0284C7',
-                border: 'none',
-                color: '#FFFFFF',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              Done
-            </button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => handleDeleteBusiness(showCredentialsModal)}
+                style={{
+                  padding: '11px 16px',
+                  borderRadius: 10,
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  color: '#EF4444',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+                title="Permanently delete this business account and wipe all stored data"
+              >
+                <Trash2 size={13} />
+                <span>Delete Account & Wipe Data</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowCredentialsModal(null)}
+                style={{
+                  flex: 1,
+                  padding: '11px',
+                  borderRadius: 10,
+                  background: '#0284C7',
+                  border: 'none',
+                  color: '#FFFFFF',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
