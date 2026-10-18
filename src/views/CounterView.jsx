@@ -19,6 +19,7 @@ import {
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import PrinterModal from '../components/PrinterModal';
 import WhatsAppAlertModal from '../components/WhatsAppAlertModal';
+import PunchWalkInOrders from '../components/PunchWalkInOrders';
 import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
 
 function checkUnacceptedOverdue(order) {
@@ -74,12 +75,6 @@ export default function CounterView({
   // Hardware & Alert Modals State (Phase 2)
   const [selectedPrintOrder, setSelectedPrintOrder] = useState(null);
   const [selectedWhatsAppOrder, setSelectedWhatsAppOrder] = useState(null);
-
-  // Manual Walk-in Order Punch Form (FR-P7)
-  const [manualTable, setManualTable] = useState('Table 01');
-  const [manualCustomer, setManualCustomer] = useState('Walk-in Diner');
-  const [manualItems, setManualItems] = useState([]);
-  const [manualPayment, setManualPayment] = useState('Cash Settled');
 
   // Daily Closing Checklist State (FR-P8 & 5.4)
   const [actualCash, setActualCash] = useState('');
@@ -260,52 +255,6 @@ export default function CounterView({
       broadcastSyncEvent(SYNC_EVENTS.OFFERS_UPDATED, updated);
       playAlertChime();
     }
-  };
-
-  // Manual Punch In Submit (FR-P7)
-  const handleAddManualItem = (item) => {
-    playTapSound();
-    setManualItems((prev) => {
-      const exist = prev.find((i) => i.id === item.id);
-      if (exist) {
-        return prev.map((i) => (i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i));
-      }
-      return [...prev, { ...item, quantity: 1, note: '' }];
-    });
-  };
-
-  const handlePunchOrderSubmit = () => {
-    if (manualItems.length === 0) return;
-    playTapSound();
-
-    const subtotal = manualItems.reduce((acc, i) => acc + i.price * i.quantity, 0);
-    const tax = Number((subtotal * 0.05).toFixed(2));
-    const total = Number((subtotal + tax).toFixed(2));
-
-    const newOrder = {
-      id: `ORD-${Math.floor(1000 + Math.random() * 9000)}`,
-      customerName: manualCustomer || 'Walk-in Diner',
-      table: manualTable,
-      phone: 'Walk-in POS',
-      createdAt: new Date().toISOString(),
-      status: 'in-progress',
-      statusLabel: 'Punched at Counter',
-      items: manualItems,
-      orderNote: 'Direct POS manual walk-in order',
-      paymentMode: manualPayment,
-      paymentStatus: 'Settled at Counter',
-      subtotal,
-      tax,
-      discount: 0,
-      total,
-      progressPercent: 50
-    };
-
-    setOrders((prev) => [newOrder, ...prev]);
-    broadcastSyncEvent(SYNC_EVENTS.NEW_ORDER, newOrder);
-    setManualItems([]);
-    setActiveSubTab('orders');
-    playSuccessChime();
   };
 
   // Submit Daily Closing Checklist (FR-P8 & 5.4)
@@ -829,107 +778,21 @@ export default function CounterView({
 
       {/* VIEW 2: MANUAL ORDER ENTRY (FR-P7) */}
       {activeSubTab === 'manual' && (
-        <div className="ios-card" style={{ marginBottom: 16 }}>
-          <div className="card-top-row">
-            <div className="card-title-group">
-              <span className="card-heading">Punch Walk-in or Phone Order</span>
-              <span className="card-meta-text">Record in-person sales directly to the kitchen stack</span>
-            </div>
-            <Plus size={18} color="#007AFF" />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>Table / Counter</label>
-              <select
-                className="ios-select"
-                value={manualTable}
-                onChange={(e) => setManualTable(e.target.value)}
-              >
-                {theme.tables.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>Customer Name</label>
-              <input
-                type="text"
-                className="ios-input"
-                value={manualCustomer}
-                onChange={(e) => setManualCustomer(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>Payment Settlement</label>
-            <select
-              className="ios-select"
-              value={manualPayment}
-              onChange={(e) => setManualPayment(e.target.value)}
-            >
-              <option value="Cash Settled">Cash Settled</option>
-              <option value="Card Terminal Settled">Card Terminal Settled (Pine Labs)</option>
-              <option value="UPI QR Settled">UPI QR Settled (GPay / PhonePe / Paytm)</option>
-            </select>
-          </div>
-
-          {/* Quick Menu Picker */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6, display: 'block' }}>
-              Tap Dishes to Add:
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-              {menu.map((dish) => (
-                <button
-                  key={dish.id}
-                  className="btn-secondary-pill"
-                  style={{
-                    padding: '8px 10px',
-                    fontSize: 12,
-                    justifyContent: 'space-between',
-                    textAlign: 'left'
-                  }}
-                  onClick={() => handleAddManualItem(dish)}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {dish.name}
-                  </span>
-                  <span style={{ fontWeight: 700, color: 'var(--primary-blue)' }}>₹{dish.price}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Selected Tray */}
-          {manualItems.length > 0 && (
-            <div style={{ background: '#F9FAFB', padding: 12, borderRadius: 14, marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Selected Items:</div>
-              <ul className="body-subtask">
-                {manualItems.map((mi, idx) => (
-                  <li key={idx}>
-                    {mi.quantity}x {mi.name} - ₹{(mi.price * mi.quantity).toFixed(0)}
-                  </li>
-                ))}
-              </ul>
-              <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: 6, marginTop: 6, fontWeight: 700, fontSize: 14 }}>
-                Total: ₹
-                {manualItems.reduce((acc, i) => acc + i.price * i.quantity, 0).toFixed(0)}
-              </div>
-            </div>
-          )}
-
-          <button
-            className="btn-primary-pill full-width"
-            onClick={handlePunchOrderSubmit}
-            disabled={manualItems.length === 0}
-          >
-            <CheckCircle2 size={16} />
-            <span>Confirm & Punch Order to Live Stack</span>
-          </button>
+        <div style={{ marginBottom: 16 }}>
+          <PunchWalkInOrders
+            orders={orders}
+            setOrders={setOrders}
+            menu={menu}
+            tables={theme?.tables}
+            onOrderSubmitted={(newOrder, meta) => {
+              const hasOtherGridsWithItems = typeof meta === 'boolean'
+                ? meta
+                : Boolean(meta?.hasOtherGridsWithItems);
+              if (!hasOtherGridsWithItems) {
+                setActiveSubTab('orders');
+              }
+            }}
+          />
         </div>
       )}
 

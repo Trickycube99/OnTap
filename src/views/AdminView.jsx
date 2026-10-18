@@ -24,7 +24,9 @@ import {
   Sparkles,
   Save,
   ShieldCheck,
-  Utensils
+  Utensils,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import BankReconciliationView from './BankReconciliationView';
@@ -32,6 +34,7 @@ import InventoryView from './InventoryView';
 import LoyaltyView from './LoyaltyView';
 import AggregatorReconciliationView from './AggregatorReconciliationView';
 import MultiBranchView from './MultiBranchView';
+import PunchWalkInOrders from '../components/PunchWalkInOrders';
 import { exportToTallyPrimeXml, exportToZohoBooksCsv } from '../utils/accountingExport';
 import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
 import { STORAGE_KEYS, saveData } from '../utils/storage';
@@ -47,6 +50,7 @@ const isOfferExpired = (offer) => {
 
 export default function AdminView({
   orders,
+  setOrders,
   menu,
   setMenu,
   expenses,
@@ -68,6 +72,7 @@ export default function AdminView({
   const activeAdminTab = externalActiveAdminTab !== undefined ? externalActiveAdminTab : internalActiveAdminTab;
   const setActiveAdminTab = externalSetActiveAdminTab || setInternalActiveAdminTab;
   const [orderSearch, setOrderSearch] = useState('');
+  const [showWalkInPunch, setShowWalkInPunch] = useState(false);
   const [payrollDisbursed, setPayrollDisbursed] = useState(false);
 
   // Coupons & Offers Management State
@@ -114,7 +119,8 @@ export default function AdminView({
     accentColor: theme?.accentColor || '#007AFF',
     menuLayout: theme?.menuLayout || 'grid',
     upiId: theme?.upiId || '9119069179@nyes',
-    logo: theme?.logo || null
+    logo: theme?.logo || null,
+    showAboutChef: theme?.showAboutChef !== false && chef?.showAboutChef !== false
   }));
   const [customizerSaveSuccess, setCustomizerSaveSuccess] = useState(false);
   const [isSavingCustomizer, setIsSavingCustomizer] = useState(false);
@@ -130,7 +136,8 @@ export default function AdminView({
     philosophy: chef?.philosophy || '',
     showVerifiedBadge: chef?.showVerifiedBadge ?? (chef?.isVerified ?? true),
     showCredentials: chef?.showCredentials ?? true,
-    showHygienePledge: chef?.showHygienePledge ?? true
+    showHygienePledge: chef?.showHygienePledge ?? true,
+    showAboutChef: chef?.showAboutChef !== false && theme?.showAboutChef !== false
   }));
   const chefPhotoInputRef = useRef(null);
 
@@ -145,7 +152,8 @@ export default function AdminView({
       accentColor: theme?.accentColor || '#007AFF',
       menuLayout: theme?.menuLayout || 'grid',
       upiId: theme?.upiId || '9119069179@nyes',
-      logo: theme?.logo || null
+      logo: theme?.logo || null,
+      showAboutChef: theme?.showAboutChef !== false && chef?.showAboutChef !== false
     });
   }
 
@@ -162,7 +170,8 @@ export default function AdminView({
       philosophy: chef?.philosophy || '',
       showVerifiedBadge: chef?.showVerifiedBadge ?? (chef?.isVerified ?? true),
       showCredentials: chef?.showCredentials ?? true,
-      showHygienePledge: chef?.showHygienePledge ?? true
+      showHygienePledge: chef?.showHygienePledge ?? true,
+      showAboutChef: chef?.showAboutChef !== false && theme?.showAboutChef !== false
     });
   }
 
@@ -267,14 +276,18 @@ export default function AdminView({
     playTapSound();
     setIsSavingCustomizer(true);
 
+    const isChefVisible = (chefDraft.showAboutChef !== false) && (customizerDraft.showAboutChef !== false);
+
     const updatedTheme = {
       ...theme,
-      ...customizerDraft
+      ...customizerDraft,
+      showAboutChef: isChefVisible
     };
 
     const updatedChef = {
       ...chef,
       ...chefDraft,
+      showAboutChef: isChefVisible,
       isVerified: Boolean(chefDraft.showVerifiedBadge)
     };
 
@@ -291,6 +304,7 @@ export default function AdminView({
         upiId: customizerDraft.upiId,
         accentColor: customizerDraft.accentColor,
         logo: customizerDraft.logo,
+        showAboutChef: isChefVisible,
         chef: updatedChef
       });
     }
@@ -716,6 +730,7 @@ export default function AdminView({
         {[
           { id: 'sales', label: 'Sales Dashboard', inFooter: true },
           { id: 'orders', label: 'Orders & CSV', inFooter: true },
+          { id: 'punch', label: '+ Punch Walk-in', inFooter: false },
           { id: 'pnl', label: 'P&L & Cash Check', inFooter: true },
           { id: 'offers', label: 'Coupons & Offers', inFooter: true },
           { id: 'bank-rec', label: 'Bank CSV Rec', inFooter: false },
@@ -974,20 +989,59 @@ export default function AdminView({
       {/* 2. ORDER HISTORY & CSV EXPORT (FR-A2) */}
       {activeAdminTab === 'orders' && (
         <div>
+          {/* Optional inline Punch Walk-in Grid */}
+          {showWalkInPunch && (
+            <div style={{ marginBottom: 16 }}>
+              <PunchWalkInOrders
+                orders={orders}
+                setOrders={setOrders}
+                menu={menu}
+                tables={theme?.tables}
+                onOrderSubmitted={() => {
+                  // Keep open or notify
+                }}
+              />
+            </div>
+          )}
+
           <div className="ios-card" style={{ marginBottom: 16 }}>
             <div className="card-top-row">
               <div className="card-title-group">
                 <span className="card-heading">Complete Order History</span>
                 <span className="card-meta-text">Searchable register logs & instant CSV export</span>
               </div>
-              <button
-                className="btn-primary-pill"
-                style={{ padding: '6px 12px', fontSize: 12 }}
-                onClick={handleExportCSV}
-              >
-                <Download size={14} />
-                <span>Export to CSV</span>
-              </button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  className="btn-secondary-pill"
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#007AFF',
+                    borderColor: '#BFDBFE',
+                    background: '#EFF6FF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5
+                  }}
+                  onClick={() => {
+                    playTapSound();
+                    setShowWalkInPunch(!showWalkInPunch);
+                  }}
+                  title="Punch walk-in or phone order"
+                >
+                  <Plus size={14} color="#007AFF" />
+                  <span>{showWalkInPunch ? 'Hide Punch Grid' : '+ Punch Walk-in'}</span>
+                </button>
+                <button
+                  className="btn-primary-pill"
+                  style={{ padding: '6px 12px', fontSize: 12 }}
+                  onClick={handleExportCSV}
+                >
+                  <Download size={14} />
+                  <span>Export to CSV</span>
+                </button>
+              </div>
             </div>
 
             {/* Search Input */}
@@ -1046,6 +1100,26 @@ export default function AdminView({
                 ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 2B. DIRECT WALK-IN & PHONE PUNCH ORDERS */}
+      {activeAdminTab === 'punch' && (
+        <div style={{ marginBottom: 16 }}>
+          <PunchWalkInOrders
+            orders={orders}
+            setOrders={setOrders}
+            menu={menu}
+            tables={theme?.tables}
+            onOrderSubmitted={(newOrder, meta) => {
+              const hasOtherGridsWithItems = typeof meta === 'boolean'
+                ? meta
+                : Boolean(meta?.hasOtherGridsWithItems);
+              if (!hasOtherGridsWithItems) {
+                setActiveAdminTab('orders');
+              }
+            }}
+          />
         </div>
       )}
 
@@ -2245,7 +2319,7 @@ export default function AdminView({
                       <span>About Chef Profile &amp; Accreditation Studio</span>
                     </div>
                     <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
-                      Customize the chef's portrait, biography, and choose whether to display official verification badges or accredited diplomas.
+                      Customize the chef's portrait, biography, and choose whether to display official verification badges or hide the entire section.
                     </div>
                   </div>
 
@@ -2258,14 +2332,16 @@ export default function AdminView({
                         playTapSound();
                         setChefDraft((prev) => ({
                           ...prev,
+                          showAboutChef: true,
                           showVerifiedBadge: true,
                           showCredentials: true,
                           showHygienePledge: true
                         }));
+                        setCustomizerDraft((prev) => ({ ...prev, showAboutChef: true }));
                         setCustomizerSaveSuccess(false);
                       }}
                       style={{ fontSize: 11, padding: '5px 10px', background: '#F0FDF4', color: '#16A34A', borderColor: '#BBF7D0', fontWeight: 600 }}
-                      title="Turn ON all verification badges, diplomas and hygiene pledge"
+                      title="Turn ON chef section and enable all verification badges, diplomas and hygiene pledge"
                     >
                       <ShieldCheck size={12} color="#16A34A" />
                       <span>Full Master Chef &amp; Accreditation</span>
@@ -2278,10 +2354,12 @@ export default function AdminView({
                         playTapSound();
                         setChefDraft((prev) => ({
                           ...prev,
+                          showAboutChef: true,
                           showVerifiedBadge: false,
                           showCredentials: false,
                           showHygienePledge: false
                         }));
+                        setCustomizerDraft((prev) => ({ ...prev, showAboutChef: true }));
                         setCustomizerSaveSuccess(false);
                       }}
                       style={{ fontSize: 11, padding: '5px 10px', background: '#F1F5F9', color: '#475569', borderColor: '#CBD5E1', fontWeight: 600 }}
@@ -2290,8 +2368,134 @@ export default function AdminView({
                       <Utensils size={12} color="#475569" />
                       <span>Minimalist Profile (Name &amp; Story Only)</span>
                     </button>
+
+                    <button
+                      type="button"
+                      className="btn-secondary-pill"
+                      onClick={() => {
+                        playTapSound();
+                        setChefDraft((prev) => ({
+                          ...prev,
+                          showAboutChef: false
+                        }));
+                        setCustomizerDraft((prev) => ({ ...prev, showAboutChef: false }));
+                        setCustomizerSaveSuccess(false);
+                      }}
+                      style={{ fontSize: 11, padding: '5px 10px', background: '#FEF2F2', color: '#DC2626', borderColor: '#FECACA', fontWeight: 600 }}
+                      title="Completely hide the About Chef section from all customer interfaces"
+                    >
+                      <EyeOff size={12} color="#DC2626" />
+                      <span>Hide Entire Chef Section</span>
+                    </button>
                   </div>
                 </div>
+
+                {/* Master Visibility Switch: Show or Hide the Entire About Chef Section */}
+                <div
+                  style={{
+                    background: (chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? '#F0FDF4' : '#FEF2F2',
+                    border: `1.5px solid ${(chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? '#BBF7D0' : '#FECACA'}`,
+                    borderRadius: 14,
+                    padding: '12px 16px',
+                    marginBottom: 16,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 12
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 10,
+                        background: (chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? '#DCFCE7' : '#FEE2E2',
+                        color: (chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? '#16A34A' : '#DC2626',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}
+                    >
+                      {(chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? (
+                        <Eye size={22} />
+                      ) : (
+                        <EyeOff size={22} />
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13.5, fontWeight: 800, color: (chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? '#166534' : '#991B1B', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span>Customer Interface Chef Visibility:</span>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            padding: '2px 8px',
+                            borderRadius: 12,
+                            background: (chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? '#16A34A' : '#DC2626',
+                            color: '#FFFFFF',
+                            fontWeight: 700
+                          }}
+                        >
+                          {(chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? 'VISIBLE (ON)' : 'HIDDEN (OFF)'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: (chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? '#15803D' : '#B91C1C', marginTop: 2 }}>
+                        {(chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false)
+                          ? "The entire 'Chef & Story' tab, credentials button, and story profile are visible on customer screens."
+                          : "The whole 'About Chef' section is completely hidden from customer screens (bottom navigation, menu button, and URLs)."}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapSound();
+                      const nextState = !(chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false);
+                      setChefDraft((prev) => ({ ...prev, showAboutChef: nextState }));
+                      setCustomizerDraft((prev) => ({ ...prev, showAboutChef: nextState }));
+                      setCustomizerSaveSuccess(false);
+                    }}
+                    style={{
+                      padding: '9px 18px',
+                      borderRadius: 10,
+                      border: 'none',
+                      background: (chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? '#16A34A' : '#DC2626',
+                      color: '#FFFFFF',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {(chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? (
+                      <>
+                        <EyeOff size={15} />
+                        <span>Hide Entire Chef Section</span>
+                      </>
+                    ) : (
+                      <>
+                        <Eye size={15} />
+                        <span>Show Chef Section to Customers</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {!(chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) && (
+                  <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: '#92400E', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <EyeOff size={15} color="#D97706" style={{ flexShrink: 0 }} />
+                    <span>
+                      <strong>Chef Section is Currently Hidden for Customers:</strong> You can still edit the portrait, bio, and settings below. Your changes will be saved and preserved for whenever you turn the section back ON.
+                    </span>
+                  </div>
+                )}
 
                 {/* Hidden Chef Photo File Input */}
                 <input
@@ -2660,59 +2864,77 @@ export default function AdminView({
 
                   {/* Mock Chef Profile Preview */}
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #F1F5F9' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                      Live Chef Profile Dining Tab Preview:
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>Live Chef Profile Dining Tab Preview:</span>
+                      <span style={{ fontSize: 10, color: (chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? '#16A34A' : '#DC2626', fontWeight: 700 }}>
+                        {(chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? '● Active on Customer Screen' : '○ Hidden from Customer Screen'}
+                      </span>
                     </div>
-                    <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: 12 }}>
-                      {chefDraft.showVerifiedBadge && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <span className="status-pill done" style={{ fontSize: 10, padding: '2px 8px' }}>
-                            <ShieldCheck size={11} /> Officially Verified Master Chef
-                          </span>
-                          <span style={{ fontSize: 10, color: '#64748B' }}>Lic: FSSAI-LIC-10026011009821</span>
+
+                    {(chefDraft.showAboutChef !== false && customizerDraft.showAboutChef !== false) ? (
+                      <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: 12 }}>
+                        {chefDraft.showVerifiedBadge && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span className="status-pill done" style={{ fontSize: 10, padding: '2px 8px' }}>
+                              <ShieldCheck size={11} /> Officially Verified Master Chef
+                            </span>
+                            <span style={{ fontSize: 10, color: '#64748B' }}>Lic: FSSAI-LIC-10026011009821</span>
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ position: 'relative', width: 44, height: 44, flexShrink: 0 }}>
+                            <img
+                              src={chefDraft.portrait || '/assets/chef_portrait.jpg'}
+                              alt="Chef"
+                              style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: `2px solid ${customizerDraft.accentColor || '#007AFF'}` }}
+                            />
+                            {chefDraft.showVerifiedBadge && (
+                              <div style={{ position: 'absolute', bottom: -2, right: -2, background: '#007AFF', color: '#FFF', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <CheckCircle2 size={9} strokeWidth={3} />
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{chefDraft.name || 'Chef Name'}</div>
+                            <div style={{ fontSize: 11, color: '#64748B' }}>{chefDraft.title} • {chefDraft.experienceYears}+ Yrs Mastery</div>
+                          </div>
                         </div>
-                      )}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ position: 'relative', width: 44, height: 44, flexShrink: 0 }}>
-                          <img
-                            src={chefDraft.portrait || '/assets/chef_portrait.jpg'}
-                            alt="Chef"
-                            style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: `2px solid ${customizerDraft.accentColor || '#007AFF'}` }}
-                          />
-                          {chefDraft.showVerifiedBadge && (
-                            <div style={{ position: 'absolute', bottom: -2, right: -2, background: '#007AFF', color: '#FFF', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <CheckCircle2 size={9} strokeWidth={3} />
-                            </div>
+                        {chefDraft.bio && (
+                          <div style={{ fontSize: 11, color: '#475569', marginTop: 8, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                            {chefDraft.bio}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                          {chefDraft.showCredentials && (
+                            <span style={{ fontSize: 9.5, padding: '2px 6px', background: '#FEF3C7', color: '#B45309', borderRadius: 6, fontWeight: 600 }}>
+                              Govt. Accredited Diplomas
+                            </span>
+                          )}
+                          {chefDraft.showHygienePledge && (
+                            <span style={{ fontSize: 9.5, padding: '2px 6px', background: '#DCFCE7', color: '#15803D', borderRadius: 6, fontWeight: 600 }}>
+                              FSSAI Hygiene &amp; Sourcing
+                            </span>
+                          )}
+                          {!chefDraft.showCredentials && !chefDraft.showVerifiedBadge && !chefDraft.showHygienePledge && (
+                            <span style={{ fontSize: 9.5, padding: '2px 6px', background: '#F1F5F9', color: '#475569', borderRadius: 6, fontWeight: 600 }}>
+                              Minimalist Chef Profile Active
+                            </span>
                           )}
                         </div>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{chefDraft.name || 'Chef Name'}</div>
-                          <div style={{ fontSize: 11, color: '#64748B' }}>{chefDraft.title} • {chefDraft.experienceYears}+ Yrs Mastery</div>
+                      </div>
+                    ) : (
+                      <div style={{ background: '#FEF2F2', border: '1.5px dashed #FCA5A5', borderRadius: 12, padding: 16, textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', padding: 8, background: '#FEE2E2', borderRadius: '50%', color: '#DC2626', marginBottom: 8 }}>
+                          <EyeOff size={20} />
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#991B1B' }}>
+                          About Chef Section is Currently Hidden
+                        </div>
+                        <div style={{ fontSize: 11, color: '#B91C1C', marginTop: 4, maxWidth: 360, margin: '4px auto 0' }}>
+                          Customer devices will not see the "Chef &amp; Story" tab in bottom navigation, chef credential badges, or the story page. The customer bottom dock will only display Menu, Orders, and Call Waiter.
                         </div>
                       </div>
-                      {chefDraft.bio && (
-                        <div style={{ fontSize: 11, color: '#475569', marginTop: 8, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                          {chefDraft.bio}
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                        {chefDraft.showCredentials && (
-                          <span style={{ fontSize: 9.5, padding: '2px 6px', background: '#FEF3C7', color: '#B45309', borderRadius: 6, fontWeight: 600 }}>
-                            Govt. Accredited Diplomas
-                          </span>
-                        )}
-                        {chefDraft.showHygienePledge && (
-                          <span style={{ fontSize: 9.5, padding: '2px 6px', background: '#DCFCE7', color: '#15803D', borderRadius: 6, fontWeight: 600 }}>
-                            FSSAI Hygiene &amp; Sourcing
-                          </span>
-                        )}
-                        {!chefDraft.showCredentials && !chefDraft.showVerifiedBadge && !chefDraft.showHygienePledge && (
-                          <span style={{ fontSize: 9.5, padding: '2px 6px', background: '#F1F5F9', color: '#475569', borderRadius: 6, fontWeight: 600 }}>
-                            Minimalist Chef Profile Active
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>

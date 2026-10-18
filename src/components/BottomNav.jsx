@@ -23,15 +23,20 @@ export default function BottomNav({
   cartCount,
   activeOrdersCount,
   language = 'en',
-  authSessions: _authSessions = {}
+  authSessions: _authSessions = {},
+  theme = null,
+  chef = null,
+  showAboutChef = true
 }) {
   if (currentRole === 'developer') {
     return null;
   }
 
+  const isChefVisible = showAboutChef !== false && chef?.showAboutChef !== false && theme?.showAboutChef !== false;
+
   const getTabs = () => {
     if (currentRole === 'customer' || currentRole === 'chef') {
-      return [
+      const tabs = [
         {
           id: 'menu',
           label: language === 'hi' ? 'मेनू' : 'Menu',
@@ -48,14 +53,19 @@ export default function BottomNav({
           label: language === 'hi' ? 'लाइव स्थिति' : 'Live Status',
           icon: Clock,
           badge: activeOrdersCount > 0 ? activeOrdersCount : null
-        },
-        {
+        }
+      ];
+
+      if (isChefVisible) {
+        tabs.push({
           id: 'chef',
           label: language === 'hi' ? 'शेफ स्टोरी' : 'Chef & Story',
           icon: ShieldCheck,
           hasDot: true
-        }
-      ];
+        });
+      }
+
+      return tabs;
     } else if (currentRole === 'counter') {
       return [
         { id: 'orders', label: 'Live Stack', icon: Layers, badge: activeOrdersCount > 0 ? activeOrdersCount : null },

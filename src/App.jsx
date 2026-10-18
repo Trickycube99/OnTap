@@ -127,6 +127,20 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
+  const showAboutChef = chef?.showAboutChef !== false && theme?.showAboutChef !== false;
+
+  useEffect(() => {
+    if (!showAboutChef && (activeTab === 'chef' || currentRole === 'chef')) {
+      if (currentRole === 'chef') {
+        setCurrentRole('customer');
+      }
+      setActiveTab('menu');
+      if (typeof window !== 'undefined' && window.location.hash === '#chef') {
+        window.location.hash = 'customer';
+      }
+    }
+  }, [showAboutChef, activeTab, currentRole]);
+
   // Save changes to localStorage scoped by active business
   useEffect(() => { saveData(getScopedKey(STORAGE_KEYS.MENU, activeBusinessId), menu); }, [menu, activeBusinessId]);
   useEffect(() => { saveData(getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId), orders); }, [orders, activeBusinessId]);
@@ -215,6 +229,12 @@ export default function App() {
 
       let targetRole = null;
       if (route === 'chef') {
+        if (!showAboutChef) {
+          setCurrentRole('customer');
+          setActiveTab('menu');
+          window.location.hash = 'customer';
+          return;
+        }
         setCurrentRole('customer');
         setActiveTab('chef');
         return;
@@ -258,7 +278,7 @@ export default function App() {
       window.removeEventListener('hashchange', syncFromUrl);
       window.removeEventListener('popstate', syncFromUrl);
     };
-  }, [currentRole]);
+  }, [currentRole, showAboutChef]);
 
   // Active in-progress orders count
   const activeOrdersCount = orders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length;
@@ -552,7 +572,7 @@ export default function App() {
         <div className="app-content-container">
           {/* Dynamic Views Rendering */}
           {(currentRole === 'customer' || currentRole === 'chef') && (
-            activeTab === 'chef' || currentRole === 'chef' ? (
+            (activeTab === 'chef' || currentRole === 'chef') && showAboutChef ? (
               <AboutChefView
                 chef={chef}
                 menu={menu}
@@ -612,6 +632,7 @@ export default function App() {
           {currentRole === 'admin' && (
             <AdminView
               orders={orders}
+              setOrders={setOrders}
               menu={menu}
               setMenu={setMenu}
               expenses={expenses}
@@ -667,6 +688,9 @@ export default function App() {
         cartCount={cartCount}
         activeOrdersCount={activeOrdersCount}
         language={language}
+        theme={theme}
+        chef={chef}
+        showAboutChef={showAboutChef}
       />
 
       {/* Interface Specific Authentication Modal / Staff Station Gate */}

@@ -1594,42 +1594,44 @@ export default function CustomerView({
       </div>
 
       {/* Subtle Chef & FSSAI Verification Option (Opt-in) */}
-      <div style={{ padding: '0 18px 10px', display: 'flex', alignItems: 'center' }}>
-        <button
-          type="button"
-          onClick={() => {
-            playTapSound();
-            if (onGoToChef) onGoToChef();
-          }}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            background: '#F8FAFC',
-            border: '1px solid #E2E8F0',
-            borderRadius: 20,
-            padding: '5px 12px',
-            fontSize: 11.5,
-            fontWeight: 600,
-            color: '#475569',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-          title={chef?.showVerifiedBadge !== false ? "Tap to view verified Executive Chef credentials & FSSAI audit" : "Tap to learn about our Executive Chef & culinary story"}
-        >
-          {chef?.showVerifiedBadge !== false ? (
-            <ShieldCheck size={13} color="#16A34A" />
-          ) : (
-            <Sparkles size={13} color="#007AFF" />
-          )}
-          <span>
-            {language === 'hi'
-              ? (chef?.showVerifiedBadge !== false ? `शेफ ${chef?.name || 'अद्वैत'} व FSSAI प्रमाण देखें` : `शेफ ${chef?.name || 'अद्वैत'} के बारे में जानें`)
-              : (chef?.showVerifiedBadge !== false ? `About Chef ${chef?.name || 'Advait'} & Credentials` : `About Chef ${chef?.name || 'Advait'}`)}
-          </span>
-          <ChevronRight size={12} color="#94A3B8" />
-        </button>
-      </div>
+      {(chef?.showAboutChef !== false && theme?.showAboutChef !== false) && (
+        <div style={{ padding: '0 18px 10px', display: 'flex', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => {
+              playTapSound();
+              if (onGoToChef) onGoToChef();
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              borderRadius: 20,
+              padding: '5px 12px',
+              fontSize: 11.5,
+              fontWeight: 600,
+              color: '#475569',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            title={chef?.showVerifiedBadge !== false ? "Tap to view verified Executive Chef credentials & FSSAI audit" : "Tap to learn about our Executive Chef & culinary story"}
+          >
+            {chef?.showVerifiedBadge !== false ? (
+              <ShieldCheck size={13} color="#16A34A" />
+            ) : (
+              <Sparkles size={13} color="#007AFF" />
+            )}
+            <span>
+              {language === 'hi'
+                ? (chef?.showVerifiedBadge !== false ? `शेफ ${chef?.name || 'अद्वैत'} व FSSAI प्रमाण देखें` : `शेफ ${chef?.name || 'अद्वैत'} के बारे में जानें`)
+                : (chef?.showVerifiedBadge !== false ? `About Chef ${chef?.name || 'Advait'} & Credentials` : `About Chef ${chef?.name || 'Advait'}`)}
+            </span>
+            <ChevronRight size={12} color="#94A3B8" />
+          </button>
+        </div>
+      )}
 
       {/* Filter / Sub-Nav Tabs (Strict Design System Specification) */}
       <div className="filter-tabs-container">

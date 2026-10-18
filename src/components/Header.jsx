@@ -86,7 +86,7 @@ export default function Header({
                     alt={theme.restaurantName}
                     style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 'inherit' }}
                   />
-                ) : chef?.portrait ? (
+                ) : (chef?.portrait && chef?.showAboutChef !== false && theme?.showAboutChef !== false) ? (
                   <img src={chef.portrait} alt={theme.restaurantName} />
                 ) : (
                   <span>{(theme?.restaurantName || 'AD').substring(0, 2).toUpperCase()}</span>
@@ -325,7 +325,7 @@ export default function Header({
           </div>
         </div>
 
-        {/* Center: Workstation Switching (Admin, Counterperson POS, Customer Menu) */}
+        {/* Center: Workstation Switching (Dev, Admin, Counterperson POS) */}
         <nav className="header-center-nav staff-center-nav">
           {/* Developer Superadmin has Master Access */}
           {currentRole === 'developer' && (
@@ -395,15 +395,6 @@ export default function Header({
                   <span className="nav-badge-pill">{activeOrdersCount}</span>
                 )}
               </button>
-
-              <button
-                className="nav-role-pill"
-                onClick={() => onRoleSwitch('customer')}
-                title="Preview Customer QR Dining Experience"
-              >
-                <Utensils size={14} color="#007AFF" />
-                <span>Customer Menu</span>
-              </button>
             </>
           )}
 
@@ -434,15 +425,6 @@ export default function Header({
                   <span>Owner Admin</span>
                 </button>
               )}
-
-              <button
-                className="nav-role-pill"
-                onClick={() => onRoleSwitch('customer')}
-                title="Preview Customer QR Dining Experience"
-              >
-                <Utensils size={14} color="#007AFF" />
-                <span>Customer Menu</span>
-              </button>
             </>
           )}
         </nav>
@@ -532,7 +514,7 @@ export default function Header({
               playTapSound();
               if (onLogoutRole) onLogoutRole(currentRole);
             }}
-            title="Lock workstation and return to customer QR menu"
+            title="Lock and exit workstation"
           >
             <LogOut size={13} color="#DC2626" />
             <span className="reset-label">Exit Station</span>
