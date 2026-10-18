@@ -306,6 +306,8 @@ export const initialExpenses = [
 export const initialStaff = [
   {
     id: "st-1",
+    loginId: "sunil.pos",
+    pin: "4401",
     name: "Sunil Verma",
     role: "Counter Captain & POS Lead",
     phone: "+91 98112-40192",
@@ -318,6 +320,8 @@ export const initialStaff = [
   },
   {
     id: "st-2",
+    loginId: "neha.pos",
+    pin: "4402",
     name: "Neha Kulkarni",
     role: "Head Barista & Cashier",
     phone: "+91 98450-88122",
@@ -330,6 +334,8 @@ export const initialStaff = [
   },
   {
     id: "st-3",
+    loginId: "manpreet.pos",
+    pin: "4403",
     name: "Chef Manpreet Singh",
     role: "Sous Chef & Tandoor Master",
     phone: "+91 98771-33100",
@@ -342,6 +348,8 @@ export const initialStaff = [
   },
   {
     id: "st-4",
+    loginId: "rajesh.pos",
+    pin: "4404",
     name: "Rajesh Yadav",
     role: "Service & Inventory Associate",
     phone: "+91 98220-77411",

@@ -7,7 +7,10 @@ import {
   User,
   AlertCircle,
   X,
-  ChevronRight
+  ChevronRight,
+  Eye,
+  EyeOff,
+  ShieldCheck
 } from 'lucide-react';
 import { ROLE_CONFIGS, ROLES, authenticateRole } from '../utils/auth';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
@@ -17,29 +20,39 @@ export default function AuthModal({
   targetRole = ROLES.COUNTER,
   activeSessionRole = null,
   onSuccess,
-  onClose
+  onClose,
+  theme,
+  staff = []
 }) {
   const [selectedStation, setSelectedStation] = useState(null);
   const currentStation = selectedStation || (targetRole === ROLES.ADMIN ? ROLES.ADMIN : ROLES.COUNTER);
 
   const roleConfig = ROLE_CONFIGS[currentStation] || ROLE_CONFIGS[ROLES.COUNTER];
 
+  const activeStaffList = Array.isArray(staff)
+    ? staff.filter((emp) => emp.status !== 'resigned')
+    : [];
+
   // Discrete form state
+  const [selectedStaffId, setSelectedStaffId] = useState(() => activeStaffList[0]?.id || '');
   const [pin, setPin] = useState('');
   const [email, setEmail] = useState('');
+  const [showPin, setShowPin] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const resetForm = () => {
     setPin('');
     setEmail('');
+    setShowPin(false);
     setErrorMessage('');
     setSelectedStation(null);
+    setSelectedStaffId(activeStaffList[0]?.id || '');
   };
 
   if (!isOpen) return null;
 
-  // Station switcher tabs (No autofill button) - Strictly Counter & Owner Admin
+  // Station switcher tabs - Strictly Counter & Owner Admin
   const allTabs = [
     { id: ROLES.COUNTER, label: 'Counterperson POS', icon: Layers },
     { id: ROLES.ADMIN, label: 'Business Owner Admin', icon: BarChart3 }
@@ -62,7 +75,12 @@ export default function AuthModal({
     if (currentStation === ROLES.ADMIN) {
       creds = { email, pin };
     } else {
-      creds = { terminal: 'POS-01 (Flagship CP)', pin };
+      creds = {
+        staffId: selectedStaffId || activeStaffList[0]?.id || '',
+        pin,
+        staffList: activeStaffList,
+        terminal: 'POS-01 (Flagship CP)'
+      };
     }
 
     // Attempt authentication via abstraction layer
@@ -99,6 +117,8 @@ export default function AuthModal({
     onClose();
   };
 
+  const selectedStaffMember = activeStaffList.find((s) => s.id === selectedStaffId);
+
   return (
     <div className="auth-modal-overlay" onClick={handleCloseModal}>
       <div
@@ -131,7 +151,7 @@ export default function AuthModal({
           </button>
         </div>
 
-        {/* Station Selector Tabs for Staff / Owner / Developer */}
+        {/* Station Selector Tabs for Staff / Owner */}
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${allowedTabs.length}, 1fr)`, gap: 6, margin: '10px 0 14px' }}>
           {allowedTabs.map((st) => (
             <button
@@ -143,9 +163,9 @@ export default function AuthModal({
                 fontSize: 11,
                 fontWeight: 600,
                 justifyContent: 'center',
-                background: currentStation === st.id ? (st.id === ROLES.DEVELOPER ? '#ECFEFF' : '#EFF6FF') : '#F9FAFB',
-                borderColor: currentStation === st.id ? (st.id === ROLES.DEVELOPER ? '#06B6D4' : '#007AFF') : '#E5E7EB',
-                color: currentStation === st.id ? (st.id === ROLES.DEVELOPER ? '#0891B2' : '#007AFF') : 'var(--text-secondary)'
+                background: currentStation === st.id ? '#EFF6FF' : '#F9FAFB',
+                borderColor: currentStation === st.id ? '#007AFF' : '#E5E7EB',
+                color: currentStation === st.id ? '#007AFF' : 'var(--text-secondary)'
               }}
               onClick={() => {
                 playTapSound();
@@ -176,27 +196,77 @@ export default function AuthModal({
           </div>
         )}
 
-        {/* Dynamic Form based on Target Role (Zero Autofill Button) */}
+        {/* Dynamic Form based on Target Role */}
         <form onSubmit={handleSubmit} className="auth-modal-form">
-          {/* COUNTER POS FORM (PIN only - zero name prompt) */}
+          {/* COUNTER POS FORM: Staff Identity & Secret PIN */}
           {currentStation === ROLES.COUNTER && (
-            <div className="auth-input-group">
-              <label className="auth-label">
-                <KeyRound size={13} />
-                <span>Terminal 4-Digit POS PIN *</span>
-              </label>
-              <input
-                type="password"
-                required
-                autoFocus
-                placeholder="Enter 4-Digit POS PIN"
-                className="auth-input"
-                maxLength={6}
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-              />
-              <span className="auth-hint">Enter your 4-digit counter terminal PIN to unlock the live POS.</span>
-            </div>
+            <>
+              {activeStaffList.length > 0 && (
+                <div className="auth-input-group" style={{ marginBottom: 12 }}>
+                  <label className="auth-label">
+                    <User size={13} />
+                    <span>Staff Member Profile *</span>
+                  </label>
+                  <select
+                    className="auth-input"
+                    value={selectedStaffId || activeStaffList[0]?.id}
+                    onChange={(e) => {
+                      setSelectedStaffId(e.target.value);
+                      setErrorMessage('');
+                    }}
+                    style={{ fontWeight: 600 }}
+                  >
+                    <optgroup label="Registered Counter Staff">
+                      {activeStaffList.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name} — {emp.role} {emp.loginId ? `(@${emp.loginId})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <option value="__owner_admin__">
+                      👑 Business Owner (Master Override)
+                    </option>
+                  </select>
+                  {selectedStaffMember && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 11, color: '#64748B' }}>
+                      <ShieldCheck size={12} color="#16A34A" />
+                      <span>Login ID: <strong>{selectedStaffMember.loginId || `${selectedStaffMember.name.toLowerCase().replace(/\s+/g, '')}.pos`}</strong></span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="auth-input-group">
+                <label className="auth-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <KeyRound size={13} />
+                    <span>4-Digit Secret POS PIN *</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPin(!showPin)}
+                    style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  >
+                    {showPin ? <EyeOff size={13} /> : <Eye size={13} />}
+                    <span>{showPin ? 'Hide' : 'Show'}</span>
+                  </button>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPin ? 'text' : 'password'}
+                    required
+                    autoFocus
+                    placeholder="Enter your 4-Digit Secret PIN"
+                    className="auth-input"
+                    maxLength={8}
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    style={{ letterSpacing: showPin ? 'normal' : '0.15em', fontWeight: 700 }}
+                  />
+                </div>
+                <span className="auth-hint">Enter your personal 4-digit staff PIN (or Owner master PIN) to unlock this station.</span>
+              </div>
+            </>
           )}
 
           {/* ADMIN OWNER FORM */}
@@ -219,25 +289,36 @@ export default function AuthModal({
               </div>
 
               <div className="auth-input-group">
-                <label className="auth-label">
-                  <KeyRound size={13} />
-                  <span>Master Owner PIN / Password *</span>
+                <label className="auth-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <KeyRound size={13} />
+                    <span>Master Owner PIN / Password *</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPin(!showPin)}
+                    style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  >
+                    {showPin ? <EyeOff size={13} /> : <Eye size={13} />}
+                    <span>{showPin ? 'Hide' : 'Show'}</span>
+                  </button>
                 </label>
                 <input
-                  type="password"
+                  type={showPin ? 'text' : 'password'}
                   required
                   placeholder="Enter Master Owner PIN"
                   className="auth-input"
                   maxLength={8}
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
+                  style={{ letterSpacing: showPin ? 'normal' : '0.15em', fontWeight: 700 }}
                 />
                 <span className="auth-hint">Authenticates against your specific registered business account.</span>
               </div>
             </>
           )}
 
-          {/* Actions (Zero Autofill Button as requested) */}
+          {/* Actions */}
           <div className="auth-actions-row" style={{ marginTop: 14 }}>
             <button
               type="button"

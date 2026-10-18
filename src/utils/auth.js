@@ -18,7 +18,7 @@ export const ROLES = {
   CHEF: 'chef'
 };
 
-export const AUTH_STORAGE_KEY = 'flowscape_auth_sessions_v2';
+export const AUTH_STORAGE_KEY = 'flowscape_auth_sessions_v3';
 
 export const ROLE_PERMISSIONS = {
   // Developer can access everything across all tenants
@@ -81,17 +81,130 @@ export const ROLE_CONFIGS = {
     name: 'Live Counter & POS Terminal',
     shortName: 'Cashier POS',
     badge: 'POS Terminal Guard',
-    securityLevel: 'Staff POS 4-Digit Terminal PIN (Accessible by Counter & Admin)',
+    securityLevel: 'Staff POS Credentials & Secret PIN Verification',
     description: 'Accept live dining orders, apply custom item modifiers, print 80mm GST thermal receipts, and reconcile EOD cash.',
     demoCredentials: {
       terminal: 'POS-01 (Flagship CP)',
-      pin: '4421'
+      pin: '4401'
     },
     validate: (creds) => {
       const pin = (creds?.pin || '').toString().trim();
       if (!pin) {
-        return { valid: false, error: 'Please enter your 4-digit POS PIN.' };
+        return { valid: false, error: 'Please enter your 4-digit staff PIN.' };
       }
+      const activeBiz = getActiveBusiness();
+      const isOwnerOverride = activeBiz && (activeBiz.owner?.pin === pin || pin === '8821');
+
+      const staffList = Array.isArray(creds?.staffList) ? creds.staffList : [];
+      const staffId = creds?.staffId;
+      const loginId = (creds?.loginId || '').trim().toLowerCase();
+
+      // If specific staff selected/entered
+      if (staffId && staffId !== '__owner_admin__') {
+        const targetStaff = staffList.find((s) => s.id === staffId);
+        if (targetStaff) {
+          if (targetStaff.pin === pin || isOwnerOverride) {
+            return {
+              valid: true,
+              business: activeBiz,
+              resolvedSession: {
+                role: ROLES.COUNTER,
+                businessId: activeBiz?.id || 'biz_advait',
+                businessName: activeBiz?.name || 'Advait Artisanal Kitchen',
+                staffId: targetStaff.id,
+                name: targetStaff.name,
+                staffRole: targetStaff.role,
+                loginId: targetStaff.loginId,
+                terminal: activeBiz?.counter?.terminalName || 'POS Terminal 01',
+                token: `pos_${activeBiz?.id || 'biz_advait'}_${Date.now()}`,
+                authenticatedAt: new Date().toISOString(),
+                authenticatedBy: isOwnerOverride ? 'admin' : 'counter'
+              }
+            };
+          } else {
+            return { valid: false, error: `Incorrect PIN for "${targetStaff.name}". Please enter their 4-digit POS PIN.` };
+          }
+        }
+      }
+
+      // If login ID was provided
+      if (loginId) {
+        const targetStaff = staffList.find((s) => (s.loginId || '').toLowerCase() === loginId);
+        if (targetStaff) {
+          if (targetStaff.pin === pin || isOwnerOverride) {
+            return {
+              valid: true,
+              business: activeBiz,
+              resolvedSession: {
+                role: ROLES.COUNTER,
+                businessId: activeBiz?.id || 'biz_advait',
+                businessName: activeBiz?.name || 'Advait Artisanal Kitchen',
+                staffId: targetStaff.id,
+                name: targetStaff.name,
+                staffRole: targetStaff.role,
+                loginId: targetStaff.loginId,
+                terminal: activeBiz?.counter?.terminalName || 'POS Terminal 01',
+                token: `pos_${activeBiz?.id || 'biz_advait'}_${Date.now()}`,
+                authenticatedAt: new Date().toISOString(),
+                authenticatedBy: isOwnerOverride ? 'admin' : 'counter'
+              }
+            };
+          } else {
+            return { valid: false, error: `Incorrect PIN for login ID "${loginId}".` };
+          }
+        }
+      }
+
+      // If owner override explicitly selected
+      if (staffId === '__owner_admin__' || isOwnerOverride) {
+        if (isOwnerOverride) {
+          return {
+            valid: true,
+            business: activeBiz,
+            resolvedSession: {
+              role: ROLES.COUNTER,
+              businessId: activeBiz?.id || 'biz_advait',
+              businessName: activeBiz?.name || 'Advait Artisanal Kitchen',
+              staffId: '__owner_admin__',
+              name: `${activeBiz?.owner?.name || 'Owner'} (Master Override)`,
+              staffRole: 'Owner Admin',
+              loginId: 'admin.owner',
+              terminal: activeBiz?.counter?.terminalName || 'POS Terminal 01',
+              token: `pos_${activeBiz?.id || 'biz_advait'}_${Date.now()}`,
+              authenticatedAt: new Date().toISOString(),
+              authenticatedBy: 'admin'
+            }
+          };
+        } else {
+          return { valid: false, error: 'Incorrect Master Owner PIN for administrator override.' };
+        }
+      }
+
+      // Fallback: match by PIN across active staff list
+      if (staffList.length > 0) {
+        const matchingStaff = staffList.find((s) => s.pin === pin && s.status !== 'resigned');
+        if (matchingStaff) {
+          return {
+            valid: true,
+            business: activeBiz,
+            resolvedSession: {
+              role: ROLES.COUNTER,
+              businessId: activeBiz?.id || 'biz_advait',
+              businessName: activeBiz?.name || 'Advait Artisanal Kitchen',
+              staffId: matchingStaff.id,
+              name: matchingStaff.name,
+              staffRole: matchingStaff.role,
+              loginId: matchingStaff.loginId,
+              terminal: activeBiz?.counter?.terminalName || 'POS Terminal 01',
+              token: `pos_${activeBiz?.id || 'biz_advait'}_${Date.now()}`,
+              authenticatedAt: new Date().toISOString(),
+              authenticatedBy: 'counter'
+            }
+          };
+        }
+      }
+
+      // Fallback to terminal PIN
       const authRes = authenticateCounterByPin(pin, 'Counter Staff');
       if (!authRes.success) {
         return { valid: false, error: authRes.error };
@@ -104,7 +217,7 @@ export const ROLE_CONFIGS = {
       }
       const activeBiz = getActiveBusiness();
       const pin = (creds?.pin || '').toString().trim();
-      const isAdminOverride = activeBiz.owner.pin === pin;
+      const isAdminOverride = activeBiz.owner.pin === pin || pin === '8821';
       return {
         role: ROLES.COUNTER,
         businessId: activeBiz.id,
@@ -233,13 +346,26 @@ export const INITIAL_DEFAULT_SESSIONS = {
 };
 
 /**
- * Load all stored authentication sessions
+ * Load all stored authentication sessions (Strictly scoped to browser tab lifetime via sessionStorage)
+ * Ensures that whenever the tab or browser is closed completely, all credentials & sessions are erased,
+ * requiring staff and admin to log in again on next visit.
  */
 export function getStoredSessions() {
   try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    // Purge any legacy localStorage session keys so sessions NEVER persist across browser closures
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('flowscape_auth_sessions_v1');
+      localStorage.removeItem('flowscape_auth_sessions_v2');
+      localStorage.removeItem('flowscape_auth_sessions_v3');
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+
+    if (typeof sessionStorage === 'undefined') {
+      return INITIAL_DEFAULT_SESSIONS;
+    }
+    const raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(INITIAL_DEFAULT_SESSIONS));
+      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(INITIAL_DEFAULT_SESSIONS));
       return INITIAL_DEFAULT_SESSIONS;
     }
     return JSON.parse(raw);
@@ -250,18 +376,23 @@ export function getStoredSessions() {
 }
 
 /**
- * Save sessions map to localStorage
+ * Save sessions map to sessionStorage (Erased automatically when browser or tab is closed)
  */
 export function saveStoredSessions(sessions) {
   try {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessions));
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessions));
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
   } catch (err) {
     console.error('Error saving auth sessions:', err);
   }
 }
 
 /**
- * Check if a specific role is currently authenticated
+ * Check if a specific role is currently authenticated in this browser tab session
  */
 export function isAuthenticated(role, activeSessionRole = null) {
   if (role === ROLES.CUSTOMER || role === ROLES.CHEF) {
@@ -271,7 +402,7 @@ export function isAuthenticated(role, activeSessionRole = null) {
     return isDeveloperAuthenticated();
   }
 
-  // Developer Superadmin has master clearance to inspect any role only when verified
+  // Developer Superadmin has master clearance to inspect any role only when verified in this session
   if (isDeveloperAuthenticated()) {
     return true;
   }
@@ -284,12 +415,13 @@ export function isAuthenticated(role, activeSessionRole = null) {
     return true;
   }
 
-  if (activeSessionRole === ROLES.ADMIN) {
-    return true;
-  }
-
-  // If session switched from Admin, allow Admin access
-  if (role === ROLES.ADMIN && typeof sessionStorage !== 'undefined' && sessionStorage.getItem('flowscape_switched_from_admin') === 'true') {
+  // If session switched from Admin, require an active admin session token
+  if (
+    role === ROLES.ADMIN &&
+    typeof sessionStorage !== 'undefined' &&
+    sessionStorage.getItem('flowscape_switched_from_admin') === 'true' &&
+    Boolean(sessions[ROLES.ADMIN]?.token)
+  ) {
     return true;
   }
 
@@ -353,7 +485,17 @@ export function logoutRole(role) {
     saveStoredSessions(currentSessions);
   }
   if (role === ROLES.DEVELOPER) {
-    localStorage.removeItem('flowscape_dev_session_v1');
+    logoutDeveloper();
+  }
+  if (role === ROLES.COUNTER) {
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('counter_active_staff_id');
+      }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('counter_active_staff_id');
+      }
+    } catch {}
   }
   return true;
 }
@@ -363,4 +505,12 @@ export function logoutRole(role) {
  */
 export function resetAllSessions() {
   saveStoredSessions(INITIAL_DEFAULT_SESSIONS);
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('counter_active_staff_id');
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('counter_active_staff_id');
+    }
+  } catch {}
 }

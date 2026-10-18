@@ -271,7 +271,12 @@ export function authenticateDeveloper(email, password) {
       authenticatedAt: new Date().toISOString()
     };
     try {
-      localStorage.setItem(DEV_SESSION_STORAGE_KEY, JSON.stringify(session));
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem(DEV_SESSION_STORAGE_KEY, JSON.stringify(session));
+      }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(DEV_SESSION_STORAGE_KEY);
+      }
     } catch {}
     return { success: true, session };
   }
@@ -280,11 +285,15 @@ export function authenticateDeveloper(email, password) {
 }
 
 /**
- * Check if developer is currently authenticated
+ * Check if developer is currently authenticated in this browser tab session
  */
 export function isDeveloperAuthenticated() {
   try {
-    const raw = localStorage.getItem(DEV_SESSION_STORAGE_KEY);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(DEV_SESSION_STORAGE_KEY);
+    }
+    if (typeof sessionStorage === 'undefined') return false;
+    const raw = sessionStorage.getItem(DEV_SESSION_STORAGE_KEY);
     if (!raw) return false;
     const session = JSON.parse(raw);
     return Boolean(session && session.token && session.role === 'developer');
@@ -298,7 +307,12 @@ export function isDeveloperAuthenticated() {
  */
 export function logoutDeveloper() {
   try {
-    localStorage.removeItem(DEV_SESSION_STORAGE_KEY);
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(DEV_SESSION_STORAGE_KEY);
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(DEV_SESSION_STORAGE_KEY);
+    }
   } catch (e) {
     console.error(e);
   }

@@ -34,7 +34,9 @@ import {
   Clock,
   AlertTriangle,
   FileSpreadsheet,
-  CheckSquare
+  CheckSquare,
+  KeyRound,
+  Lock
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import BankReconciliationView from './BankReconciliationView';
@@ -145,7 +147,9 @@ export default function AdminView({
     bankAccount: '',
     ifsc: 'HDFC0000128',
     canEditPrice: false,
-    canCreateDiscounts: false
+    canCreateDiscounts: false,
+    loginId: '',
+    pin: ''
   });
   const [staffFilter, setStaffFilter] = useState('all'); // 'all' | 'active' | 'resigned'
   const [staffSearch, setStaffSearch] = useState('');
@@ -153,6 +157,20 @@ export default function AdminView({
   const [isSavingStaff, setIsSavingStaff] = useState(false);
   const [staffSaveSuccess, setStaffSaveSuccess] = useState(false);
   const [staffSyncFeedback, setStaffSyncFeedback] = useState('');
+
+  // Staff POS Credentials Vault Visibility (Owner Back-Office Only)
+  const [revealedStaffPins, setRevealedStaffPins] = useState({});
+  const [showAllStaffPins, setShowAllStaffPins] = useState(false);
+  const [copiedStaffKey, setCopiedStaffKey] = useState(null);
+
+  const handleCopyCredential = (text, key) => {
+    try {
+      navigator.clipboard.writeText(text);
+      playSuccessChime();
+      setCopiedStaffKey(key);
+      setTimeout(() => setCopiedStaffKey(null), 2500);
+    } catch {}
+  };
 
   // Menu Management Modal State
   const [showAddDishModal, setShowAddDishModal] = useState(false);
@@ -688,7 +706,9 @@ export default function AdminView({
       bankAccount: '',
       ifsc: 'HDFC0000128',
       canEditPrice: false,
-      canCreateDiscounts: false
+      canCreateDiscounts: false,
+      loginId: '',
+      pin: String(Math.floor(1000 + Math.random() * 9000))
     });
     setShowStaffModal(true);
   };
@@ -706,7 +726,9 @@ export default function AdminView({
       bankAccount: emp.bankAccount || '',
       ifsc: emp.ifsc || 'HDFC0000128',
       canEditPrice: Boolean(emp.permissions?.canEditPrice),
-      canCreateDiscounts: Boolean(emp.permissions?.canCreateDiscounts)
+      canCreateDiscounts: Boolean(emp.permissions?.canCreateDiscounts),
+      loginId: emp.loginId || `${(emp.name || '').toLowerCase().replace(/\s+/g, '')}.pos`,
+      pin: emp.pin || '4401'
     });
     setShowStaffModal(true);
   };
@@ -728,6 +750,9 @@ export default function AdminView({
       ? Number(staffFormData.monthEndPay) || 0
       : wage;
 
+    const cleanLoginId = (staffFormData.loginId || '').trim() || `${staffFormData.name.trim().toLowerCase().replace(/\s+/g, '')}.pos`;
+    const cleanPin = (staffFormData.pin || '').trim() || String(Math.floor(1000 + Math.random() * 9000));
+
     let updatedStaff;
     if (editingStaffId) {
       // Update existing staff
@@ -743,6 +768,8 @@ export default function AdminView({
               status: staffFormData.status || 'active',
               bankAccount: staffFormData.bankAccount.trim() || s.bankAccount,
               ifsc: staffFormData.ifsc.trim() || s.ifsc || 'HDFC0000128',
+              loginId: cleanLoginId,
+              pin: cleanPin,
               permissions: {
                 ...s.permissions,
                 canEditPrice: Boolean(staffFormData.canEditPrice),
@@ -763,6 +790,8 @@ export default function AdminView({
         status: staffFormData.status || 'active',
         bankAccount: staffFormData.bankAccount.trim() || `9821004812${Math.floor(100 + Math.random() * 900)}`,
         ifsc: staffFormData.ifsc.trim() || 'HDFC0000128',
+        loginId: cleanLoginId,
+        pin: cleanPin,
         permissions: {
           canEditPrice: Boolean(staffFormData.canEditPrice),
           canCreateDiscounts: Boolean(staffFormData.canCreateDiscounts),
@@ -2759,6 +2788,298 @@ export default function AdminView({
               </div>
             )}
 
+            {/* Staff POS Credentials & Operator Security Vault (Owner Only) */}
+            <div
+              style={{
+                marginTop: 16,
+                marginBottom: 20,
+                padding: '16px 18px',
+                background: 'linear-gradient(135deg, #FAF5FF 0%, #F5F3FF 50%, #EFF6FF 100%)',
+                border: '1.5px solid #DDD6FE',
+                borderRadius: 16,
+                boxShadow: '0 2px 6px rgba(139, 92, 246, 0.06)'
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  marginBottom: 12
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 12,
+                      background: '#7C3AED',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#FFFFFF',
+                      boxShadow: '0 2px 6px rgba(124, 58, 237, 0.3)'
+                    }}
+                  >
+                    <KeyRound size={20} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: '#4C1D95' }}>
+                        Staff POS Credentials &amp; Operator Security Vault
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 10,
+                          background: '#EDE9FE',
+                          color: '#6D28D9',
+                          border: '1px solid #C4B5FD',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em'
+                        }}
+                      >
+                        Owner Eyes Only
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#6D28D9', marginTop: 2 }}>
+                      View, reveal, and manage POS terminal login IDs and 4-digit secret PINs for every employee.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn-secondary-pill"
+                    onClick={() => {
+                      playTapSound();
+                      setShowAllStaffPins(!showAllStaffPins);
+                    }}
+                    style={{
+                      fontSize: 11.5,
+                      padding: '6px 14px',
+                      background: showAllStaffPins ? '#F5F3FF' : '#FFFFFF',
+                      borderColor: '#8B5CF6',
+                      color: '#7C3AED',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}
+                  >
+                    {showAllStaffPins ? <EyeOff size={13} /> : <Eye size={13} />}
+                    <span>{showAllStaffPins ? 'Mask All PINs' : 'Reveal All PINs'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Vault Table */}
+              <div style={{ overflowX: 'auto', background: '#FFFFFF', borderRadius: 12, border: '1px solid #E9D5FF' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0', color: '#475569', fontSize: 11, fontWeight: 700 }}>
+                      <th style={{ padding: '10px 14px' }}>Employee &amp; Role</th>
+                      <th style={{ padding: '10px 14px' }}>Staff Login ID</th>
+                      <th style={{ padding: '10px 14px' }}>4-Digit Secret PIN</th>
+                      <th style={{ padding: '10px 14px' }}>POS Permissions</th>
+                      <th style={{ padding: '10px 14px' }}>Status</th>
+                      <th style={{ padding: '10px 14px', textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {staff.map((emp) => {
+                      const isRevealed = showAllStaffPins || Boolean(revealedStaffPins[emp.id]);
+                      const loginId = emp.loginId || `${emp.name.toLowerCase().replace(/\s+/g, '')}.pos`;
+                      const pin = emp.pin || '4401';
+                      const isResigned = emp.status === 'resigned';
+
+                      return (
+                        <tr
+                          key={emp.id}
+                          style={{
+                            borderBottom: '1px solid #F1F5F9',
+                            opacity: isResigned ? 0.65 : 1,
+                            transition: 'background 0.15s ease'
+                          }}
+                        >
+                          {/* Name & Role */}
+                          <td style={{ padding: '10px 14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div
+                                style={{
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: '50%',
+                                  background: isResigned ? '#E2E8F0' : '#EFF6FF',
+                                  color: isResigned ? '#64748B' : '#007AFF',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: 11,
+                                  fontWeight: 700
+                                }}
+                              >
+                                {emp.name.slice(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#0F172A' }}>{emp.name}</div>
+                                <div style={{ fontSize: 10.5, color: '#64748B' }}>{emp.role}</div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Login ID */}
+                          <td style={{ padding: '10px 14px' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <span
+                                style={{
+                                  fontFamily: 'monospace',
+                                  fontWeight: 700,
+                                  fontSize: 11.5,
+                                  padding: '3px 8px',
+                                  background: '#F1F5F9',
+                                  border: '1px solid #CBD5E1',
+                                  borderRadius: 8,
+                                  color: '#0F172A'
+                                }}
+                              >
+                                @{loginId}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyCredential(loginId, `login_${emp.id}`)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  color: copiedStaffKey === `login_${emp.id}` ? '#16A34A' : '#94A3B8',
+                                  padding: 2
+                                }}
+                                title="Copy Login ID"
+                              >
+                                {copiedStaffKey === `login_${emp.id}` ? <Check size={13} color="#16A34A" /> : <Copy size={13} />}
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* 4-Digit Secret PIN */}
+                          <td style={{ padding: '10px 14px' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <span
+                                style={{
+                                  fontFamily: 'monospace',
+                                  fontWeight: 800,
+                                  fontSize: 13,
+                                  letterSpacing: isRevealed ? '0.08em' : '0.2em',
+                                  padding: '3px 10px',
+                                  background: isRevealed ? '#FEF3C7' : '#F8FAFC',
+                                  border: `1px solid ${isRevealed ? '#FCD34D' : '#E2E8F0'}`,
+                                  color: isRevealed ? '#92400E' : '#334155',
+                                  borderRadius: 8
+                                }}
+                              >
+                                {isRevealed ? pin : '••••'}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  playTapSound();
+                                  setRevealedStaffPins((prev) => ({
+                                    ...prev,
+                                    [emp.id]: !prev[emp.id]
+                                  }));
+                                }}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 2 }}
+                                title={isRevealed ? 'Hide PIN' : 'Reveal PIN'}
+                              >
+                                {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleCopyCredential(pin, `pin_${emp.id}`)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  color: copiedStaffKey === `pin_${emp.id}` ? '#16A34A' : '#94A3B8',
+                                  padding: 2
+                                }}
+                                title="Copy 4-digit PIN"
+                              >
+                                {copiedStaffKey === `pin_${emp.id}` ? <Check size={13} color="#16A34A" /> : <Copy size={13} />}
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* Permissions */}
+                          <td style={{ padding: '10px 14px' }}>
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  padding: '2px 6px',
+                                  borderRadius: 6,
+                                  background: emp.permissions?.canEditPrice ? '#DCFCE7' : '#F1F5F9',
+                                  color: emp.permissions?.canEditPrice ? '#15803D' : '#94A3B8',
+                                  fontWeight: 600
+                                }}
+                              >
+                                {emp.permissions?.canEditPrice ? 'Price Edit: Yes' : 'No Price Edit'}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  padding: '2px 6px',
+                                  borderRadius: 6,
+                                  background: emp.permissions?.canCreateDiscounts ? '#DCFCE7' : '#F1F5F9',
+                                  color: emp.permissions?.canCreateDiscounts ? '#15803D' : '#94A3B8',
+                                  fontWeight: 600
+                                }}
+                              >
+                                {emp.permissions?.canCreateDiscounts ? 'Offers: Yes' : 'No Offers'}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Status */}
+                          <td style={{ padding: '10px 14px' }}>
+                            <span
+                              className={`status-pill ${isResigned ? 'rejected' : 'done'}`}
+                              style={{ fontSize: 9.5, padding: '2px 8px' }}
+                            >
+                              {isResigned ? 'Resigned' : 'Active'}
+                            </span>
+                          </td>
+
+                          {/* Action */}
+                          <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              className="btn-secondary-pill"
+                              style={{ padding: '4px 8px', fontSize: 11, gap: 4 }}
+                              onClick={() => handleOpenEditStaff(emp)}
+                              title="Edit Credentials & Permissions"
+                            >
+                              <Edit2 size={12} />
+                              <span>Edit</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             {/* Filter and Search Bar */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between', margin: '14px 0 12px' }}>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -2839,6 +3160,49 @@ export default function AdminView({
                           </div>
                           <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
                             {emp.role} {emp.phone && `• ${emp.phone}`}
+                          </div>
+
+                          {/* POS Credentials Pill Row */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '2px 8px', borderRadius: 8 }}>
+                              <span style={{ color: '#64748B', fontWeight: 600 }}>Login ID:</span>
+                              <strong style={{ fontFamily: 'monospace', color: '#0F172A' }}>@{emp.loginId || `${emp.name.toLowerCase().replace(/\s+/g, '')}.pos`}</strong>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyCredential(emp.loginId || `${emp.name.toLowerCase().replace(/\s+/g, '')}.pos`, `card_login_${emp.id}`)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: copiedStaffKey === `card_login_${emp.id}` ? '#16A34A' : '#94A3B8', padding: 1 }}
+                                title="Copy Login ID"
+                              >
+                                {copiedStaffKey === `card_login_${emp.id}` ? <Check size={11} color="#16A34A" /> : <Copy size={11} />}
+                              </button>
+                            </div>
+
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '2px 8px', borderRadius: 8 }}>
+                              <KeyRound size={11} color="#7C3AED" />
+                              <span style={{ color: '#64748B', fontWeight: 600 }}>POS PIN:</span>
+                              <strong style={{ fontFamily: 'monospace', letterSpacing: (showAllStaffPins || revealedStaffPins[emp.id]) ? '0.05em' : '0.2em', color: (showAllStaffPins || revealedStaffPins[emp.id]) ? '#92400E' : '#0F172A' }}>
+                                {showAllStaffPins || revealedStaffPins[emp.id] ? (emp.pin || '4401') : '••••'}
+                              </strong>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  playTapSound();
+                                  setRevealedStaffPins((prev) => ({ ...prev, [emp.id]: !prev[emp.id] }));
+                                }}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 1 }}
+                                title="Toggle PIN visibility"
+                              >
+                                {showAllStaffPins || revealedStaffPins[emp.id] ? <EyeOff size={12} /> : <Eye size={12} />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyCredential(emp.pin || '4401', `card_pin_${emp.id}`)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: copiedStaffKey === `card_pin_${emp.id}` ? '#16A34A' : '#94A3B8', padding: 1 }}
+                                title="Copy 4-digit PIN"
+                              >
+                                {copiedStaffKey === `card_pin_${emp.id}` ? <Check size={11} color="#16A34A" /> : <Copy size={11} />}
+                              </button>
+                            </div>
                           </div>
                         </div>
 
@@ -4635,6 +4999,71 @@ export default function AdminView({
                     >
                       Resigned
                     </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* POS Terminal Credentials Section (Owner Controlled) */}
+              <div
+                style={{
+                  padding: 12,
+                  background: '#F5F3FF',
+                  border: '1.5px solid #DDD6FE',
+                  borderRadius: 12,
+                  marginBottom: 12
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <KeyRound size={14} color="#7C3AED" />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#5B21B6' }}>
+                    Staff POS Terminal Login Credentials (Owner Controlled)
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: '#4C1D95', display: 'block', marginBottom: 4 }}>
+                      Staff Login ID *
+                    </label>
+                    <input
+                      type="text"
+                      className="ios-input"
+                      placeholder="e.g. rahul.pos"
+                      value={staffFormData.loginId}
+                      onChange={(e) => setStaffFormData({ ...staffFormData, loginId: e.target.value })}
+                      required
+                      style={{ fontFamily: 'monospace', fontWeight: 600 }}
+                    />
+                    <span style={{ fontSize: 9.5, color: '#6D28D9', marginTop: 2, display: 'block' }}>Used on live POS station</span>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: '#4C1D95' }}>
+                        4-Digit POS PIN *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const randPin = String(Math.floor(1000 + Math.random() * 9000));
+                          setStaffFormData((prev) => ({ ...prev, pin: randPin }));
+                        }}
+                        style={{ background: 'none', border: 'none', color: '#7C3AED', cursor: 'pointer', fontSize: 10, fontWeight: 700 }}
+                      >
+                        🎲 Auto-Gen
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      className="ios-input"
+                      placeholder="e.g. 4405"
+                      value={staffFormData.pin}
+                      onChange={(e) => setStaffFormData({ ...staffFormData, pin: e.target.value })}
+                      required
+                      style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.1em' }}
+                    />
+                    <span style={{ fontSize: 9.5, color: '#6D28D9', marginTop: 2, display: 'block' }}>Employee secret PIN</span>
                   </div>
                 </div>
               </div>

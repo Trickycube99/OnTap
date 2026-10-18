@@ -40,6 +40,19 @@ const getScopedKey = (baseKey, bizId) => {
   return `${baseKey}_${bizId}`;
 };
 
+export const normalizeStaffCredentials = (staffList) => {
+  if (!Array.isArray(staffList)) return [];
+  return staffList.map((emp, idx) => {
+    const defaultLoginId = emp.loginId || (emp.name ? emp.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.pos' : `staff${idx + 1}.pos`);
+    const defaultPin = emp.pin ? String(emp.pin).trim() : String(4401 + idx);
+    return {
+      ...emp,
+      loginId: defaultLoginId,
+      pin: defaultPin
+    };
+  });
+};
+
 export default function App() {
   const initialBiz = getActiveBusiness();
   const initialBizId = initialBiz?.id || 'biz_advait';
@@ -59,7 +72,10 @@ export default function App() {
     );
   });
   const [expenses, setExpenses] = useState(() => loadData(getScopedKey(STORAGE_KEYS.EXPENSES, initialBizId), isDefaultBiz ? initialExpenses : []));
-  const [staff, setStaff] = useState(() => loadData(getScopedKey(STORAGE_KEYS.STAFF, initialBizId), isDefaultBiz ? initialStaff : []));
+  const [staff, setStaff] = useState(() => {
+    const raw = loadData(getScopedKey(STORAGE_KEYS.STAFF, initialBizId), isDefaultBiz ? initialStaff : []);
+    return normalizeStaffCredentials(raw);
+  });
   const [offers, setOffers] = useState(() => loadData(getScopedKey(STORAGE_KEYS.OFFERS, initialBizId), isDefaultBiz ? initialOffers : []));
   const [theme, setTheme] = useState(() => {
     const loaded = loadData(getScopedKey(STORAGE_KEYS.THEME, initialBizId), initialTheme);
@@ -110,10 +126,19 @@ export default function App() {
     const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
     const rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
     const route = rawHash || rawPath;
-    if (route === 'dev' || route === 'developer' || route === 'superadmin') return 'developer';
-    if (route === 'counter' || route === 'pos' || route === 'kds' || route === 'kitchen') return 'counter';
-    if (route === 'admin' || route === 'owner') return 'admin';
-    return 'customer';
+    let initialTarget = 'customer';
+    if (route === 'dev' || route === 'developer' || route === 'superadmin') initialTarget = 'developer';
+    else if (route === 'counter' || route === 'pos' || route === 'kds' || route === 'kitchen') initialTarget = 'counter';
+    else if (route === 'admin' || route === 'owner') initialTarget = 'admin';
+    else if (route === 'chef') initialTarget = 'chef';
+
+    // If protected role and no active session in this browser tab/window, require fresh authentication
+    if (initialTarget === 'counter' || initialTarget === 'admin') {
+      if (!isAuthenticated(initialTarget)) {
+        return 'customer';
+      }
+    }
+    return initialTarget;
   });
   const [activeTab, setActiveTab] = useState('menu'); // customer: 'menu','cart','track','chef'
   const [counterSubTab, setCounterSubTab] = useState('orders'); // counter: 'orders','manual','stock','checklist'
@@ -211,7 +236,7 @@ export default function App() {
       } else if (msg.type === SYNC_EVENTS.CHEF_UPDATED) {
         if (msg.payload) setChef(msg.payload);
       } else if (msg.type === SYNC_EVENTS.STAFF_UPDATED) {
-        if (Array.isArray(msg.payload)) setStaff(msg.payload);
+        if (Array.isArray(msg.payload)) setStaff(normalizeStaffCredentials(msg.payload));
       }
     });
 
@@ -263,19 +288,30 @@ export default function App() {
       }
 
       if (targetRole) {
-        // If already on this active role, do not re-prompt
-        if (targetRole === currentRole) {
-          return;
-        }
-
-        if (targetRole === 'customer' || targetRole === 'developer' || isAuthenticated(targetRole, currentRole)) {
+        if (targetRole === 'customer' || targetRole === 'chef') {
           setCurrentRole(targetRole);
           if (targetRole === 'customer') setActiveTab('menu');
           else if (targetRole === 'chef') setActiveTab('chef');
-          else if (targetRole === 'counter') { setActiveTab('orders'); setCounterSubTab('orders'); }
-          else if (targetRole === 'admin') setActiveTab('sales');
+          return;
+        }
+
+        if (targetRole === 'developer') {
+          setCurrentRole('developer');
+          return;
+        }
+
+        // Counter POS or Owner Admin: verify session exists in current browser window
+        if (isAuthenticated(targetRole)) {
+          setCurrentRole(targetRole);
+          if (targetRole === 'counter') {
+            setActiveTab('orders');
+            setCounterSubTab('orders');
+          } else if (targetRole === 'admin') {
+            setActiveTab('sales');
+          }
         } else {
-          // Open workstation authentication gate
+          // No active session in this tab/window: prompt login modal immediately
+          setCurrentRole('customer');
           setAuthModal({ isOpen: true, targetRole });
         }
       }
@@ -336,7 +372,7 @@ export default function App() {
     const loadedMenu = loadData(getScopedKey(STORAGE_KEYS.MENU, bizId), initialMenu);
     const loadedOrders = loadData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), isDefault ? initialOrders : []);
     const loadedExpenses = loadData(getScopedKey(STORAGE_KEYS.EXPENSES, bizId), isDefault ? initialExpenses : []);
-    const loadedStaff = loadData(getScopedKey(STORAGE_KEYS.STAFF, bizId), isDefault ? initialStaff : []);
+    const loadedStaff = normalizeStaffCredentials(loadData(getScopedKey(STORAGE_KEYS.STAFF, bizId), isDefault ? initialStaff : []));
     const loadedOffers = loadData(getScopedKey(STORAGE_KEYS.OFFERS, bizId), isDefault ? initialOffers : []);
     const loadedChecklists = loadData(getScopedKey(STORAGE_KEYS.CHECKLISTS, bizId), []);
 
@@ -496,6 +532,17 @@ export default function App() {
     } else {
       const updated = getStoredSessions();
       setAuthSessions(updated);
+    }
+
+    if (newSession.staffId) {
+      try {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('counter_active_staff_id', newSession.staffId);
+        }
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('counter_active_staff_id');
+        }
+      } catch {}
     }
 
     setAuthModal({ isOpen: false, targetRole: null });
@@ -719,6 +766,7 @@ export default function App() {
           }
         }}
         theme={theme}
+        staff={staff}
       />
 
       {/* Table QR Standee & Direct Order Link Modal */}

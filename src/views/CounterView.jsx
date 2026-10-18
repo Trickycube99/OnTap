@@ -17,13 +17,19 @@ import {
   BarChart3,
   User,
   Lock,
-  ShieldCheck
+  ShieldCheck,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ArrowLeftRight,
+  X
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import PrinterModal from '../components/PrinterModal';
 import WhatsAppAlertModal from '../components/WhatsAppAlertModal';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
 import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
+import { getActiveBusiness } from '../utils/businessManager';
 
 function checkUnacceptedOverdue(order) {
   if (!order || !order.createdAt) return { elapsedMins: 0, isUnacceptedOverdue: false };
@@ -118,7 +124,10 @@ export default function CounterView({
 
   const [activeStaffId, setActiveStaffId] = useState(() => {
     try {
-      const saved = localStorage.getItem('counter_active_staff_id');
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('counter_active_staff_id');
+      }
+      const saved = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('counter_active_staff_id') : null;
       if (saved && activeStaffList.some((s) => s.id === saved)) return saved;
       if (saved === '__owner_admin__' && canReturnToAdmin) return '__owner_admin__';
     } catch {}
@@ -142,12 +151,103 @@ export default function CounterView({
       const fallbackId = activeStaffList[0].id;
       setActiveStaffId(fallbackId);
       try {
-        localStorage.setItem('counter_active_staff_id', fallbackId);
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('counter_active_staff_id', fallbackId);
+        }
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('counter_active_staff_id');
+        }
       } catch {}
     }
   }, [staff, activeStaffId, canReturnToAdmin]);
 
   const [permissionsToast, setPermissionsToast] = useState('');
+
+  // Operator Switching & PIN Verification Modal State
+  const [showSwitchOperatorModal, setShowSwitchOperatorModal] = useState(false);
+  const [targetSwitchStaffId, setTargetSwitchStaffId] = useState('');
+  const [switchStaffPin, setSwitchStaffPin] = useState('');
+  const [switchPinError, setSwitchPinError] = useState('');
+  const [showSwitchPin, setShowSwitchPin] = useState(false);
+  const [isVerifyingSwitch, setIsVerifyingSwitch] = useState(false);
+
+  const handleOpenSwitchModal = () => {
+    playTapSound();
+    const otherStaff = activeStaffList.find((s) => s.id !== activeStaffId);
+    setTargetSwitchStaffId(otherStaff?.id || activeStaffList[0]?.id || '__owner_admin__');
+    setSwitchStaffPin('');
+    setSwitchPinError('');
+    setShowSwitchPin(false);
+    setShowSwitchOperatorModal(true);
+  };
+
+  const handleConfirmSwitchOperator = (e) => {
+    e?.preventDefault();
+    setSwitchPinError('');
+    setIsVerifyingSwitch(true);
+
+    const pin = (switchStaffPin || '').trim();
+    if (!pin) {
+      setSwitchPinError('Please enter the 4-digit staff PIN.');
+      setIsVerifyingSwitch(false);
+      return;
+    }
+
+    const activeBiz = getActiveBusiness();
+    const isOwnerPin = (activeBiz && activeBiz.owner?.pin === pin) || pin === '8821';
+
+    if (targetSwitchStaffId === '__owner_admin__') {
+      if (isOwnerPin) {
+        setActiveStaffId('__owner_admin__');
+        try {
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem('counter_active_staff_id', '__owner_admin__');
+          }
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('counter_active_staff_id');
+          }
+        } catch {}
+        playSuccessChime();
+        setPermissionsToast('✓ Operator switched to Business Owner (Master Override).');
+        setShowSwitchOperatorModal(false);
+        setIsVerifyingSwitch(false);
+        return;
+      } else {
+        playAlertChime();
+        setSwitchPinError('Incorrect Master Owner PIN. Enter authorized owner PIN (8821).');
+        setIsVerifyingSwitch(false);
+        return;
+      }
+    }
+
+    const targetStaff = activeStaffList.find((s) => s.id === targetSwitchStaffId);
+    if (!targetStaff) {
+      setSwitchPinError('Target staff member not found.');
+      setIsVerifyingSwitch(false);
+      return;
+    }
+
+    const validPin = (targetStaff.pin || '').toString().trim();
+    if (pin === validPin || isOwnerPin) {
+      setActiveStaffId(targetStaff.id);
+      try {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('counter_active_staff_id', targetStaff.id);
+        }
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('counter_active_staff_id');
+        }
+      } catch {}
+      playSuccessChime();
+      setPermissionsToast(`✓ Terminal operator successfully switched to ${targetStaff.name} (${targetStaff.role}).`);
+      setShowSwitchOperatorModal(false);
+      setIsVerifyingSwitch(false);
+    } else {
+      playAlertChime();
+      setSwitchPinError(`Incorrect PIN for "${targetStaff.name}". Enter their registered 4-digit staff PIN.`);
+      setIsVerifyingSwitch(false);
+    }
+  };
 
   // Listen for real-time events from customers and owner admin
   useEffect(() => {
@@ -574,57 +674,71 @@ export default function CounterView({
           boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <User size={15} color="#007AFF" />
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#1E293B' }}>
-            Terminal Operator:
-          </span>
-          {activeStaffList.length > 0 || canReturnToAdmin ? (
-            <select
-              className="ios-select"
-              value={isOwnerOverride ? '__owner_admin__' : (activeStaffId || activeStaffList[0]?.id)}
-              onChange={(e) => {
-                const val = e.target.value;
-                setActiveStaffId(val);
-                try {
-                  localStorage.setItem('counter_active_staff_id', val);
-                } catch {}
-                playTapSound();
-              }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <User size={15} color="#007AFF" />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#1E293B' }}>
+              Active Operator:
+            </span>
+          </div>
+
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '4px 10px',
+              borderRadius: 20,
+              border: `1.5px solid ${isOwnerOverride ? '#DDD6FE' : '#CBD5E1'}`,
+              background: isOwnerOverride ? '#F5F3FF' : '#F8FAFC',
+              fontSize: 12,
+              fontWeight: 600,
+              color: isOwnerOverride ? '#6D28D9' : '#1E293B'
+            }}
+          >
+            <span style={{ fontWeight: 700 }}>
+              {isOwnerOverride ? '👑 Owner Admin (Master Override)' : (currentStaff?.name || 'Counter Staff')}
+            </span>
+            <span
               style={{
-                padding: '4px 10px',
-                fontSize: 12,
-                fontWeight: 600,
-                minWidth: 180,
-                borderColor: isOwnerOverride ? '#DDD6FE' : '#CBD5E1',
-                background: isOwnerOverride ? '#F5F3FF' : '#FFFFFF',
-                color: isOwnerOverride ? '#6D28D9' : '#1E293B'
+                fontSize: 10,
+                padding: '2px 7px',
+                borderRadius: 10,
+                background: isOwnerOverride ? '#EDE9FE' : '#E2E8F0',
+                color: isOwnerOverride ? '#7C3AED' : '#475569',
+                fontWeight: 600
               }}
             >
-              {canReturnToAdmin && (
-                <option value="__owner_admin__">
-                  👑 Owner Admin (Master Override)
-                </option>
-              )}
-              {canReturnToAdmin && activeStaffList.length > 0 ? (
-                <optgroup label="Active Counter Staff">
-                  {activeStaffList.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.role})
-                    </option>
-                  ))}
-                </optgroup>
-              ) : (
-                activeStaffList.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.name} ({emp.role})
-                  </option>
-                ))
-              )}
-            </select>
-          ) : (
-            <span style={{ fontSize: 11.5, color: '#64748B' }}>Default Floor Staff</span>
-          )}
+              {isOwnerOverride ? 'Master Admin' : (currentStaff?.role || 'Cashier')}
+            </span>
+            {!isOwnerOverride && currentStaff?.loginId && (
+              <span style={{ fontSize: 10.5, color: '#64748B', fontFamily: 'monospace' }}>
+                @{currentStaff.loginId}
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="btn-secondary-pill"
+            onClick={handleOpenSwitchModal}
+            style={{
+              padding: '4px 12px',
+              fontSize: 11.5,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#FFFFFF',
+              borderColor: '#007AFF',
+              color: '#007AFF',
+              boxShadow: '0 1px 2px rgba(0,122,255,0.08)'
+            }}
+            title="Switch staff operator (requires secret PIN verification)"
+          >
+            <ArrowLeftRight size={13} />
+            <span>Switch Operator</span>
+          </button>
         </div>
 
         {/* Live Permissions Indicator Pills */}
@@ -1897,6 +2011,152 @@ export default function CounterView({
             <button className="btn-primary-pill full-width" onClick={handleSavePrice}>
               Save Updated Price (₹)
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Operator Switch & Secret PIN Verification Modal */}
+      {showSwitchOperatorModal && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowSwitchOperatorModal(false)}
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            className="modal-content-sheet"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 440, width: '92%', borderRadius: 20, padding: 22 }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <KeyRound size={18} color="#007AFF" />
+                <span className="card-heading" style={{ fontSize: 16 }}>
+                  Switch POS Terminal Operator
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSwitchOperatorModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: 11.5, color: '#64748B', marginBottom: 14 }}>
+              Every staff member must verify their credentials with their 4-digit secret PIN before taking over this live POS terminal.
+            </div>
+
+            {/* Error Message */}
+            {switchPinError && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 12px',
+                  background: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  borderRadius: 10,
+                  color: '#DC2626',
+                  fontSize: 12,
+                  marginBottom: 14
+                }}
+              >
+                <AlertTriangle size={15} color="#DC2626" />
+                <span>{switchPinError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmSwitchOperator}>
+              {/* Target Staff Selection */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', display: 'block', marginBottom: 6 }}>
+                  Select Incoming Operator *
+                </label>
+                <select
+                  className="ios-select"
+                  value={targetSwitchStaffId}
+                  onChange={(e) => {
+                    setTargetSwitchStaffId(e.target.value);
+                    setSwitchPinError('');
+                  }}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 12.5, fontWeight: 600 }}
+                  required
+                >
+                  <optgroup label="Active Counter Staff">
+                    {activeStaffList.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} — {emp.role} {emp.loginId ? `(@${emp.loginId})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {canReturnToAdmin && (
+                    <option value="__owner_admin__">
+                      👑 Business Owner (Master Admin Override)
+                    </option>
+                  )}
+                </select>
+                {targetSwitchStaffId !== '__owner_admin__' && (
+                  <div style={{ marginTop: 6, fontSize: 11, color: '#64748B', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <ShieldCheck size={12} color="#16A34A" />
+                    <span>Login ID: <strong>@{activeStaffList.find(s => s.id === targetSwitchStaffId)?.loginId || 'pos.operator'}</strong></span>
+                  </div>
+                )}
+              </div>
+
+              {/* PIN Input with reveal toggle */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155' }}>
+                    Enter 4-Digit Secret PIN *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowSwitchPin(!showSwitchPin)}
+                    style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  >
+                    {showSwitchPin ? <EyeOff size={13} /> : <Eye size={13} />}
+                    <span>{showSwitchPin ? 'Hide' : 'Show'}</span>
+                  </button>
+                </div>
+                <input
+                  type={showSwitchPin ? 'text' : 'password'}
+                  className="ios-input"
+                  placeholder="Enter 4-digit PIN"
+                  value={switchStaffPin}
+                  onChange={(e) => setSwitchStaffPin(e.target.value)}
+                  maxLength={8}
+                  required
+                  autoFocus
+                  style={{ letterSpacing: showSwitchPin ? 'normal' : '0.15em', fontWeight: 700, fontSize: 15 }}
+                />
+                <span style={{ fontSize: 10.5, color: '#64748B', marginTop: 4, display: 'block' }}>
+                  {targetSwitchStaffId === '__owner_admin__'
+                    ? 'Enter Owner Master PIN (8821)'
+                    : 'Enter the personal 4-digit POS PIN assigned to this staff member.'}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                <button
+                  type="submit"
+                  disabled={isVerifyingSwitch}
+                  className="btn-primary-pill full-width"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                >
+                  <KeyRound size={14} />
+                  <span>{isVerifyingSwitch ? 'Verifying...' : 'Verify & Switch Operator'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary-pill"
+                  onClick={() => setShowSwitchOperatorModal(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
