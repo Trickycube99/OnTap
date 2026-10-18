@@ -224,6 +224,37 @@ export function updateBusiness(id, updates) {
   const index = businesses.findIndex((b) => b.id === id);
   if (index === -1) return { success: false, error: 'Business account not found' };
 
+  // Validate owner updates if provided
+  if (updates.owner) {
+    if (updates.owner.email) {
+      const cleanEmail = updates.owner.email.trim().toLowerCase();
+      if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+        return { success: false, error: 'A valid owner email address is required.' };
+      }
+      const duplicate = businesses.find((b) => b.id !== id && b.owner?.email?.toLowerCase() === cleanEmail);
+      if (duplicate) {
+        return { success: false, error: `Email "${cleanEmail}" is already registered to business "${duplicate.name}".` };
+      }
+      updates.owner.email = cleanEmail;
+    }
+    if (updates.owner.pin !== undefined) {
+      const cleanPin = String(updates.owner.pin).trim();
+      if (!/^\d{4}$/.test(cleanPin)) {
+        return { success: false, error: 'Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).' };
+      }
+      updates.owner.pin = cleanPin;
+    }
+  }
+
+  // Validate counter updates if provided
+  if (updates.counter && updates.counter.pin !== undefined) {
+    const cleanCounterPin = String(updates.counter.pin).trim();
+    if (!/^\d{4}$/.test(cleanCounterPin)) {
+      return { success: false, error: 'Counter POS PIN must be exactly 4 numeric digits (e.g. 4421).' };
+    }
+    updates.counter.pin = cleanCounterPin;
+  }
+
   businesses[index] = {
     ...businesses[index],
     ...updates,

@@ -32,7 +32,8 @@ import {
   provisionOwnerAccountWithVerification,
   resendVerificationLink,
   sendPasswordReset,
-  deleteOwnerAccountFromFirebase
+  deleteOwnerAccountFromFirebase,
+  updateOwnerCredentialsManually
 } from '../utils/firebaseAuth';
 import { deleteCloudOrdersForBusiness } from '../utils/firebaseSync';
 import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
@@ -65,6 +66,14 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCredentialsModal, setShowCredentialsModal] = useState(null); // business object
   const [copiedKey, setCopiedKey] = useState(null);
+
+  // Manual Credentials Override State (for technical anomaly recovery)
+  const [isEditingCredentials, setIsEditingCredentials] = useState(false);
+  const [editOwnerEmail, setEditOwnerEmail] = useState('');
+  const [editOwnerPin, setEditOwnerPin] = useState('');
+  const [editCounterPin, setEditCounterPin] = useState('');
+  const [editMarkVerified, setEditMarkVerified] = useState(true);
+  const [editOverrideError, setEditOverrideError] = useState('');
 
   // New Business Form State
   const [newBiz, setNewBiz] = useState({
@@ -308,6 +317,116 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     navigator.clipboard.writeText(text);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleOpenCredentialsModal = (biz) => {
+    playTapSound();
+    setShowCredentialsModal(biz);
+    setIsEditingCredentials(false);
+    setEditOwnerEmail(biz.owner?.email || '');
+    setEditOwnerPin(biz.owner?.pin || '');
+    setEditCounterPin(biz.counter?.pin || '');
+    setEditMarkVerified(biz.emailVerified !== false);
+    setEditOverrideError('');
+    setActionStatus(null);
+  };
+
+  const handleSaveManualCredentialsOverride = async (e) => {
+    if (e) e.preventDefault();
+    playTapSound();
+    setEditOverrideError('');
+    setActionStatus(null);
+
+    const cleanEmail = (editOwnerEmail || '').trim().toLowerCase();
+    const cleanPin = (editOwnerPin || '').trim();
+    const cleanCounterPin = (editCounterPin || '').trim();
+
+    if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setEditOverrideError('Please enter a valid owner email address.');
+      playAlertChime();
+      return;
+    }
+
+    // Original app requirement: Owner Master PIN is strictly 4 numeric digits
+    if (!/^\d{4}$/.test(cleanPin)) {
+      setEditOverrideError('Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).');
+      playAlertChime();
+      return;
+    }
+
+    if (cleanCounterPin && !/^\d{4}$/.test(cleanCounterPin)) {
+      setEditOverrideError('Counter Staff POS PIN must be exactly 4 numeric digits (e.g. 4421).');
+      playAlertChime();
+      return;
+    }
+
+    // Check duplicate email against other tenants
+    const duplicateEmail = businesses.find(
+      (b) => b.id !== showCredentialsModal.id && b.owner?.email?.toLowerCase() === cleanEmail
+    );
+    if (duplicateEmail) {
+      setEditOverrideError(`Email "${cleanEmail}" is already registered to "${duplicateEmail.name}".`);
+      playAlertChime();
+      return;
+    }
+
+    setIsActionLoading(true);
+
+    const res = await updateOwnerCredentialsManually({
+      businessId: showCredentialsModal.id,
+      oldEmail: showCredentialsModal.owner?.email,
+      oldPin: showCredentialsModal.owner?.pin,
+      newEmail: cleanEmail,
+      newPin: cleanPin,
+      markVerified: editMarkVerified
+    });
+
+    if (cleanCounterPin && cleanCounterPin !== showCredentialsModal.counter?.pin) {
+      updateBusiness(showCredentialsModal.id, { counter: { pin: cleanCounterPin } });
+    }
+
+    setIsActionLoading(false);
+
+    if (res.success) {
+      playSuccessChime();
+      const freshBiz = res.business || {
+        ...showCredentialsModal,
+        owner: { ...showCredentialsModal.owner, email: cleanEmail, pin: cleanPin },
+        status: editMarkVerified ? 'active' : showCredentialsModal.status,
+        emailVerified: editMarkVerified ? true : showCredentialsModal.emailVerified
+      };
+      if (cleanCounterPin) {
+        freshBiz.counter = { ...freshBiz.counter, pin: cleanCounterPin };
+      }
+
+      setShowCredentialsModal(freshBiz);
+      refreshBusinesses();
+      setIsEditingCredentials(false);
+      setActionStatus({
+        type: 'success',
+        text: res.message || 'Credentials successfully overridden and synchronized with Firebase Auth!'
+      });
+
+      // Broadcast multi-tenant update event across open tabs
+      broadcastSyncEvent(SYNC_EVENTS.CONFIG_UPDATED, {
+        businessId: showCredentialsModal.id,
+        reason: 'credentials_override'
+      });
+
+      // Platform Developer Console audit log
+      setLogs((prev) => [
+        {
+          id: Date.now(),
+          time: 'Just now',
+          type: 'auth',
+          text: `Manual credentials override applied for "${showCredentialsModal.name}" — Owner Email: ${cleanEmail}, Master PIN: ${cleanPin}`
+        },
+        ...prev
+      ]);
+    } else {
+      playAlertChime();
+      setEditOverrideError(res.error || 'Failed to update credentials.');
+    }
   };
 
   const exportPlatformBackup = () => {
@@ -1112,12 +1231,9 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         <span>POS</span>
                       </button>
 
-                      {/* View Credentials */}
+                      {/* View & Override Credentials */}
                       <button
-                        onClick={() => {
-                          playTapSound();
-                          setShowCredentialsModal(biz);
-                        }}
+                        onClick={() => handleOpenCredentialsModal(biz)}
                         style={{
                           padding: '8px 10px',
                           borderRadius: 8,
@@ -1126,7 +1242,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           color: '#F59E0B',
                           cursor: 'pointer'
                         }}
-                        title="View & copy login credentials"
+                        title="View & Override Credentials (Technical Recovery)"
                       >
                         <KeyRound size={14} />
                       </button>
@@ -1789,7 +1905,9 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
         }} onClick={() => setShowCredentialsModal(null)}>
           <div style={{
             width: '100%',
-            maxWidth: 460,
+            maxWidth: 480,
+            maxHeight: '90vh',
+            overflowY: 'auto',
             background: '#111827',
             border: '1px solid rgba(255, 255, 255, 0.12)',
             borderRadius: 20,
@@ -1804,247 +1922,493 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                 </h3>
               </div>
               <button
-                onClick={() => setShowCredentialsModal(null)}
+                onClick={() => {
+                  setShowCredentialsModal(null);
+                  setIsEditingCredentials(false);
+                }}
                 style={{ background: 'transparent', border: 'none', color: '#64748B', cursor: 'pointer' }}
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.8)',
-                padding: '12px 14px',
-                borderRadius: 12,
-                border: '1px solid rgba(255, 255, 255, 0.08)'
-              }}>
-                <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>OWNER ADMIN LOGIN</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: 'monospace', fontSize: 13, color: '#38BDF8' }}>
-                    {showCredentialsModal.owner.email}
-                  </span>
-                  <button
-                    onClick={() => copyToClipboard(showCredentialsModal.owner.email, 'email')}
-                    style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
-                  >
-                    {copiedKey === 'email' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.8)',
-                padding: '12px 14px',
-                borderRadius: 12,
-                border: '1px solid rgba(255, 255, 255, 0.08)'
-              }}>
-                <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>OWNER MASTER PIN (4 DIGITS)</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#F59E0B' }}>
-                    {showCredentialsModal.owner.pin}
-                  </span>
-                  <button
-                    onClick={() => copyToClipboard(showCredentialsModal.owner.pin, 'ownerPin')}
-                    style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
-                  >
-                    {copiedKey === 'ownerPin' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.8)',
-                padding: '12px 14px',
-                borderRadius: 12,
-                border: '1px solid rgba(255, 255, 255, 0.08)'
-              }}>
-                <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>COUNTER STAFF POS PIN (4 DIGITS)</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#10B981' }}>
-                    {showCredentialsModal.counter.pin}
-                  </span>
-                  <button
-                    onClick={() => copyToClipboard(showCredentialsModal.counter.pin, 'counterPin')}
-                    style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
-                  >
-                    {copiedKey === 'counterPin' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Account Lifecycle State (Remains suspended until verified by Firebase) */}
-              <div style={{
-                background: (showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.12)',
-                border: `1px solid ${(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-                padding: '10px 14px',
-                borderRadius: 12,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 4
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 11, color: '#94A3B8' }}>ACCOUNT LIFECYCLE STATE:</span>
-                  <span style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: (showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? '#34D399' : '#F87171'
-                  }}>
-                    {(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? '● Active' : '○ Suspended'}
-                  </span>
-                </div>
-                {!(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) && (
-                  <span style={{ fontSize: 11, color: '#FCA5A5', lineHeight: 1.4 }}>
-                    This account will remain in a <strong>suspended</strong> state until the owner clicks the verification link sent by Firebase.
-                  </span>
-                )}
-              </div>
-
-              {/* Email Verification Status & Actions */}
-              <div style={{
-                background: showCredentialsModal.emailVerified !== false ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                border: `1px solid ${showCredentialsModal.emailVerified !== false ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
-                padding: '10px 14px',
-                borderRadius: 12,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Mail size={15} color={showCredentialsModal.emailVerified !== false ? '#10B981' : '#F59E0B'} />
-                  <span style={{ fontSize: 12, color: showCredentialsModal.emailVerified !== false ? '#34D399' : '#FBBF24', fontWeight: 600 }}>
-                    {showCredentialsModal.emailVerified !== false ? 'Email Verified' : 'Pending Verification'}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  disabled={isActionLoading}
-                  onClick={async () => {
-                    setIsActionLoading(true);
-                    setActionStatus(null);
-                    playTapSound();
-                    const r = await resendVerificationLink({
-                      email: showCredentialsModal.owner.email,
-                      password: showCredentialsModal.owner.pin
-                    });
-                    setIsActionLoading(false);
-                    if (r.success) {
-                      playSuccessChime();
-                      setActionStatus({ type: 'success', text: r.message });
-                    } else {
-                      playAlertChime();
-                      setActionStatus({ type: 'error', text: r.error });
-                    }
-                  }}
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    borderRadius: 6,
-                    padding: '4px 10px',
-                    fontSize: 11,
-                    color: '#F8FAFC',
-                    cursor: isActionLoading ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4
-                  }}
-                >
-                  <RefreshCw size={11} className={isActionLoading ? 'spinning' : ''} />
-                  <span>Resend Email</span>
-                </button>
-              </div>
-
-              {/* Password Reset Action */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 2 }}>
-                <button
-                  type="button"
-                  disabled={isActionLoading}
-                  onClick={async () => {
-                    setIsActionLoading(true);
-                    setActionStatus(null);
-                    playTapSound();
-                    const r = await sendPasswordReset({ email: showCredentialsModal.owner.email });
-                    setIsActionLoading(false);
-                    if (r.success) {
-                      playSuccessChime();
-                      setActionStatus({ type: 'success', text: r.message });
-                    } else {
-                      playAlertChime();
-                      setActionStatus({ type: 'error', text: r.error });
-                    }
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#38BDF8',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: isActionLoading ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    padding: 0
-                  }}
-                >
-                  <Send size={12} />
-                  <span>Send Password Reset Link to Owner</span>
-                </button>
-              </div>
-
-              {actionStatus && (
+            {isEditingCredentials ? (
+              /* MANUAL CREDENTIALS OVERRIDE FORM (TECHNICAL ANOMALY RECOVERY) */
+              <form onSubmit={handleSaveManualCredentialsOverride} style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
                 <div style={{
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  fontSize: 12,
-                  background: actionStatus.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                  color: actionStatus.type === 'success' ? '#34D399' : '#F87171',
-                  border: `1px solid ${actionStatus.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
-                }}>
-                  {actionStatus.text}
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                type="button"
-                onClick={() => handleDeleteBusiness(showCredentialsModal)}
-                style={{
-                  padding: '11px 16px',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
                   borderRadius: 10,
-                  background: 'rgba(239, 68, 68, 0.12)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  color: '#EF4444',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
+                  padding: '10px 12px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#FBBF24', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                    <AlertTriangle size={14} />
+                    <span>Technical Anomaly Recovery Override</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 11, color: '#CBD5E1', lineHeight: 1.4 }}>
+                    Manually update the business owner's email address and/or login password (Master PIN). Updates immediately synchronize the local database and Firebase Auth.
+                  </p>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', marginBottom: 5 }}>
+                    OWNER ADMIN EMAIL *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editOwnerEmail}
+                    onChange={(e) => setEditOwnerEmail(e.target.value)}
+                    placeholder="e.g. owner@restaurant.com"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: '#0F172A',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#38BDF8',
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8' }}>
+                      OWNER MASTER PIN / PASSWORD (4 DIGITS) *
+                    </label>
+                    <span style={{ fontSize: 10, color: '#F59E0B' }}>Padded to 6-char in Firebase</span>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    maxLength={4}
+                    value={editOwnerPin}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      if (val.length <= 4) setEditOwnerPin(val);
+                    }}
+                    placeholder="4 numeric digits (e.g. 8821)"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: '#0F172A',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#F59E0B',
+                      fontFamily: 'monospace',
+                      fontSize: 15,
+                      fontWeight: 700,
+                      letterSpacing: 2,
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <span style={{ fontSize: 10, color: '#64748B', display: 'block', marginTop: 4 }}>
+                    Strictly 4 numeric digits. Synchronized with Firebase Auth (${editOwnerPin || '****'}00).
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', marginBottom: 5 }}>
+                    COUNTER STAFF POS PIN (4 DIGITS)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    value={editCounterPin}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      if (val.length <= 4) setEditCounterPin(val);
+                    }}
+                    placeholder="4 numeric digits (e.g. 4421)"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: '#0F172A',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#10B981',
+                      fontFamily: 'monospace',
+                      fontSize: 15,
+                      fontWeight: 700,
+                      letterSpacing: 2,
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <label style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6
-                }}
-                title="Permanently delete this business account and wipe all stored data"
-              >
-                <Trash2 size={13} />
-                <span>Delete Account & Wipe Data</span>
-              </button>
+                  gap: 8,
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: '1px solid rgba(16, 185, 129, 0.2)'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={editMarkVerified}
+                    onChange={(e) => setEditMarkVerified(e.target.checked)}
+                    style={{ accentColor: '#10B981', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: 11, color: '#D1FAE5' }}>
+                    Mark Email Verified & Activate Account (Overrides Suspended State)
+                  </span>
+                </label>
 
-              <button
-                type="button"
-                onClick={() => setShowCredentialsModal(null)}
-                style={{
-                  flex: 1,
-                  padding: '11px',
-                  borderRadius: 10,
-                  background: '#0284C7',
-                  border: 'none',
-                  color: '#FFFFFF',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-              >
-                Done
-              </button>
-            </div>
+                {editOverrideError && (
+                  <div style={{
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    color: '#F87171',
+                    border: '1px solid rgba(239, 68, 68, 0.3)'
+                  }}>
+                    {editOverrideError}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                  <button
+                    type="button"
+                    disabled={isActionLoading}
+                    onClick={() => {
+                      playTapSound();
+                      setIsEditingCredentials(false);
+                      setEditOverrideError('');
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '11px',
+                      borderRadius: 10,
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#CBD5E1',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: isActionLoading ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isActionLoading}
+                    style={{
+                      flex: 2,
+                      padding: '11px',
+                      borderRadius: 10,
+                      background: '#D97706',
+                      border: 'none',
+                      color: '#FFFFFF',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: isActionLoading ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6
+                    }}
+                  >
+                    {isActionLoading ? (
+                      <>
+                        <RefreshCw size={13} className="spinning" />
+                        <span>Synchronizing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check size={14} />
+                        <span>Save Manual Override</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* VIEW CREDENTIALS DISPLAY */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+                <div style={{
+                  background: 'rgba(15, 23, 42, 0.8)',
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}>
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>OWNER ADMIN LOGIN</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 13, color: '#38BDF8' }}>
+                      {showCredentialsModal.owner.email}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(showCredentialsModal.owner.email, 'email')}
+                      style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+                    >
+                      {copiedKey === 'email' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: 'rgba(15, 23, 42, 0.8)',
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}>
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>OWNER MASTER PIN (4 DIGITS)</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#F59E0B' }}>
+                      {showCredentialsModal.owner.pin}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(showCredentialsModal.owner.pin, 'ownerPin')}
+                      style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+                    >
+                      {copiedKey === 'ownerPin' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: 'rgba(15, 23, 42, 0.8)',
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}>
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>COUNTER STAFF POS PIN (4 DIGITS)</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#10B981' }}>
+                      {showCredentialsModal.counter.pin}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(showCredentialsModal.counter.pin, 'counterPin')}
+                      style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+                    >
+                      {copiedKey === 'counterPin' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* MANUAL OVERRIDE BUTTON (FOR TECHNICAL ANOMALIES) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapSound();
+                    setIsEditingCredentials(true);
+                    setEditOwnerEmail(showCredentialsModal.owner?.email || '');
+                    setEditOwnerPin(showCredentialsModal.owner?.pin || '');
+                    setEditCounterPin(showCredentialsModal.counter?.pin || '');
+                    setEditMarkVerified(showCredentialsModal.emailVerified !== false);
+                    setEditOverrideError('');
+                    setActionStatus(null);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    color: '#FBBF24',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                  title="Manually change owner email and password for technical anomalies"
+                >
+                  <Sliders size={14} />
+                  <span>Manual Technical Override: Change Email / Password</span>
+                </button>
+
+                {/* Account Lifecycle State (Remains suspended until verified by Firebase) */}
+                <div style={{
+                  background: (showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.12)',
+                  border: `1px solid ${(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 11, color: '#94A3B8' }}>ACCOUNT LIFECYCLE STATE:</span>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: (showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? '#34D399' : '#F87171'
+                    }}>
+                      {(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? '● Active' : '○ Suspended'}
+                    </span>
+                  </div>
+                  {!(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) && (
+                    <span style={{ fontSize: 11, color: '#FCA5A5', lineHeight: 1.4 }}>
+                      This account will remain in a <strong>suspended</strong> state until the owner clicks the verification link sent by Firebase.
+                    </span>
+                  )}
+                </div>
+
+                {/* Email Verification Status & Actions */}
+                <div style={{
+                  background: showCredentialsModal.emailVerified !== false ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                  border: `1px solid ${showCredentialsModal.emailVerified !== false ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Mail size={15} color={showCredentialsModal.emailVerified !== false ? '#10B981' : '#F59E0B'} />
+                    <span style={{ fontSize: 12, color: showCredentialsModal.emailVerified !== false ? '#34D399' : '#FBBF24', fontWeight: 600 }}>
+                      {showCredentialsModal.emailVerified !== false ? 'Email Verified' : 'Pending Verification'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isActionLoading}
+                    onClick={async () => {
+                      setIsActionLoading(true);
+                      setActionStatus(null);
+                      playTapSound();
+                      const r = await resendVerificationLink({
+                        email: showCredentialsModal.owner.email,
+                        password: showCredentialsModal.owner.pin
+                      });
+                      setIsActionLoading(false);
+                      if (r.success) {
+                        playSuccessChime();
+                        setActionStatus({ type: 'success', text: r.message });
+                      } else {
+                        playAlertChime();
+                        setActionStatus({ type: 'error', text: r.error });
+                      }
+                    }}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      borderRadius: 6,
+                      padding: '4px 10px',
+                      fontSize: 11,
+                      color: '#F8FAFC',
+                      cursor: isActionLoading ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <RefreshCw size={11} className={isActionLoading ? 'spinning' : ''} />
+                    <span>Resend Email</span>
+                  </button>
+                </div>
+
+                {/* Password Reset Action */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 2 }}>
+                  <button
+                    type="button"
+                    disabled={isActionLoading}
+                    onClick={async () => {
+                      setIsActionLoading(true);
+                      setActionStatus(null);
+                      playTapSound();
+                      const r = await sendPasswordReset({ email: showCredentialsModal.owner.email });
+                      setIsActionLoading(false);
+                      if (r.success) {
+                        playSuccessChime();
+                        setActionStatus({ type: 'success', text: r.message });
+                      } else {
+                        playAlertChime();
+                        setActionStatus({ type: 'error', text: r.error });
+                      }
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#38BDF8',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: isActionLoading ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      padding: 0
+                    }}
+                  >
+                    <Send size={12} />
+                    <span>Send Password Reset Link to Owner</span>
+                  </button>
+                </div>
+
+                {actionStatus && (
+                  <div style={{
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    background: actionStatus.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    color: actionStatus.type === 'success' ? '#34D399' : '#F87171',
+                    border: `1px solid ${actionStatus.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                  }}>
+                    {actionStatus.text}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!isEditingCredentials && (
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteBusiness(showCredentialsModal)}
+                  style={{
+                    padding: '11px 16px',
+                    borderRadius: 10,
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#EF4444',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                  title="Permanently delete this business account and wipe all stored data"
+                >
+                  <Trash2 size={13} />
+                  <span>Delete Account & Wipe Data</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCredentialsModal(null);
+                    setIsEditingCredentials(false);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '11px',
+                    borderRadius: 10,
+                    background: '#0284C7',
+                    border: 'none',
+                    color: '#FFFFFF',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Done
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

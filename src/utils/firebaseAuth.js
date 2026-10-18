@@ -4,6 +4,10 @@
 // 2. User Log In with Strict Verification Check (blocking unverified accounts)
 // 3. Password Reset / Forgot Password Email Link
 // 4. Resend Verification Email Helper
+// 5. Apply Email Verification Code from Email Link
+// 6. Confirm Password Reset from Email Link
+// 7. Delete Owner Account from Firebase Auth
+// 8. Manual Credentials Override for Technical Anomalies
 
 import { initializeApp, getApps, getApp, deleteApp } from 'firebase/app';
 import {
@@ -17,6 +21,8 @@ import {
   verifyPasswordResetCode,
   confirmPasswordReset,
   deleteUser,
+  updatePassword,
+  updateEmail,
   signOut,
   reload
 } from 'firebase/auth';
@@ -586,6 +592,143 @@ export async function deleteOwnerAccountFromFirebase({ email, password }) {
       warning: formatAuthError(error)
     };
   }
+}
+
+/**
+ * 8. MANUAL CREDENTIALS OVERRIDE (TECHNICAL ANOMALY RECOVERY)
+ * Allows platform administrator / developer to manually update an owner's email
+ * and/or 4-digit Master PIN in both the local multi-tenant database and Firebase Auth.
+ * Uses a sandboxed secondary Firebase app so the active developer session is completely isolated.
+ */
+export async function updateOwnerCredentialsManually({
+  businessId,
+  oldEmail,
+  oldPin,
+  newEmail,
+  newPin,
+  markVerified = true
+}) {
+  const cleanOldEmail = (oldEmail || '').trim().toLowerCase();
+  const cleanOldPin = (oldPin || '').trim();
+  const cleanNewEmail = (newEmail || '').trim().toLowerCase();
+  const cleanNewPin = (newPin || '').trim();
+
+  if (!cleanNewEmail.includes('@') || !cleanNewEmail.includes('.')) {
+    return { success: false, error: 'A valid owner email address is required.' };
+  }
+
+  // Original app requirement: Owner Master PIN is strictly 4 numeric digits
+  if (!/^\d{4}$/.test(cleanNewPin)) {
+    return { success: false, error: 'Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).' };
+  }
+
+  const config = getFirebaseConfig();
+  let firebaseNotice = null;
+  let firebaseUpdated = false;
+
+  if (config && config.apiKey && config.projectId) {
+    const secondaryAppName = `override_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    let secondaryApp = null;
+    try {
+      secondaryApp = initializeApp(config, secondaryAppName);
+      const secondaryAuth = getAuth(secondaryApp);
+
+      // Attempt to authenticate existing user in sandbox
+      let userCredential = null;
+      try {
+        userCredential = await signInWithEmailAndPassword(secondaryAuth, cleanOldEmail, `${cleanOldPin}00`);
+      } catch (err) {
+        if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+          try {
+            userCredential = await signInWithEmailAndPassword(secondaryAuth, cleanOldEmail, cleanOldPin);
+          } catch {}
+        }
+      }
+
+      if (userCredential && userCredential.user) {
+        const user = userCredential.user;
+
+        // 1. If password/PIN changed, update in Firebase Auth
+        if (cleanNewPin !== cleanOldPin) {
+          try {
+            await updatePassword(user, `${cleanNewPin}00`);
+            firebaseUpdated = true;
+          } catch (pwErr) {
+            console.warn('Firebase updatePassword warning:', pwErr);
+          }
+        }
+
+        // 2. If email changed, attempt update or recreation
+        if (cleanNewEmail !== cleanOldEmail) {
+          try {
+            await updateEmail(user, cleanNewEmail);
+            firebaseUpdated = true;
+          } catch (emErr) {
+            console.warn('Firebase direct updateEmail warning, recreating user:', emErr);
+            try {
+              await deleteUser(user);
+              await createUserWithEmailAndPassword(secondaryAuth, cleanNewEmail, `${cleanNewPin}00`);
+              firebaseUpdated = true;
+            } catch (recreateErr) {
+              console.warn('Firebase recreate user warning:', recreateErr);
+            }
+          }
+        }
+
+        firebaseNotice = 'Credentials updated in Firebase Auth and local business storage.';
+      } else {
+        // Old user could not be signed into (e.g. forgotten password or created during demo mode/offline)
+        try {
+          await createUserWithEmailAndPassword(secondaryAuth, cleanNewEmail, `${cleanNewPin}00`);
+          firebaseUpdated = true;
+          firebaseNotice = `Fresh credentials provisioned in Firebase Auth for ${cleanNewEmail}.`;
+        } catch (createErr) {
+          if (createErr.code === 'auth/email-already-in-use') {
+            firebaseNotice = `Email ${cleanNewEmail} is registered in Firebase Auth. Local storage updated.`;
+          } else {
+            console.warn('Firebase fallback account provisioning notice:', createErr);
+            firebaseNotice = `Local credentials updated. (Firebase notice: ${formatAuthError(createErr)})`;
+          }
+        }
+      }
+
+      try { await signOut(secondaryAuth); } catch {}
+      try { await deleteApp(secondaryApp); } catch {}
+    } catch (fbErr) {
+      if (secondaryApp) {
+        try { await deleteApp(secondaryApp); } catch {}
+      }
+      console.warn('Firebase override process notice:', fbErr);
+      firebaseNotice = `Local credentials updated. (Firebase: ${formatAuthError(fbErr)})`;
+    }
+  } else {
+    firebaseNotice = 'Owner credentials updated in local multi-tenant database (Demo Mode).';
+  }
+
+  // Update local business record
+  const updates = {
+    owner: {
+      email: cleanNewEmail,
+      pin: cleanNewPin
+    }
+  };
+
+  if (markVerified) {
+    updates.status = 'active';
+    updates.emailVerified = true;
+  }
+
+  const updateRes = updateBusiness(businessId, updates);
+  if (!updateRes.success) {
+    return { success: false, error: updateRes.error };
+  }
+
+  return {
+    success: true,
+    business: updateRes.business,
+    firebaseUpdated,
+    message: firebaseNotice || `Credentials for ${cleanNewEmail} successfully overridden and saved.`
+  };
 }
 
 /**
