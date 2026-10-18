@@ -135,9 +135,16 @@ export default function AuthModal({
       }
 
       // Flow B: User Log In with Strict Verification Check (blocks unverified accounts)
+      if (!/^\d{4}$/.test(pin.trim())) {
+        playAlertChime();
+        setIsSubmitting(false);
+        setErrorMessage('Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).');
+        return;
+      }
+
       const res = await logInUserWithVerification({
         email,
-        password: pin
+        password: pin.trim()
       });
 
       if (res.success) {
@@ -484,7 +491,7 @@ export default function AuthModal({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                   <label className="auth-label" style={{ margin: 0 }}>
                     <KeyRound size={13} />
-                    <span>Password / Master PIN *</span>
+                    <span>Owner Master PIN (4 Digits) *</span>
                   </label>
                   <button
                     type="button"
@@ -512,11 +519,19 @@ export default function AuthModal({
                   <input
                     type={showPin ? 'text' : 'password'}
                     required
-                    placeholder="Enter Master PIN or password"
+                    maxLength={4}
+                    pattern="[0-9]*"
+                    inputMode="numeric"
+                    placeholder="Enter 4-digit PIN (e.g. 8821)"
                     className="auth-input"
                     value={pin}
-                    onChange={(e) => setPin(e.target.value)}
-                    style={{ width: '100%', paddingRight: 40 }}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    style={{
+                      width: '100%',
+                      paddingRight: 40,
+                      letterSpacing: showPin ? 'normal' : '0.25em',
+                      fontWeight: 700
+                    }}
                   />
                   <button
                     type="button"
@@ -537,7 +552,7 @@ export default function AuthModal({
                     {showPin ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
-                <span className="auth-hint">Your email must be verified before dashboard access is permitted.</span>
+                <span className="auth-hint">Original App Constraint: Exactly 4 numeric digits. Accounts remain suspended until email is verified.</span>
               </div>
             </>
           )}

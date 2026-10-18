@@ -24,6 +24,7 @@ export const DEFAULT_BUSINESSES = [
     city: 'Connaught Place, New Delhi',
     plan: 'Enterprise',
     status: 'active',
+    emailVerified: true,
     owner: {
       name: 'Sanjay Malhotra',
       email: 'admin@advaitkitchen.com',
@@ -48,6 +49,7 @@ export const DEFAULT_BUSINESSES = [
     city: 'Bandra West, Mumbai',
     plan: 'Pro',
     status: 'active',
+    emailVerified: true,
     owner: {
       name: 'Priya Nair',
       email: 'priya@copperchimney.in',
@@ -72,6 +74,7 @@ export const DEFAULT_BUSINESSES = [
     city: 'Indiranagar, Bengaluru',
     plan: 'Starter',
     status: 'active',
+    emailVerified: true,
     owner: {
       name: 'Amit Deshmukh',
       email: 'amit@chaipoint.com',
@@ -186,7 +189,8 @@ export function createBusiness(data) {
     category: data.category || 'Casual Dining',
     city: (data.city || '').trim() || 'New Delhi, India',
     plan: data.plan || 'Starter',
-    status: 'active',
+    status: data.status ? data.status : (data.emailVerified === true ? 'active' : 'suspended'),
+    emailVerified: data.emailVerified === true ? true : false,
     owner: {
       name: (data.ownerName || '').trim() || 'Business Owner',
       email: cleanEmail,
@@ -326,11 +330,27 @@ export function authenticateBusinessOwner(email, pin) {
   const cleanEmail = (email || '').trim().toLowerCase();
   const cleanPin = (pin || '').toString().trim();
 
+  if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+    return { success: false, error: 'Please enter a valid owner email address.' };
+  }
+
+  if (!/^\d{4}$/.test(cleanPin)) {
+    return { success: false, error: 'Owner Master PIN must be exactly 4 numeric digits.' };
+  }
+
   const business = businesses.find(
     (b) => b.owner.email.toLowerCase() === cleanEmail && b.owner.pin === cleanPin
   );
 
   if (business) {
+    if (business.emailVerified === false || business.status === 'suspended') {
+      return {
+        success: false,
+        isUnverified: true,
+        business,
+        error: `Business account "${business.name}" is suspended pending email verification. Please verify your email with Firebase before logging in.`
+      };
+    }
     if (business.status !== 'active') {
       return { success: false, error: `Business account "${business.name}" is currently ${business.status}. Contact Developer Support.` };
     }

@@ -12,6 +12,7 @@ import {
   signInWithEmailAndPassword,
   sendEmailVerification,
   sendPasswordResetEmail,
+  checkActionCode,
   applyActionCode,
   verifyPasswordResetCode,
   confirmPasswordReset,
@@ -19,7 +20,7 @@ import {
   reload
 } from 'firebase/auth';
 import { getFirebaseConfig } from './firebaseSync';
-import { getBusinesses, createBusiness, setActiveBusiness } from './businessManager';
+import { getBusinesses, saveBusinesses, createBusiness, updateBusiness, setActiveBusiness } from './businessManager';
 
 let authInstance = null;
 
@@ -52,16 +53,19 @@ export function getFirebaseAuth() {
  */
 export async function provisionOwnerAccountWithVerification({ email, password, ownerName, businessName }) {
   const cleanEmail = (email || '').trim().toLowerCase();
-  let cleanPassword = (password || '').trim();
+  let cleanPin = (password || '').trim();
 
   if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
     return { success: false, error: 'A valid owner email address is required.' };
   }
 
-  // Ensure password satisfies Firebase's 6-character minimum
-  if (cleanPassword.length < 6) {
-    cleanPassword = `${cleanPassword}00`;
+  // Original app requirement: Owner Master PIN is strictly 4 numeric digits
+  if (!/^\d{4}$/.test(cleanPin)) {
+    return { success: false, error: 'Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).' };
   }
+
+  // Transparently pad 4-digit PIN with '00' for Firebase Auth's 6-character requirement
+  const cleanPassword = `${cleanPin}00`;
 
   const config = getFirebaseConfig();
 
@@ -125,11 +129,12 @@ export async function logInUserWithVerification({ email, password }) {
   const cleanPassword = (password || '').trim();
 
   if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-    return { success: false, error: 'Please enter a valid email address.' };
+    return { success: false, error: 'Please enter a valid owner email address.' };
   }
 
-  if (!cleanPassword) {
-    return { success: false, error: 'Please enter your password.' };
+  // Original app requirement: Owner Master PIN is strictly 4 numeric digits
+  if (!/^\d{4}$/.test(cleanPassword)) {
+    return { success: false, error: 'Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).' };
   }
 
   const auth = getFirebaseAuth();
@@ -138,12 +143,12 @@ export async function logInUserWithVerification({ email, password }) {
     try {
       let userCredential;
       try {
-        userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        // Try transparently padded 4-digit PIN first (standard Firebase 6-char compatibility)
+        userCredential = await signInWithEmailAndPassword(auth, cleanEmail, `${cleanPassword}00`);
       } catch (err) {
-        // If 4-digit PIN was padded during provisioning, try padded PIN
-        if ((err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') && cleanPassword.length === 4) {
+        if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
           try {
-            userCredential = await signInWithEmailAndPassword(auth, cleanEmail, `${cleanPassword}00`);
+            userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
           } catch {
             throw err;
           }
@@ -154,32 +159,39 @@ export async function logInUserWithVerification({ email, password }) {
 
       const user = userCredential.user;
 
-      // Force reload to pick up verification link clicks
+      // Force reload to pick up verification link clicks from Firebase
       try {
         await reload(user);
       } catch {}
 
       // STRICT VERIFICATION CHECK: BLOCK ACCESS IF EMAIL NOT VERIFIED
+      // Account remains in suspended / unverified state until verified by Firebase
       if (!user.emailVerified) {
         await signOut(auth); // Terminate unverified session immediately
+        const matchingBiz = getBusinesses().find((b) => b.owner.email.toLowerCase() === cleanEmail);
         return {
           success: false,
           isUnverified: true,
           email: cleanEmail,
-          error: `Access Denied: Your email address (${cleanEmail}) has not been verified yet. Please click the verification link sent to your inbox before logging in.`
+          error: `Access Denied: Business account "${matchingBiz?.name || 'Owner'}" remains in a suspended state because ${cleanEmail} has not been verified yet. Please click the verification link sent by Firebase to activate the account.`
         };
       }
 
-      // Verified! Connect to matching business
+      // Verified! Transition business from suspended to active if needed
       let matchingBiz = getBusinesses().find((b) => b.owner.email.toLowerCase() === cleanEmail);
       if (!matchingBiz) {
         const createRes = createBusiness({
           name: 'My Restaurant Back-Office',
           ownerName: user.displayName || 'Business Owner',
           ownerEmail: cleanEmail,
-          ownerPin: cleanPassword.length === 4 ? cleanPassword : '8821'
+          ownerPin: cleanPassword,
+          status: 'active',
+          emailVerified: true
         });
         matchingBiz = createRes.business;
+      } else if (matchingBiz.status === 'suspended' || matchingBiz.emailVerified === false) {
+        updateBusiness(matchingBiz.id, { status: 'active', emailVerified: true });
+        matchingBiz = { ...matchingBiz, status: 'active', emailVerified: true };
       }
 
       setActiveBusiness(matchingBiz.id);
@@ -215,17 +227,17 @@ export async function logInUserWithVerification({ email, password }) {
     return { success: false, error: 'No business owner account found with this email. Accounts must be provisioned via Developer Dashboard.' };
   }
 
-  if (matchingBiz.emailVerified === false) {
+  if (matchingBiz.owner.pin !== cleanPassword && cleanPassword !== '8821') {
+    return { success: false, error: 'Incorrect 4-digit Master Owner PIN for this business.' };
+  }
+
+  if (matchingBiz.status === 'suspended' || matchingBiz.emailVerified === false) {
     return {
       success: false,
       isUnverified: true,
       email: cleanEmail,
-      error: `Access Denied: Your email address (${cleanEmail}) has not been verified yet. Please verify your email before accessing the Back-Office.`
+      error: `Access Denied: Business account "${matchingBiz.name}" remains in a suspended state pending email verification. Please verify the email sent to ${cleanEmail} before accessing the Back-Office.`
     };
-  }
-
-  if (matchingBiz.owner.pin !== cleanPassword && cleanPassword !== '8821') {
-    return { success: false, error: 'Incorrect password or Master Owner PIN for this business.' };
   }
 
   setActiveBusiness(matchingBiz.id);
@@ -359,7 +371,8 @@ export async function resendVerificationLink({ email, password }) {
 
 /**
  * 4. APPLY EMAIL VERIFICATION CODE (FROM EMAIL LINK)
- * Automatically marks the user's email as verified in Firebase Auth.
+ * Automatically marks the user's email as verified in Firebase Auth,
+ * and transitions the corresponding business from suspended to active.
  */
 export async function handleVerifyEmailAction(oobCode) {
   if (!oobCode) {
@@ -370,26 +383,34 @@ export async function handleVerifyEmailAction(oobCode) {
 
   if (auth) {
     try {
+      let verifiedEmail = null;
+      try {
+        const info = await checkActionCode(auth, oobCode);
+        verifiedEmail = info?.data?.email;
+      } catch {}
+
       await applyActionCode(auth, oobCode);
 
-      // Also ensure matching local business record is marked as verified
+      // Transition matching business from suspended to active
       const businesses = getBusinesses();
       let updated = false;
       const updatedBiz = businesses.map((b) => {
-        if (b.emailVerified === false) {
+        if (
+          (verifiedEmail && b.owner.email.toLowerCase() === verifiedEmail.toLowerCase()) ||
+          (!verifiedEmail && (b.emailVerified === false || b.status === 'suspended'))
+        ) {
           updated = true;
-          return { ...b, emailVerified: true };
+          return { ...b, status: 'active', emailVerified: true };
         }
         return b;
       });
       if (updated) {
-        try {
-          localStorage.setItem('flowscape_businesses_v1', JSON.stringify(updatedBiz));
-        } catch {}
+        saveBusinesses(updatedBiz);
       }
 
       return {
         success: true,
+        email: verifiedEmail,
         message: 'Email verified, you can now login'
       };
     } catch (error) {
@@ -404,12 +425,10 @@ export async function handleVerifyEmailAction(oobCode) {
     }
   }
 
-  // Local fallback mode: mark business as verified
+  // Local fallback mode: mark business as active and verified
   const businesses = getBusinesses();
-  const updatedBiz = businesses.map((b) => ({ ...b, emailVerified: true }));
-  try {
-    localStorage.setItem('flowscape_businesses_v1', JSON.stringify(updatedBiz));
-  } catch {}
+  const updatedBiz = businesses.map((b) => ({ ...b, status: 'active', emailVerified: true }));
+  saveBusinesses(updatedBiz);
 
   return {
     success: true,
@@ -446,31 +465,39 @@ export async function handleVerifyPasswordResetCode(oobCode) {
 
 /**
  * 6. CONFIRM PASSWORD RESET (FROM EMAIL LINK)
- * Submits the new password to Firebase Auth.
+ * Submits the new 4-digit Master PIN to Firebase Auth (with transparent padding)
+ * and updates the owner PIN in the local business record.
  */
-export async function handleConfirmPasswordReset(oobCode, newPassword) {
-  const cleanPassword = (newPassword || '').trim();
+export async function handleConfirmPasswordReset(oobCode, newPassword, targetEmail) {
+  const cleanPin = (newPassword || '').trim();
 
-  if (!cleanPassword || cleanPassword.length < 6) {
-    return { success: false, error: 'New password must be at least 6 characters long.' };
+  // Original app requirement: Master PIN must be exactly 4 numeric digits
+  if (!/^\d{4}$/.test(cleanPin)) {
+    return { success: false, error: 'Master PIN must be exactly 4 numeric digits (e.g. 8821).' };
   }
 
+  const firebasePassword = `${cleanPin}00`;
   const auth = getFirebaseAuth();
 
   if (auth) {
     try {
-      await confirmPasswordReset(auth, oobCode, cleanPassword);
+      await confirmPasswordReset(auth, oobCode, firebasePassword);
 
-      // Also update local business owner PIN if applicable
+      // Update owner PIN in local business storage for target business
       const businesses = getBusinesses();
-      if (cleanPassword.length <= 8 && /^\d+$/.test(cleanPassword)) {
-        const updatedBiz = businesses.map((b) => ({
-          ...b,
-          owner: { ...b.owner, pin: cleanPassword }
-        }));
-        try {
-          localStorage.setItem('flowscape_businesses_v1', JSON.stringify(updatedBiz));
-        } catch {}
+      let targetIndex = -1;
+      if (targetEmail) {
+        targetIndex = businesses.findIndex((b) => b.owner.email.toLowerCase() === targetEmail.toLowerCase());
+      }
+      if (targetIndex === -1) {
+        targetIndex = 0;
+      }
+      if (targetIndex !== -1 && businesses[targetIndex]) {
+        businesses[targetIndex].owner = {
+          ...businesses[targetIndex].owner,
+          pin: cleanPin
+        };
+        saveBusinesses(businesses);
       }
 
       return {
@@ -484,13 +511,20 @@ export async function handleConfirmPasswordReset(oobCode, newPassword) {
 
   // Local fallback mode: update owner PIN
   const businesses = getBusinesses();
-  const updatedBiz = businesses.map((b) => ({
-    ...b,
-    owner: { ...b.owner, pin: cleanPassword }
-  }));
-  try {
-    localStorage.setItem('flowscape_businesses_v1', JSON.stringify(updatedBiz));
-  } catch {}
+  let targetIndex = -1;
+  if (targetEmail) {
+    targetIndex = businesses.findIndex((b) => b.owner.email.toLowerCase() === targetEmail.toLowerCase());
+  }
+  if (targetIndex === -1) {
+    targetIndex = 0;
+  }
+  if (targetIndex !== -1 && businesses[targetIndex]) {
+    businesses[targetIndex].owner = {
+      ...businesses[targetIndex].owner,
+      pin: cleanPin
+    };
+    saveBusinesses(businesses);
+  }
 
   return {
     success: true,

@@ -179,12 +179,13 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     const tables = Array.from({ length: Number(newBiz.tableCount) || 6 }, (_, i) => `Table ${String(i + 1).padStart(2, '0')}`);
     tables.push('Takeaway / Counter');
 
-    // 2. Provision business in local multi-tenant database (marked as pending email verification)
+    // 2. Provision business in local multi-tenant database (marked as suspended pending email verification)
     const res = createBusiness({
       ...newBiz,
       ownerPin: trimmedOwnerPin,
       counterPin: trimmedCounterPin,
       tables,
+      status: 'suspended',
       emailVerified: false
     });
 
@@ -969,11 +970,11 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           <span style={{ fontFamily: 'monospace', color: '#38BDF8', fontWeight: 600 }}>{biz.owner.email}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ color: '#94A3B8' }}>Owner PIN:</span>
+                          <span style={{ color: '#94A3B8' }}>Owner PIN (4 Digits):</span>
                           <span style={{ fontFamily: 'monospace', color: '#F59E0B', fontWeight: 700 }}>{biz.owner.pin}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: '#94A3B8' }}>Counter POS PIN:</span>
+                          <span style={{ color: '#94A3B8' }}>Counter POS PIN (4 Digits):</span>
                           <span style={{ fontFamily: 'monospace', color: '#10B981', fontWeight: 700 }}>{biz.counter.pin}</span>
                         </div>
                       </div>
@@ -997,11 +998,11 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           fontWeight: 700,
                           padding: '2px 8px',
                           borderRadius: 6,
-                          background: isActive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          color: isActive ? '#34D399' : '#F87171',
+                          background: (isActive && biz.emailVerified !== false) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                          color: (isActive && biz.emailVerified !== false) ? '#34D399' : '#F87171',
                           border: '1px solid rgba(255, 255, 255, 0.08)'
                         }}>
-                          {isActive ? '● Active' : '○ Suspended'}
+                          {(isActive && biz.emailVerified !== false) ? '● Active' : '○ Suspended (Pending Verification)'}
                         </span>
 
                         <span style={{
@@ -1607,9 +1608,12 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     <input
                       type="text"
                       required
-                      placeholder="e.g. 6622"
+                      maxLength={4}
+                      pattern="[0-9]*"
+                      inputMode="numeric"
+                      placeholder="e.g. 8821"
                       value={newBiz.ownerPin}
-                      onChange={(e) => setNewBiz({ ...newBiz, ownerPin: e.target.value })}
+                      onChange={(e) => setNewBiz({ ...newBiz, ownerPin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                       style={{
                         width: '100%',
                         padding: '8px 10px',
@@ -1618,10 +1622,14 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         border: '1px solid rgba(255, 255, 255, 0.1)',
                         color: '#F59E0B',
                         fontWeight: 700,
-                        fontSize: 13,
+                        fontSize: 14,
+                        letterSpacing: '0.15em',
                         boxSizing: 'border-box'
                       }}
                     />
+                    <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 4 }}>
+                      Original Constraint: Exactly 4 numeric digits. Account will remain in a <strong>suspended</strong> state until email verification is completed via Firebase.
+                    </div>
                   </div>
                 </div>
 
@@ -1640,9 +1648,12 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       <input
                         type="text"
                         required
-                        placeholder="e.g. 1122"
+                        maxLength={4}
+                        pattern="[0-9]*"
+                        inputMode="numeric"
+                        placeholder="e.g. 4421"
                         value={newBiz.counterPin}
-                        onChange={(e) => setNewBiz({ ...newBiz, counterPin: e.target.value })}
+                        onChange={(e) => setNewBiz({ ...newBiz, counterPin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                         style={{
                           width: '100%',
                           padding: '8px 10px',
@@ -1651,7 +1662,8 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           border: '1px solid rgba(255, 255, 255, 0.1)',
                           color: '#10B981',
                           fontWeight: 700,
-                          fontSize: 13,
+                          fontSize: 14,
+                          letterSpacing: '0.15em',
                           boxSizing: 'border-box'
                         }}
                       />
@@ -1786,7 +1798,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                 borderRadius: 12,
                 border: '1px solid rgba(255, 255, 255, 0.08)'
               }}>
-                <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>OWNER MASTER PIN</div>
+                <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>OWNER MASTER PIN (4 DIGITS)</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#F59E0B' }}>
                     {showCredentialsModal.owner.pin}
@@ -1806,7 +1818,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                 borderRadius: 12,
                 border: '1px solid rgba(255, 255, 255, 0.08)'
               }}>
-                <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>COUNTER STAFF POS PIN</div>
+                <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>COUNTER STAFF POS PIN (4 DIGITS)</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#10B981' }}>
                     {showCredentialsModal.counter.pin}
@@ -1818,6 +1830,33 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     {copiedKey === 'counterPin' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
                   </button>
                 </div>
+              </div>
+
+              {/* Account Lifecycle State (Remains suspended until verified by Firebase) */}
+              <div style={{
+                background: (showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.12)',
+                border: `1px solid ${(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                padding: '10px 14px',
+                borderRadius: 12,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11, color: '#94A3B8' }}>ACCOUNT LIFECYCLE STATE:</span>
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: (showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? '#34D399' : '#F87171'
+                  }}>
+                    {(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? '● Active' : '○ Suspended'}
+                  </span>
+                </div>
+                {!(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) && (
+                  <span style={{ fontSize: 11, color: '#FCA5A5', lineHeight: 1.4 }}>
+                    This account will remain in a <strong>suspended</strong> state until the owner clicks the verification link sent by Firebase.
+                  </span>
+                )}
               </div>
 
               {/* Email Verification Status & Actions */}
