@@ -26,7 +26,7 @@ import {
 
 export default function AuthModal({
   isOpen,
-  targetRole = ROLES.COUNTER,
+  targetRole = ROLES.ADMIN,
   activeSessionRole = null,
   onSuccess,
   onClose,
@@ -34,7 +34,7 @@ export default function AuthModal({
   staff = []
 }) {
   const [selectedStation, setSelectedStation] = useState(null);
-  const currentStation = selectedStation || (targetRole === ROLES.ADMIN ? ROLES.ADMIN : ROLES.COUNTER);
+  const currentStation = selectedStation || (targetRole === ROLES.COUNTER ? ROLES.COUNTER : ROLES.ADMIN);
 
   const roleConfig = ROLE_CONFIGS[currentStation] || ROLE_CONFIGS[ROLES.COUNTER];
 

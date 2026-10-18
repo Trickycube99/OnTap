@@ -456,6 +456,7 @@ export default function App() {
       if (targetRole === 'admin') {
         setCurrentRole('admin');
         if (isAuthenticated('admin')) {
+          setAdminTab('sales');
           setActiveTab('sales');
         } else {
           setAuthModal({ isOpen: true, targetRole: 'admin' });
@@ -586,7 +587,7 @@ export default function App() {
 
     setCurrentRole(targetRole);
     window.location.hash = targetRole;
-    if (targetRole === 'admin') setActiveTab('sales');
+    if (targetRole === 'admin') { setAdminTab('sales'); setActiveTab('sales'); }
     else if (targetRole === 'counter') { setActiveTab('orders'); setCounterSubTab('orders'); }
     else if (targetRole === 'customer') setActiveTab('menu');
   };
@@ -668,6 +669,7 @@ export default function App() {
       setActiveTab('orders');
       setCounterSubTab('orders');
     } else if (role === 'admin') {
+      setAdminTab('sales');
       setActiveTab('sales');
     }
   };
@@ -709,9 +711,8 @@ export default function App() {
       } catch {}
     }
 
+    setAuthActionState(null);
     setAuthModal({ isOpen: false, targetRole: null });
-    setCurrentRole(role);
-    window.location.hash = role;
 
     if (matchedBusiness) {
       setActiveBusiness(matchedBusiness.id);
@@ -719,18 +720,20 @@ export default function App() {
       loadBusinessData(matchedBusiness.id, matchedBusiness);
     }
 
-    if (role === 'customer') {
-      if (newSession.table) setActiveTable(newSession.table);
-      setActiveTab('menu');
-    } else if (role === 'chef') {
-      setActiveTab('chef');
-    } else if (role === 'counter') {
+    if (role === 'counter') {
+      setCurrentRole('counter');
+      window.location.hash = 'counter';
       setActiveTab('orders');
       setCounterSubTab('orders');
-    } else if (role === 'admin') {
-      setActiveTab('sales');
     } else if (role === 'developer') {
-      // stays on developer
+      setCurrentRole('developer');
+      window.location.hash = 'manj';
+    } else {
+      // Direct redirection straight to the Admin Dashboard
+      setCurrentRole('admin');
+      window.location.hash = 'admin';
+      setAdminTab('sales');
+      setActiveTab('sales');
     }
   };
 
@@ -748,6 +751,7 @@ export default function App() {
     // Return safely to default Admin / Owner login view, never customer
     setCurrentRole('admin');
     window.location.hash = 'admin';
+    setAdminTab('sales');
     setActiveTab('sales');
     setAuthModal({ isOpen: true, targetRole: 'admin' });
   };
