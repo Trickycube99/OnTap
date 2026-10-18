@@ -202,6 +202,8 @@ export default function App() {
         if (msg.payload) setTheme(msg.payload);
       } else if (msg.type === SYNC_EVENTS.CHEF_UPDATED) {
         if (msg.payload) setChef(msg.payload);
+      } else if (msg.type === SYNC_EVENTS.STAFF_UPDATED) {
+        if (Array.isArray(msg.payload)) setStaff(msg.payload);
       }
     });
 
@@ -626,6 +628,8 @@ export default function App() {
               setActiveSubTab={setCounterSubTab}
               canReturnToAdmin={canReturnToAdmin}
               onReturnToAdmin={() => handleRoleSwitch('admin')}
+              staff={staff}
+              setStaff={setStaff}
             />
           )}
 

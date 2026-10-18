@@ -14,7 +14,10 @@ import {
   Sparkles,
   Bell,
   Trash2,
-  BarChart3
+  BarChart3,
+  User,
+  Lock,
+  ShieldCheck
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import PrinterModal from '../components/PrinterModal';
@@ -66,7 +69,9 @@ export default function CounterView({
   activeSubTab = 'orders',
   setActiveSubTab,
   canReturnToAdmin = false,
-  onReturnToAdmin
+  onReturnToAdmin,
+  staff = [],
+  setStaff
 }) {
   const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'received', 'in-progress', 'ready', 'done'
   const [rejectOrderId, setRejectOrderId] = useState(null);
@@ -101,16 +106,41 @@ export default function CounterView({
   // Server Call Alerts Banner
   const [serverAlert, setServerAlert] = useState(null);
 
-  // Listen for real-time events from customers
+  // Active Counter Staff Operator & Permissions
+  const activeStaffList = Array.isArray(staff)
+    ? staff.filter((emp) => emp.status !== 'resigned')
+    : [];
+
+  const [activeStaffId, setActiveStaffId] = useState(() => {
+    try {
+      const saved = localStorage.getItem('counter_active_staff_id');
+      if (saved && activeStaffList.some((s) => s.id === saved)) return saved;
+    } catch {}
+    return activeStaffList[0]?.id || '';
+  });
+
+  // Effective staff member currently operating Counter POS
+  const currentStaff = activeStaffList.find((s) => s.id === activeStaffId) || activeStaffList[0];
+
+  const effectivePermissions = {
+    canEditPrice: canReturnToAdmin ? true : Boolean(currentStaff?.permissions?.canEditPrice),
+    canCreateDiscounts: canReturnToAdmin ? true : Boolean(currentStaff?.permissions?.canCreateDiscounts)
+  };
+
+  // Listen for real-time events from customers and owner admin
   useEffect(() => {
     const unsubscribe = subscribeSyncEvents((msg) => {
       if (msg.type === SYNC_EVENTS.CALL_SERVER) {
         setServerAlert(msg.payload);
         playAlertChime();
+      } else if (msg.type === SYNC_EVENTS.STAFF_UPDATED) {
+        if (Array.isArray(msg.payload) && setStaff) {
+          setStaff(msg.payload);
+        }
       }
     });
     return unsubscribe;
-  }, []);
+  }, [setStaff]);
 
   // Calculate Expected Totals from recorded orders for today
   const expectedCash = orders
@@ -206,6 +236,11 @@ export default function CounterView({
 
   // Save Price Edit (FR-P4)
   const handleSavePrice = () => {
+    if (!effectivePermissions.canEditPrice) {
+      playAlertChime();
+      alert(`Access Restricted: Staff member "${currentStaff?.name || 'Operator'}" does not have permission to edit dish prices. The owner can grant this in Staff & Payroll.`);
+      return;
+    }
     playTapSound();
     const priceNum = parseFloat(newPrice);
     if (!isNaN(priceNum) && priceNum > 0 && editingItem) {
@@ -220,6 +255,11 @@ export default function CounterView({
   // Create Offer (FR-P5)
   const handleCreateOffer = (e) => {
     e.preventDefault();
+    if (!effectivePermissions.canCreateDiscounts) {
+      playAlertChime();
+      alert(`Access Restricted: Staff member "${currentStaff?.name || 'Operator'}" does not have permission to issue promotional offers. The owner can grant this in Staff & Payroll.`);
+      return;
+    }
     playTapSound();
     if (!newOfferCode || !newOfferValue) return;
 
@@ -247,6 +287,11 @@ export default function CounterView({
   };
 
   const handleDeleteOffer = (offerId) => {
+    if (!effectivePermissions.canCreateDiscounts) {
+      playAlertChime();
+      alert(`Access Restricted: Staff member "${currentStaff?.name || 'Operator'}" does not have permission to modify promotional offers.`);
+      return;
+    }
     playTapSound();
     if (window.confirm('Are you sure you want to delete this coupon?')) {
       const updated = offers.filter((o) => o.id !== offerId);
@@ -408,6 +453,105 @@ export default function CounterView({
           </button>
         </div>
       )}
+
+      {/* Terminal Operator & Permissions Status Bar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '9px 14px',
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: 14,
+          marginBottom: 12,
+          flexWrap: 'wrap',
+          gap: 10,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <User size={15} color="#007AFF" />
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#1E293B' }}>
+            Terminal Operator:
+          </span>
+          {canReturnToAdmin ? (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: '#7C3AED',
+                background: '#F5F3FF',
+                padding: '2px 8px',
+                borderRadius: 8,
+                border: '1px solid #DDD6FE'
+              }}
+            >
+              Owner Admin (Full Permissions)
+            </span>
+          ) : activeStaffList.length > 0 ? (
+            <select
+              className="ios-select"
+              value={activeStaffId || activeStaffList[0]?.id}
+              onChange={(e) => {
+                setActiveStaffId(e.target.value);
+                try {
+                  localStorage.setItem('counter_active_staff_id', e.target.value);
+                } catch {}
+                playTapSound();
+              }}
+              style={{ padding: '3px 8px', fontSize: 11.5, fontWeight: 600, minWidth: 150 }}
+            >
+              {activeStaffList.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name} ({emp.role})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span style={{ fontSize: 11.5, color: '#64748B' }}>Default Floor Staff</span>
+          )}
+        </div>
+
+        {/* Live Permissions Indicator Pills */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 10.5,
+              padding: '2px 8px',
+              borderRadius: 8,
+              fontWeight: 600,
+              background: effectivePermissions.canEditPrice ? '#DCFCE7' : '#F1F5F9',
+              color: effectivePermissions.canEditPrice ? '#15803D' : '#94A3B8',
+              border: `1px solid ${effectivePermissions.canEditPrice ? '#BBF7D0' : '#E2E8F0'}`
+            }}
+            title={effectivePermissions.canEditPrice ? "Price editing permitted by owner" : "Price editing locked by owner"}
+          >
+            {effectivePermissions.canEditPrice ? '✓ Price Edit Allowed' : '🔒 Price Edit Locked'}
+          </span>
+
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 10.5,
+              padding: '2px 8px',
+              borderRadius: 8,
+              fontWeight: 600,
+              background: effectivePermissions.canCreateDiscounts ? '#DCFCE7' : '#F1F5F9',
+              color: effectivePermissions.canCreateDiscounts ? '#15803D' : '#94A3B8',
+              border: `1px solid ${effectivePermissions.canCreateDiscounts ? '#BBF7D0' : '#E2E8F0'}`
+            }}
+            title={effectivePermissions.canCreateDiscounts ? "Offers creation permitted by owner" : "Offers creation locked by owner"}
+          >
+            {effectivePermissions.canCreateDiscounts ? '✓ Offers Allowed' : '🔒 Offers Locked'}
+          </span>
+        </div>
+      </div>
 
       {/* Sub-Nav Tabs (Strict Design System Rules) */}
       <div className="filter-tabs-container" style={{ padding: '0 0 12px' }}>
@@ -864,13 +1008,28 @@ export default function CounterView({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button
                       className="btn-secondary-pill"
-                      style={{ padding: '6px 10px', fontSize: 11 }}
+                      style={{
+                        padding: '6px 10px',
+                        fontSize: 11,
+                        opacity: effectivePermissions.canEditPrice ? 1 : 0.6,
+                        cursor: effectivePermissions.canEditPrice ? 'pointer' : 'not-allowed',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3
+                      }}
                       onClick={() => {
+                        if (!effectivePermissions.canEditPrice) {
+                          playAlertChime();
+                          alert(`Access Restricted: Staff member "${currentStaff?.name || 'Operator'}" is not authorized by the owner to edit item prices.`);
+                          return;
+                        }
                         setEditingItem(item);
                         setNewPrice(item.price.toString());
                       }}
+                      title={effectivePermissions.canEditPrice ? "Edit Item Price" : "Price editing locked by Owner"}
                     >
-                      Edit ₹
+                      {!effectivePermissions.canEditPrice && <Lock size={10} color="#94A3B8" />}
+                      <span>Edit ₹</span>
                     </button>
 
                     <button
@@ -901,6 +1060,30 @@ export default function CounterView({
               <Percent size={18} color="#9333EA" />
             </div>
 
+            {/* Permission Restriction Banner */}
+            {!effectivePermissions.canCreateDiscounts && (
+              <div
+                style={{
+                  margin: '10px 0 14px',
+                  padding: '10px 14px',
+                  background: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  borderRadius: 12,
+                  color: '#B91C1C',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <Lock size={15} color="#DC2626" />
+                <span>
+                  Offers &amp; Discounts Creation Locked for <strong>{currentStaff?.name || 'Current Staff'}</strong>. The restaurant owner can grant "Can Issue Offers" in the Owner Admin Staff &amp; Payroll section.
+                </span>
+              </div>
+            )}
+
             <form onSubmit={handleCreateOffer}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                 <div>
@@ -911,6 +1094,7 @@ export default function CounterView({
                     placeholder="e.g. ADVAIT20"
                     value={newOfferCode}
                     onChange={(e) => setNewOfferCode(e.target.value)}
+                    disabled={!effectivePermissions.canCreateDiscounts}
                   />
                 </div>
                 <div>
@@ -919,6 +1103,7 @@ export default function CounterView({
                     className="ios-select"
                     value={newOfferType}
                     onChange={(e) => setNewOfferType(e.target.value)}
+                    disabled={!effectivePermissions.canCreateDiscounts}
                   >
                     <option value="percent">Percentage (%)</option>
                     <option value="flat">Flat Amount (₹)</option>
@@ -936,6 +1121,7 @@ export default function CounterView({
                     placeholder="e.g. 500 (0 for none)"
                     value={newOfferMin}
                     onChange={(e) => setNewOfferMin(e.target.value)}
+                    disabled={!effectivePermissions.canCreateDiscounts}
                   />
                 </div>
                 <div>
@@ -945,6 +1131,7 @@ export default function CounterView({
                     className="ios-input"
                     value={newOfferExpiry}
                     onChange={(e) => setNewOfferExpiry(e.target.value)}
+                    disabled={!effectivePermissions.canCreateDiscounts}
                   />
                 </div>
               </div>
@@ -959,6 +1146,7 @@ export default function CounterView({
                     placeholder="e.g. 50"
                     value={newOfferValue}
                     onChange={(e) => setNewOfferValue(e.target.value)}
+                    disabled={!effectivePermissions.canCreateDiscounts}
                   />
                 </div>
                 <div>
@@ -969,13 +1157,23 @@ export default function CounterView({
                     placeholder="e.g. ₹50 Off on Dinner Menu"
                     value={newOfferDesc}
                     onChange={(e) => setNewOfferDesc(e.target.value)}
+                    disabled={!effectivePermissions.canCreateDiscounts}
                   />
                 </div>
               </div>
 
-              <button type="submit" className="btn-primary-pill full-width" style={{ marginBottom: 16 }}>
-                <Tag size={15} />
-                <span>Publish New Offer</span>
+              <button
+                type="submit"
+                className="btn-primary-pill full-width"
+                disabled={!effectivePermissions.canCreateDiscounts}
+                style={{
+                  marginBottom: 16,
+                  opacity: effectivePermissions.canCreateDiscounts ? 1 : 0.5,
+                  cursor: effectivePermissions.canCreateDiscounts ? 'pointer' : 'not-allowed'
+                }}
+              >
+                {effectivePermissions.canCreateDiscounts ? <Tag size={15} /> : <Lock size={15} />}
+                <span>{effectivePermissions.canCreateDiscounts ? 'Publish New Offer' : 'Offer Creation Locked by Owner'}</span>
               </button>
             </form>
 

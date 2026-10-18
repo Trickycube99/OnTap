@@ -117,6 +117,8 @@ export default function AdminView({
   const [staffFilter, setStaffFilter] = useState('all'); // 'all' | 'active' | 'resigned'
   const [staffSearch, setStaffSearch] = useState('');
   const [editingPayInput, setEditingPayInput] = useState({}); // { [staffId]: string }
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [staffSaveSuccess, setStaffSaveSuccess] = useState(false);
 
   // Menu Management Modal State
   const [showAddDishModal, setShowAddDishModal] = useState(false);
@@ -538,9 +540,10 @@ export default function AdminView({
     }
   };
 
-  // User Management
+  // User Management & Permissions
   const handleToggleStaffPermission = (staffId, permKey) => {
     playTapSound();
+    setStaffSaveSuccess(false);
     setStaff((prev) =>
       prev.map((s) =>
         s.id === staffId
@@ -548,12 +551,38 @@ export default function AdminView({
               ...s,
               permissions: {
                 ...s.permissions,
-                [permKey]: !s.permissions[permKey]
+                [permKey]: !s.permissions?.[permKey]
               }
             }
           : s
       )
     );
+  };
+
+  // Explicit Save & Broadcast Handler for Staff and Terminal Permissions
+  const handleSaveStaffAndPermissions = () => {
+    playTapSound();
+    setIsSavingStaff(true);
+
+    // 1. Update state in parent App
+    const updatedStaff = [...staff];
+    setStaff(updatedStaff);
+
+    // 2. Persist in active business record & scoped localStorage
+    const activeBiz = getActiveBusiness();
+    const scopedStaffKey = activeBiz?.id && activeBiz.id !== 'biz_advait'
+      ? `${STORAGE_KEYS.STAFF}_${activeBiz.id}`
+      : STORAGE_KEYS.STAFF;
+    saveData(scopedStaffKey, updatedStaff);
+
+    // 3. Real-time broadcast to all open POS terminals / windows
+    broadcastSyncEvent(SYNC_EVENTS.STAFF_UPDATED, updatedStaff);
+
+    // 4. Success feedback
+    playSuccessChime();
+    setIsSavingStaff(false);
+    setStaffSaveSuccess(true);
+    setTimeout(() => setStaffSaveSuccess(false), 4000);
   };
 
   // Staff Payroll Net Pay Calculation (without attendance)
@@ -1790,10 +1819,29 @@ export default function AdminView({
                 <span className="card-heading">Staff Payroll &amp; Team Management (INR)</span>
                 <span className="card-meta-text">Manage staff profiles, base salaries, resignations &amp; customizable month-end payouts</span>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="btn-primary-pill"
+                  onClick={handleSaveStaffAndPermissions}
+                  style={{
+                    fontSize: 12,
+                    padding: '7px 16px',
+                    background: '#16A34A',
+                    borderColor: '#15803D',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                  title="Save staff roster & broadcast permissions changes to Counter POS"
+                >
+                  <Save size={14} />
+                  <span>{isSavingStaff ? 'Saving...' : 'Save Staff & Permissions'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-secondary-pill"
                   onClick={handleOpenAddStaff}
                   style={{ fontSize: 12, padding: '7px 14px' }}
                 >
@@ -1802,6 +1850,29 @@ export default function AdminView({
                 </button>
               </div>
             </div>
+
+            {/* Real-time Save Confirmation Banner */}
+            {staffSaveSuccess && (
+              <div
+                style={{
+                  margin: '12px 0 6px',
+                  padding: '10px 14px',
+                  background: '#DCFCE7',
+                  border: '1px solid #BBF7D0',
+                  borderRadius: 12,
+                  color: '#15803D',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  animation: 'fadeIn 0.2s ease-in-out'
+                }}
+              >
+                <CheckCircle2 size={16} color="#16A34A" />
+                <span>✓ Staff changes &amp; terminal permissions (Price Editing &amp; Offers) saved and broadcast to all live POS terminals!</span>
+              </div>
+            )}
 
             {/* Filter and Search Bar */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between', margin: '14px 0 12px' }}>
@@ -2079,6 +2150,52 @@ export default function AdminView({
                     </div>
                   );
                 })}
+            </div>
+
+            {/* Bottom Save Staff & Permissions Bar */}
+            <div
+              style={{
+                marginTop: 14,
+                padding: '12px 16px',
+                background: '#F0FDF4',
+                border: '1.5px solid #86EFAC',
+                borderRadius: 14,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 10
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#166534', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ShieldCheck size={16} color="#16A34A" />
+                  <span>Sync Changes to Counter POS &amp; Terminals</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#15803D' }}>
+                  Save all wage modifications, month-end payouts, and terminal permissions (Edit Price &amp; Issue Offers).
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="btn-primary-pill"
+                onClick={handleSaveStaffAndPermissions}
+                style={{
+                  fontSize: 12,
+                  padding: '8px 20px',
+                  background: '#16A34A',
+                  borderColor: '#15803D',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontWeight: 700,
+                  boxShadow: '0 2px 8px rgba(22, 163, 74, 0.25)'
+                }}
+              >
+                <Save size={14} />
+                <span>{isSavingStaff ? 'Saving...' : 'Save Staff & Permissions'}</span>
+              </button>
             </div>
 
             {/* Corporate Bank Salary Disbursal Card */}
