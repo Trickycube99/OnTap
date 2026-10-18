@@ -8,6 +8,7 @@ import AboutChefView from './views/AboutChefView';
 import CounterView from './views/CounterView';
 import AdminView from './views/AdminView';
 import DeveloperAdminView from './views/DeveloperAdminView';
+import AuthActionView from './views/AuthActionView';
 import {
   initialMenu,
   verifiedChefData,
@@ -102,6 +103,30 @@ export default function App() {
   const [authSessions, setAuthSessions] = useState(() => getStoredSessions());
   const [authModal, setAuthModal] = useState({ isOpen: false, targetRole: null });
   const [isTableQrOpen, setIsTableQrOpen] = useState(false);
+
+  // Dedicated Firebase Auth Action State (Email Verification & Password Reset)
+  const [authActionState, setAuthActionState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+      const hashParams = new URLSearchParams(hashQuery);
+      const mode = urlParams.get('mode') || hashParams.get('mode');
+      const oobCode = urlParams.get('oobCode') || hashParams.get('oobCode') || urlParams.get('code') || hashParams.get('code');
+      const rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase().split('?')[0];
+
+      if (mode === 'verifyEmail' || mode === 'resetPassword') {
+        return { mode, oobCode: oobCode || '' };
+      }
+      if (rawHash === 'verify-email' || rawHash === 'verifyemail') {
+        return { mode: 'verifyEmail', oobCode: oobCode || '' };
+      }
+      if (rawHash === 'reset-password' || rawHash === 'resetpassword') {
+        return { mode: 'resetPassword', oobCode: oobCode || '' };
+      }
+    }
+    return null;
+  });
+
   const [switchedFromAdmin, setSwitchedFromAdmin] = useState(() => {
     if (typeof sessionStorage !== 'undefined') {
       return sessionStorage.getItem('flowscape_switched_from_admin') === 'true';
@@ -247,7 +272,26 @@ export default function App() {
   // URL Hash & Parameter Routing Guard
   useEffect(() => {
     const syncFromUrl = () => {
+      // 1. Intercept Firebase Auth Action links (Email Verification & Password Reset)
       const urlParams = new URLSearchParams(window.location.search);
+      const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+      const hashParams = new URLSearchParams(hashQuery);
+
+      const mode = urlParams.get('mode') || hashParams.get('mode');
+      const oobCode = urlParams.get('oobCode') || hashParams.get('oobCode') || urlParams.get('code') || hashParams.get('code');
+
+      const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+      const rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase().split('?')[0];
+      const route = rawHash || rawPath;
+
+      if (mode === 'verifyEmail' || mode === 'resetPassword' || route === 'verify-email' || route === 'reset-password') {
+        setAuthActionState({
+          mode: mode || (route.includes('reset') ? 'resetPassword' : 'verifyEmail'),
+          oobCode: oobCode || ''
+        });
+        return; // HALT ROUTING! Do NOT redirect to customer interface!
+      }
+
       const tableParam = urlParams.get('table') || urlParams.get('t');
       if (tableParam) {
         const cleanTable = tableParam.toLowerCase().startsWith('table')
@@ -257,10 +301,6 @@ export default function App() {
         setCurrentRole('customer');
         setActiveTab('menu');
       }
-
-      const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
-      const rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
-      const route = rawHash || rawPath;
 
       let targetRole = null;
       if (route === 'chef') {
@@ -589,6 +629,43 @@ export default function App() {
 
   const cartTotal = cart.reduce((a, b) => a + b.price * b.quantity, 0);
   const cartCount = cart.reduce((a, b) => a + b.quantity, 0);
+
+  // Dedicated Render for Email Verification & Password Reset (Without redirecting to customer interface)
+  if (authActionState) {
+    return (
+      <div className="app-container" style={{ minHeight: '100vh', background: '#0B0F19' }}>
+        <AuthActionView
+          actionState={authActionState}
+          theme={theme}
+          onOpenLogin={() => {
+            try {
+              window.history.replaceState({}, document.title, window.location.pathname);
+            } catch {}
+            setAuthActionState(null);
+            setCurrentRole('admin');
+            window.location.hash = 'admin';
+            setAuthModal({ isOpen: true, targetRole: 'admin' });
+          }}
+        />
+
+        {/* Mounted AuthModal so clicking 'Go to Owner Login' pops up login smoothly */}
+        <AuthModal
+          isOpen={authModal.isOpen}
+          targetRole={authModal.targetRole || 'admin'}
+          activeSessionRole={authSessions?.admin?.token ? 'admin' : authSessions?.counter?.token ? 'counter' : currentRole}
+          onSuccess={handleAuthSuccess}
+          onClose={() => {
+            setAuthModal({ isOpen: false, targetRole: null });
+            if (currentRole !== authModal.targetRole) {
+              window.location.hash = currentRole || 'admin';
+            }
+          }}
+          theme={theme}
+          staff={staff}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">

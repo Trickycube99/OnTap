@@ -12,6 +12,9 @@ import {
   signInWithEmailAndPassword,
   sendEmailVerification,
   sendPasswordResetEmail,
+  applyActionCode,
+  verifyPasswordResetCode,
+  confirmPasswordReset,
   signOut,
   reload
 } from 'firebase/auth';
@@ -352,6 +355,147 @@ export async function resendVerificationLink({ email, password }) {
   }
 
   return { success: false, error: 'Account not found.' };
+}
+
+/**
+ * 4. APPLY EMAIL VERIFICATION CODE (FROM EMAIL LINK)
+ * Automatically marks the user's email as verified in Firebase Auth.
+ */
+export async function handleVerifyEmailAction(oobCode) {
+  if (!oobCode) {
+    return { success: false, error: 'Invalid or missing email verification code.' };
+  }
+
+  const auth = getFirebaseAuth();
+
+  if (auth) {
+    try {
+      await applyActionCode(auth, oobCode);
+
+      // Also ensure matching local business record is marked as verified
+      const businesses = getBusinesses();
+      let updated = false;
+      const updatedBiz = businesses.map((b) => {
+        if (b.emailVerified === false) {
+          updated = true;
+          return { ...b, emailVerified: true };
+        }
+        return b;
+      });
+      if (updated) {
+        try {
+          localStorage.setItem('flowscape_businesses_v1', JSON.stringify(updatedBiz));
+        } catch {}
+      }
+
+      return {
+        success: true,
+        message: 'Email verified, you can now login'
+      };
+    } catch (error) {
+      if (error.code === 'auth/invalid-action-code') {
+        return {
+          success: true,
+          alreadyUsed: true,
+          message: 'Email verified, you can now login'
+        };
+      }
+      return { success: false, error: formatAuthError(error) };
+    }
+  }
+
+  // Local fallback mode: mark business as verified
+  const businesses = getBusinesses();
+  const updatedBiz = businesses.map((b) => ({ ...b, emailVerified: true }));
+  try {
+    localStorage.setItem('flowscape_businesses_v1', JSON.stringify(updatedBiz));
+  } catch {}
+
+  return {
+    success: true,
+    message: 'Email verified, you can now login'
+  };
+}
+
+/**
+ * 5. VERIFY PASSWORD RESET CODE (FROM EMAIL LINK)
+ * Verifies code validity and retrieves the email for which reset was requested.
+ */
+export async function handleVerifyPasswordResetCode(oobCode) {
+  if (!oobCode) {
+    return { success: false, error: 'Invalid or missing password reset code.' };
+  }
+
+  const auth = getFirebaseAuth();
+
+  if (auth) {
+    try {
+      const email = await verifyPasswordResetCode(auth, oobCode);
+      return { success: true, email };
+    } catch (error) {
+      return { success: false, error: formatAuthError(error) };
+    }
+  }
+
+  // Local fallback mode
+  return {
+    success: true,
+    email: 'admin@advaitkitchen.com'
+  };
+}
+
+/**
+ * 6. CONFIRM PASSWORD RESET (FROM EMAIL LINK)
+ * Submits the new password to Firebase Auth.
+ */
+export async function handleConfirmPasswordReset(oobCode, newPassword) {
+  const cleanPassword = (newPassword || '').trim();
+
+  if (!cleanPassword || cleanPassword.length < 6) {
+    return { success: false, error: 'New password must be at least 6 characters long.' };
+  }
+
+  const auth = getFirebaseAuth();
+
+  if (auth) {
+    try {
+      await confirmPasswordReset(auth, oobCode, cleanPassword);
+
+      // Also update local business owner PIN if applicable
+      const businesses = getBusinesses();
+      if (cleanPassword.length <= 8 && /^\d+$/.test(cleanPassword)) {
+        const updatedBiz = businesses.map((b) => ({
+          ...b,
+          owner: { ...b.owner, pin: cleanPassword }
+        }));
+        try {
+          localStorage.setItem('flowscape_businesses_v1', JSON.stringify(updatedBiz));
+        } catch {}
+      }
+
+      return {
+        success: true,
+        message: 'Password changed for your email. Please go to the login page and try again.'
+      };
+    } catch (error) {
+      return { success: false, error: formatAuthError(error) };
+    }
+  }
+
+  // Local fallback mode: update owner PIN
+  const businesses = getBusinesses();
+  const updatedBiz = businesses.map((b) => ({
+    ...b,
+    owner: { ...b.owner, pin: cleanPassword }
+  }));
+  try {
+    localStorage.setItem('flowscape_businesses_v1', JSON.stringify(updatedBiz));
+  } catch {}
+
+  return {
+    success: true,
+    message: 'Password changed for your email. Please go to the login page and try again.'
+  };
 }
 
 /**
