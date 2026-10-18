@@ -12,7 +12,6 @@ import {
   Edit2,
   CheckCircle2,
   Award,
-  FileCode,
   Send,
   QrCode,
   Tag,
@@ -31,11 +30,7 @@ import {
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import BankReconciliationView from './BankReconciliationView';
 import InventoryView from './InventoryView';
-import LoyaltyView from './LoyaltyView';
-import AggregatorReconciliationView from './AggregatorReconciliationView';
-import MultiBranchView from './MultiBranchView';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
-import { exportToTallyPrimeXml, exportToZohoBooksCsv } from '../utils/accountingExport';
 import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
 import { STORAGE_KEYS, saveData } from '../utils/storage';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
@@ -350,7 +345,7 @@ export default function AdminView({
     (theme?.upcomingObligations?.rent || 0) +
     (theme?.upcomingObligations?.payroll || 0) +
     (theme?.upcomingObligations?.emi || 0);
-  const totalAvailableFunds = (theme?.cashInHand || 0) + (theme?.pendingAggregatorSettlement || 0);
+  const totalAvailableFunds = theme?.cashInHand || 0;
   const isCashCrunchAlert = totalAvailableFunds < totalUpcomingObligations;
 
   // Top Items Analytics (FR-A4)
@@ -736,10 +731,6 @@ export default function AdminView({
           { id: 'bank-rec', label: 'Bank CSV Rec', inFooter: false },
           { id: 'payroll', label: 'Staff Payroll', inFooter: true },
           { id: 'inventory', label: 'Inventory & Wastage', inFooter: false },
-          { id: 'loyalty', label: 'Loyalty Club', inFooter: false },
-          { id: 'aggregators', label: 'Zomato & Swiggy', inFooter: false },
-          { id: 'branches', label: 'Multi-Branch', inFooter: false },
-          { id: 'accounting', label: 'Tally / Zoho', inFooter: false },
           { id: 'menu', label: 'Menu CRUD', inFooter: false },
           { id: 'branding', label: 'App Customizer', inFooter: true }
         ].map((tab) => (
@@ -1142,7 +1133,7 @@ export default function AdminView({
                 <span>Section 5.4 Alert: Cash Position Below Fixed Obligations!</span>
               </div>
               <div style={{ fontSize: 12, color: '#991B1B', marginTop: 4 }}>
-                Available Funds (Cash in Hand ₹{theme.cashInHand.toLocaleString('en-IN')} + Pending Zomato/Swiggy ₹{theme.pendingAggregatorSettlement.toLocaleString('en-IN')} = ₹{totalAvailableFunds.toLocaleString('en-IN')}) is below upcoming obligations (₹{totalUpcomingObligations.toLocaleString('en-IN')}: Rent ₹{theme.upcomingObligations.rent.toLocaleString('en-IN')}, Payroll ₹{theme.upcomingObligations.payroll.toLocaleString('en-IN')}, EMI ₹{theme.upcomingObligations.emi.toLocaleString('en-IN')}) due on {theme.upcomingObligations.dueDate}.
+                Available Funds (Cash in Hand ₹{totalAvailableFunds.toLocaleString('en-IN')}) is below upcoming obligations (₹{totalUpcomingObligations.toLocaleString('en-IN')}: Rent ₹{theme.upcomingObligations.rent.toLocaleString('en-IN')}, Payroll ₹{theme.upcomingObligations.payroll.toLocaleString('en-IN')}, EMI ₹{theme.upcomingObligations.emi.toLocaleString('en-IN')}) due on {theme.upcomingObligations.dueDate}.
               </div>
             </div>
           ) : (
@@ -1208,23 +1199,7 @@ export default function AdminView({
               </div>
             </div>
 
-            {/* Aggregator Pending Line (Section 5.4 requirement) */}
-            <div
-              style={{
-                background: '#F9FAFB',
-                padding: '10px 12px',
-                borderRadius: 12,
-                fontSize: 12,
-                display: 'flex',
-                justifyContent: 'space-between',
-                color: 'var(--text-secondary)'
-              }}
-            >
-              <span>Pending Zomato & Swiggy Settlements (Receivable):</span>
-              <strong>₹{theme.pendingAggregatorSettlement.toLocaleString('en-IN')}</strong>
-            </div>
-
-            <div className="card-bottom-progress">
+            <div className="card-bottom-progress" style={{ marginTop: 12 }}>
               <div className="card-bottom-progress-fill done" style={{ width: '100%' }} />
             </div>
           </div>
@@ -1827,111 +1802,7 @@ export default function AdminView({
         <InventoryView menu={menu} />
       )}
 
-      {/* PHASE 3: CUSTOMER LOYALTY CLUB */}
-      {activeAdminTab === 'loyalty' && (
-        <LoyaltyView theme={theme} />
-      )}
 
-      {/* PHASE 3: ZOMATO & SWIGGY AGGREGATOR RECONCILIATION */}
-      {activeAdminTab === 'aggregators' && (
-        <AggregatorReconciliationView />
-      )}
-
-      {/* PHASE 3: MULTI-BRANCH OUTLETS */}
-      {activeAdminTab === 'branches' && (
-        <MultiBranchView theme={theme} chef={chef} />
-      )}
-
-      {/* PHASE 3: ACCOUNTING EXPORT (TALLY & ZOHO) */}
-      {activeAdminTab === 'accounting' && (
-        <div>
-          <div className="ios-card active-gradient" style={{ marginBottom: 16 }}>
-            <div className="card-top-row">
-              <div className="card-title-group">
-                <span className="card-heading">Accounting Software Integration</span>
-                <span className="card-meta-text">Tally Prime XML & Zoho Books Direct Schema Export (Phase 3)</span>
-              </div>
-              <FileCode size={20} color="#007AFF" />
-            </div>
-
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
-              Eliminate manual bookkeeping. Automatically map QR orders, cash/card/UPI splits, and 5% GST tax ledgers into your chartered accountant's software.
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-              {/* Tally Prime XML Card */}
-              <div
-                style={{
-                  padding: 14,
-                  background: '#FFFFFF',
-                  borderRadius: 14,
-                  border: '1px solid #E5E7EB'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#007AFF', fontSize: 13 }}>
-                    T
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 700 }}>Tally Prime XML</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Voucher & Master Import</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 12 }}>
-                  Includes Sales Vouchers, Output CGST 2.5%, SGST 2.5%, and Party/Bank ledgers.
-                </div>
-                <button
-                  className="btn-primary-pill full-width"
-                  style={{ fontSize: 12, padding: '8px 12px' }}
-                  onClick={() => {
-                    playTapSound();
-                    exportToTallyPrimeXml(orders, theme);
-                    playSuccessChime();
-                  }}
-                >
-                  <Download size={13} />
-                  <span>Download Tally XML</span>
-                </button>
-              </div>
-
-              {/* Zoho Books CSV Card */}
-              <div
-                style={{
-                  padding: 14,
-                  background: '#FFFFFF',
-                  borderRadius: 14,
-                  border: '1px solid #E5E7EB'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#D97706', fontSize: 13 }}>
-                    Z
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 700 }}>Zoho Books CSV</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Multi-Column Invoice Import</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 12 }}>
-                  Standard Zoho Books schema with line items, tax percentage, and payment modes.
-                </div>
-                <button
-                  className="btn-secondary-pill full-width"
-                  style={{ fontSize: 12, padding: '8px 12px', color: '#D97706', borderColor: '#FDE68A' }}
-                  onClick={() => {
-                    playTapSound();
-                    exportToZohoBooksCsv(orders, theme);
-                    playSuccessChime();
-                  }}
-                >
-                  <Download size={13} />
-                  <span>Download Zoho CSV</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 5. MENU MANAGEMENT CRUD (FR-A7) */}
       {activeAdminTab === 'menu' && (
