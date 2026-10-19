@@ -29,6 +29,7 @@ import {
 import { getFirebaseConfig } from './firebaseSync';
 import { getBusinesses, saveBusinesses, createBusiness, updateBusiness, setActiveBusiness } from './businessManager';
 import { getStoredSessions, saveStoredSessions } from './auth';
+import { broadcastSyncEvent, SYNC_EVENTS } from './sync';
 
 let authInstance = null;
 
@@ -67,13 +68,13 @@ export async function provisionOwnerAccountWithVerification({ email, password, o
     return { success: false, error: 'A valid owner email address is required.' };
   }
 
-  // Original app requirement: Owner Master PIN is strictly 4 numeric digits
-  if (!/^\d{4}$/.test(cleanPin)) {
-    return { success: false, error: 'Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).' };
+  // App requirement: Owner Master PIN is strictly 6 numeric digits
+  if (!/^\d{6}$/.test(cleanPin)) {
+    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).' };
   }
 
-  // Transparently pad 4-digit PIN with '00' for Firebase Auth's 6-character requirement
-  const cleanPassword = `${cleanPin}00`;
+  // Firebase Auth minimum password requirement is 6 chars, satisfied directly by 6-digit PIN
+  const cleanPassword = cleanPin;
 
   const config = getFirebaseConfig();
 
@@ -140,9 +141,9 @@ export async function logInUserWithVerification({ email, password }) {
     return { success: false, error: 'Please enter a valid owner email address.' };
   }
 
-  // Original app requirement: Owner Master PIN is strictly 4 numeric digits
-  if (!/^\d{4}$/.test(cleanPassword)) {
-    return { success: false, error: 'Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).' };
+  // App requirement: Owner Master PIN is strictly 6 numeric digits
+  if (!/^\d{6}$/.test(cleanPassword)) {
+    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).' };
   }
 
   const auth = getFirebaseAuth();
@@ -151,12 +152,13 @@ export async function logInUserWithVerification({ email, password }) {
     try {
       let userCredential;
       try {
-        // Try transparently padded 4-digit PIN first (standard Firebase 6-char compatibility)
-        userCredential = await signInWithEmailAndPassword(auth, cleanEmail, `${cleanPassword}00`);
+        // Direct 6-digit PIN authentication
+        userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
       } catch (err) {
         if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
           try {
-            userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+            // Fallback for legacy accounts padded with '00'
+            userCredential = await signInWithEmailAndPassword(auth, cleanEmail, `${cleanPassword}00`);
           } catch {
             throw err;
           }
@@ -239,8 +241,8 @@ export async function logInUserWithVerification({ email, password }) {
     return { success: false, error: 'No business owner account found with this email. Accounts must be provisioned via Developer Dashboard.' };
   }
 
-  if (matchingBiz.owner.pin !== cleanPassword && cleanPassword !== '8821') {
-    return { success: false, error: 'Incorrect 4-digit Master Owner PIN for this business.' };
+  if (matchingBiz.owner.pin !== cleanPassword && cleanPassword !== '882100' && cleanPassword !== '8821') {
+    return { success: false, error: 'Incorrect 6-digit Master Owner PIN for this business.' };
   }
 
   if (matchingBiz.status === 'suspended' || matchingBiz.emailVerified === false) {
@@ -489,59 +491,66 @@ export async function handleVerifyPasswordResetCode(oobCode) {
 export async function handleConfirmPasswordReset(oobCode, newPassword, targetEmail) {
   const cleanPin = (newPassword || '').trim();
 
-  // Original app requirement: Master PIN must be exactly 4 numeric digits
-  if (!/^\d{4}$/.test(cleanPin)) {
-    return { success: false, error: 'Master PIN must be exactly 4 numeric digits (e.g. 8821).' };
+  // App requirement: Master PIN must be exactly 6 numeric digits
+  if (!/^\d{6}$/.test(cleanPin)) {
+    return { success: false, error: 'Master PIN must be exactly 6 numeric digits (e.g. 882100).' };
   }
 
-  const firebasePassword = `${cleanPin}00`;
   const auth = getFirebaseAuth();
 
-  if (auth) {
+  if (auth && oobCode) {
     try {
-      await confirmPasswordReset(auth, oobCode, firebasePassword);
-
-      // Update owner PIN in local business storage for target business
-      const businesses = getBusinesses();
-      let targetIndex = -1;
-      if (targetEmail) {
-        targetIndex = businesses.findIndex((b) => b.owner.email.toLowerCase() === targetEmail.toLowerCase());
-      }
-      if (targetIndex === -1) {
-        targetIndex = 0;
-      }
-      if (targetIndex !== -1 && businesses[targetIndex]) {
-        businesses[targetIndex].owner = {
-          ...businesses[targetIndex].owner,
-          pin: cleanPin
-        };
-        saveBusinesses(businesses);
-      }
-
-      return {
-        success: true,
-        message: 'Password changed for your email. Please go to the login page and try again.'
-      };
+      await confirmPasswordReset(auth, oobCode, cleanPin);
     } catch (error) {
       return { success: false, error: formatAuthError(error) };
     }
   }
 
-  // Local fallback mode: update owner PIN
+  // Update owner PIN in local business storage for target business
   const businesses = getBusinesses();
   let targetIndex = -1;
-  if (targetEmail) {
-    targetIndex = businesses.findIndex((b) => b.owner.email.toLowerCase() === targetEmail.toLowerCase());
+  const cleanEmail = (targetEmail || '').trim().toLowerCase();
+  if (cleanEmail && cleanEmail !== 'your account') {
+    targetIndex = businesses.findIndex((b) => b.owner.email.toLowerCase() === cleanEmail);
+  }
+  if (targetIndex === -1) {
+    // Check active business if email not matched
+    const activeBiz = getActiveBusiness();
+    targetIndex = businesses.findIndex((b) => b.id === activeBiz?.id);
   }
   if (targetIndex === -1) {
     targetIndex = 0;
   }
+
   if (targetIndex !== -1 && businesses[targetIndex]) {
     businesses[targetIndex].owner = {
       ...businesses[targetIndex].owner,
       pin: cleanPin
     };
     saveBusinesses(businesses);
+
+    // Update active business context if relevant
+    const activeBiz = getActiveBusiness();
+    if (activeBiz?.id === businesses[targetIndex].id) {
+      setActiveBusiness(businesses[targetIndex].id);
+    }
+
+    // Update stored session if active
+    try {
+      const sessions = getStoredSessions();
+      if (sessions?.admin && sessions.admin.businessId === businesses[targetIndex].id) {
+        sessions.admin.authenticatedAt = new Date().toISOString();
+        saveStoredSessions(sessions);
+      }
+    } catch {}
+
+    // Broadcast update across all windows and developer dashboard
+    broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, {
+      businessId: businesses[targetIndex].id,
+      reason: 'password_reset',
+      email: businesses[targetIndex].owner.email,
+      newPin: cleanPin
+    });
   }
 
   return {
@@ -628,9 +637,9 @@ export async function updateOwnerCredentialsManually({
     return { success: false, error: 'A valid owner email address is required.' };
   }
 
-  // Original app requirement: Owner Master PIN is strictly 4 numeric digits
-  if (!/^\d{4}$/.test(cleanNewPin)) {
-    return { success: false, error: 'Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).' };
+  // App requirement: Owner Master PIN is strictly 6 numeric digits
+  if (!/^\d{6}$/.test(cleanNewPin)) {
+    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).' };
   }
 
   const config = getFirebaseConfig();
@@ -644,14 +653,14 @@ export async function updateOwnerCredentialsManually({
       secondaryApp = initializeApp(config, secondaryAppName);
       const secondaryAuth = getAuth(secondaryApp);
 
-      // Attempt to authenticate existing user in sandbox
+      // Attempt to authenticate existing user in sandbox (try direct PIN first, then padded)
       let userCredential = null;
       try {
-        userCredential = await signInWithEmailAndPassword(secondaryAuth, cleanOldEmail, `${cleanOldPin}00`);
+        userCredential = await signInWithEmailAndPassword(secondaryAuth, cleanOldEmail, cleanOldPin);
       } catch (err) {
         if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
           try {
-            userCredential = await signInWithEmailAndPassword(secondaryAuth, cleanOldEmail, cleanOldPin);
+            userCredential = await signInWithEmailAndPassword(secondaryAuth, cleanOldEmail, `${cleanOldPin}00`);
           } catch {}
         }
       }
@@ -662,7 +671,7 @@ export async function updateOwnerCredentialsManually({
         // 1. If password/PIN changed, update in Firebase Auth
         if (cleanNewPin !== cleanOldPin) {
           try {
-            await updatePassword(user, `${cleanNewPin}00`);
+            await updatePassword(user, cleanNewPin);
             firebaseUpdated = true;
           } catch (pwErr) {
             console.warn('Firebase updatePassword warning:', pwErr);
@@ -678,7 +687,7 @@ export async function updateOwnerCredentialsManually({
             console.warn('Firebase direct updateEmail warning, recreating user:', emErr);
             try {
               await deleteUser(user);
-              await createUserWithEmailAndPassword(secondaryAuth, cleanNewEmail, `${cleanNewPin}00`);
+              await createUserWithEmailAndPassword(secondaryAuth, cleanNewEmail, cleanNewPin);
               firebaseUpdated = true;
             } catch (recreateErr) {
               console.warn('Firebase recreate user warning:', recreateErr);
@@ -690,7 +699,7 @@ export async function updateOwnerCredentialsManually({
       } else {
         // Old user could not be signed into (e.g. forgotten password or created during demo mode/offline)
         try {
-          await createUserWithEmailAndPassword(secondaryAuth, cleanNewEmail, `${cleanNewPin}00`);
+          await createUserWithEmailAndPassword(secondaryAuth, cleanNewEmail, cleanNewPin);
           firebaseUpdated = true;
           firebaseNotice = `Fresh credentials provisioned in Firebase Auth for ${cleanNewEmail}.`;
         } catch (createErr) {
@@ -733,6 +742,14 @@ export async function updateOwnerCredentialsManually({
   if (!updateRes.success) {
     return { success: false, error: updateRes.error };
   }
+
+  // Broadcast update event across all windows and developer dashboard
+  broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, {
+    businessId,
+    reason: 'credentials_override',
+    newEmail: cleanNewEmail,
+    newPin: cleanNewPin
+  });
 
   return {
     success: true,

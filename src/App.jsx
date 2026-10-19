@@ -65,11 +65,14 @@ export const normalizeStaffCredentials = (staffList) => {
   if (!Array.isArray(staffList)) return [];
   return staffList.map((emp, idx) => {
     const defaultLoginId = emp.loginId || (emp.name ? emp.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.pos' : `staff${idx + 1}.pos`);
-    const defaultPin = emp.pin ? String(emp.pin).trim() : String(4401 + idx);
+    let rawPin = emp.pin ? String(emp.pin).trim() : String(440100 + idx);
+    if (rawPin.length < 6) {
+      rawPin = rawPin.padEnd(6, '0');
+    }
     return {
       ...emp,
       loginId: defaultLoginId,
-      pin: defaultPin
+      pin: rawPin.slice(0, 6)
     };
   });
 };
@@ -347,6 +350,17 @@ export default function App() {
         if (msg.payload) setChef(msg.payload);
       } else if (msg.type === SYNC_EVENTS.STAFF_UPDATED) {
         if (Array.isArray(msg.payload)) setStaff(normalizeStaffCredentials(msg.payload));
+      } else if (msg.type === SYNC_EVENTS.BUSINESSES_UPDATED || msg.type === SYNC_EVENTS.CREDENTIALS_UPDATED) {
+        const freshBiz = getActiveBusiness();
+        if (freshBiz) {
+          setTheme((prev) => ({
+            ...prev,
+            restaurantName: freshBiz.name,
+            tagline: freshBiz.tagline || prev.tagline,
+            upiId: freshBiz.upiId || prev.upiId,
+            accentColor: freshBiz.accentColor || prev.accentColor
+          }));
+        }
       } else if (msg.type === SYNC_EVENTS.BUSINESS_DELETED) {
         if (msg.payload?.businessId === activeBusinessId) {
           const fallbackBiz = getActiveBusiness();

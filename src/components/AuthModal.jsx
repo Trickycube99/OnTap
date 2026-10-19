@@ -135,10 +135,10 @@ export default function AuthModal({
       }
 
       // Flow B: User Log In with Strict Verification Check (blocks unverified accounts)
-      if (!/^\d{4}$/.test(pin.trim())) {
+      if (!/^\d{6}$/.test(pin.trim())) {
         playAlertChime();
         setIsSubmitting(false);
-        setErrorMessage('Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).');
+        setErrorMessage('Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).');
         return;
       }
 
@@ -437,7 +437,7 @@ export default function AuthModal({
                 <label className="auth-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <KeyRound size={13} />
-                    <span>4-Digit Secret POS PIN *</span>
+                    <span>6-Digit Secret POS PIN *</span>
                   </div>
                   <button
                     type="button"
@@ -453,15 +453,17 @@ export default function AuthModal({
                     type={showPin ? 'text' : 'password'}
                     required
                     autoFocus
-                    placeholder="Enter your 4-Digit Secret PIN"
+                    placeholder="Enter your 6-Digit Secret PIN"
                     className="auth-input"
-                    maxLength={8}
+                    maxLength={6}
+                    pattern="[0-9]*"
+                    inputMode="numeric"
                     value={pin}
-                    onChange={(e) => setPin(e.target.value)}
-                    style={{ letterSpacing: showPin ? 'normal' : '0.15em', fontWeight: 700 }}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    style={{ letterSpacing: showPin ? 'normal' : '0.2em', fontWeight: 700 }}
                   />
                 </div>
-                <span className="auth-hint">Enter your personal 4-digit staff PIN (or Owner master PIN) to unlock this station.</span>
+                <span className="auth-hint">Enter your personal 6-digit staff PIN (or Owner master PIN) to unlock this station.</span>
               </div>
             </>
           )}
@@ -491,7 +493,7 @@ export default function AuthModal({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                   <label className="auth-label" style={{ margin: 0 }}>
                     <KeyRound size={13} />
-                    <span>Owner Master PIN (4 Digits) *</span>
+                    <span>Owner Master PIN (6 Digits) *</span>
                   </label>
                   <button
                     type="button"
@@ -519,13 +521,13 @@ export default function AuthModal({
                   <input
                     type={showPin ? 'text' : 'password'}
                     required
-                    maxLength={4}
+                    maxLength={6}
                     pattern="[0-9]*"
                     inputMode="numeric"
-                    placeholder="Enter 4-digit PIN (e.g. 8821)"
+                    placeholder="Enter 6-digit PIN (e.g. 882100)"
                     className="auth-input"
                     value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     style={{
                       width: '100%',
                       paddingRight: 40,
@@ -552,7 +554,7 @@ export default function AuthModal({
                     {showPin ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
-                <span className="auth-hint">Original App Constraint: Exactly 4 numeric digits. Accounts remain suspended until email is verified.</span>
+                <span className="auth-hint">Platform Requirement: Exactly 6 numeric digits. Accounts remain suspended until email is verified.</span>
               </div>
             </>
           )}

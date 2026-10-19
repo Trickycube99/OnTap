@@ -48,7 +48,9 @@ export const SYNC_EVENTS = {
   THEME_UPDATED: 'THEME_UPDATED',
   CHEF_UPDATED: 'CHEF_UPDATED',
   STAFF_UPDATED: 'STAFF_UPDATED',
-  BUSINESS_DELETED: 'BUSINESS_DELETED'
+  BUSINESS_DELETED: 'BUSINESS_DELETED',
+  BUSINESSES_UPDATED: 'BUSINESSES_UPDATED',
+  CREDENTIALS_UPDATED: 'CREDENTIALS_UPDATED'
 };
 
 const currentClientId = Math.random().toString(36).substring(2, 9);
@@ -107,14 +109,19 @@ export function broadcastSyncEvent(type, payload = {}, targetBusinessId = null) 
 export function subscribeSyncEvents(callback, filterBusinessId = null) {
   if (typeof window === 'undefined') return () => {};
 
+  const isPlatformEvent = (type) =>
+    type === SYNC_EVENTS.BUSINESS_DELETED ||
+    type === SYNC_EVENTS.BUSINESSES_UPDATED ||
+    type === SYNC_EVENTS.CREDENTIALS_UPDATED;
+
   const handleBroadcast = (event) => {
     if (event && event.data && callback) {
       const msg = event.data;
       const targetBizId = filterBusinessId || getActiveBusiness()?.id;
 
       // STRICT MULTI-TENANT ISOLATION:
-      // Drop any event originating from a different business account!
-      if (msg.businessId && targetBizId && msg.businessId !== targetBizId && msg.type !== SYNC_EVENTS.BUSINESS_DELETED) {
+      // Drop any event originating from a different business account (unless platform-wide event)!
+      if (msg.businessId && targetBizId && msg.businessId !== targetBizId && !isPlatformEvent(msg.type)) {
         return;
       }
       callback(msg);
@@ -127,7 +134,7 @@ export function subscribeSyncEvents(callback, filterBusinessId = null) {
     if (e.key === 'flowscape_sync_event_ping' && e.newValue) {
       try {
         const parsed = JSON.parse(e.newValue);
-        if (parsed.businessId && targetBizId && parsed.businessId !== targetBizId && parsed.type !== SYNC_EVENTS.BUSINESS_DELETED) {
+        if (parsed.businessId && targetBizId && parsed.businessId !== targetBizId && !isPlatformEvent(parsed.type)) {
           return;
         }
         if (callback) callback(parsed);

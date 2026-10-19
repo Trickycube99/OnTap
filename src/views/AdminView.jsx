@@ -712,7 +712,7 @@ export default function AdminView({
       canEditPrice: false,
       canCreateDiscounts: false,
       loginId: '',
-      pin: String(Math.floor(1000 + Math.random() * 9000))
+      pin: String(Math.floor(100000 + Math.random() * 900000))
     });
     setShowStaffModal(true);
   };
@@ -732,7 +732,7 @@ export default function AdminView({
       canEditPrice: Boolean(emp.permissions?.canEditPrice),
       canCreateDiscounts: Boolean(emp.permissions?.canCreateDiscounts),
       loginId: emp.loginId || `${(emp.name || '').toLowerCase().replace(/\s+/g, '')}.pos`,
-      pin: emp.pin || '4401'
+      pin: emp.pin || '440100'
     });
     setShowStaffModal(true);
   };
@@ -755,7 +755,11 @@ export default function AdminView({
       : wage;
 
     const cleanLoginId = (staffFormData.loginId || '').trim() || `${staffFormData.name.trim().toLowerCase().replace(/\s+/g, '')}.pos`;
-    const cleanPin = (staffFormData.pin || '').trim() || String(Math.floor(1000 + Math.random() * 9000));
+    const cleanPin = (staffFormData.pin || '').trim() || String(Math.floor(100000 + Math.random() * 900000));
+    if (!/^\d{6}$/.test(cleanPin)) {
+      alert('Staff POS PIN must be exactly 6 numeric digits (e.g. 440100).');
+      return;
+    }
 
     let updatedStaff;
     if (editingStaffId) {
@@ -2854,7 +2858,7 @@ export default function AdminView({
                       </span>
                     </div>
                     <div style={{ fontSize: 11.5, color: '#6D28D9', marginTop: 2 }}>
-                      View, reveal, and manage POS terminal login IDs and 4-digit secret PINs for every employee.
+                      View, reveal, and manage POS terminal login IDs and 6-digit secret PINs for every employee.
                     </div>
                   </div>
                 </div>
@@ -2892,7 +2896,7 @@ export default function AdminView({
                     <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0', color: '#475569', fontSize: 11, fontWeight: 700 }}>
                       <th style={{ padding: '10px 14px' }}>Employee &amp; Role</th>
                       <th style={{ padding: '10px 14px' }}>Staff Login ID</th>
-                      <th style={{ padding: '10px 14px' }}>4-Digit Secret PIN</th>
+                      <th style={{ padding: '10px 14px' }}>6-Digit Secret PIN</th>
                       <th style={{ padding: '10px 14px' }}>POS Permissions</th>
                       <th style={{ padding: '10px 14px' }}>Status</th>
                       <th style={{ padding: '10px 14px', textAlign: 'right' }}>Action</th>
@@ -2902,7 +2906,7 @@ export default function AdminView({
                     {staff.map((emp) => {
                       const isRevealed = showAllStaffPins || Boolean(revealedStaffPins[emp.id]);
                       const loginId = emp.loginId || `${emp.name.toLowerCase().replace(/\s+/g, '')}.pos`;
-                      const pin = emp.pin || '4401';
+                      const pin = emp.pin || '440100';
                       const isResigned = emp.status === 'resigned';
 
                       return (
@@ -2974,7 +2978,7 @@ export default function AdminView({
                             </div>
                           </td>
 
-                          {/* 4-Digit Secret PIN */}
+                          {/* 6-Digit Secret PIN */}
                           <td style={{ padding: '10px 14px' }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                               <span
@@ -2990,7 +2994,7 @@ export default function AdminView({
                                   borderRadius: 8
                                 }}
                               >
-                                {isRevealed ? pin : '••••'}
+                                {isRevealed ? pin : '••••••'}
                               </span>
 
                               <button
@@ -3018,7 +3022,7 @@ export default function AdminView({
                                   color: copiedStaffKey === `pin_${emp.id}` ? '#16A34A' : '#94A3B8',
                                   padding: 2
                                 }}
-                                title="Copy 4-digit PIN"
+                                title="Copy 6-digit PIN"
                               >
                                 {copiedStaffKey === `pin_${emp.id}` ? <Check size={13} color="#16A34A" /> : <Copy size={13} />}
                               </button>
@@ -3187,7 +3191,7 @@ export default function AdminView({
                               <KeyRound size={11} color="#7C3AED" />
                               <span style={{ color: '#64748B', fontWeight: 600 }}>POS PIN:</span>
                               <strong style={{ fontFamily: 'monospace', letterSpacing: (showAllStaffPins || revealedStaffPins[emp.id]) ? '0.05em' : '0.2em', color: (showAllStaffPins || revealedStaffPins[emp.id]) ? '#92400E' : '#0F172A' }}>
-                                {showAllStaffPins || revealedStaffPins[emp.id] ? (emp.pin || '4401') : '••••'}
+                                {showAllStaffPins || revealedStaffPins[emp.id] ? (emp.pin || '440100') : '••••••'}
                               </strong>
                               <button
                                 type="button"
@@ -3202,9 +3206,9 @@ export default function AdminView({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleCopyCredential(emp.pin || '4401', `card_pin_${emp.id}`)}
+                                onClick={() => handleCopyCredential(emp.pin || '440100', `card_pin_${emp.id}`)}
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: copiedStaffKey === `card_pin_${emp.id}` ? '#16A34A' : '#94A3B8', padding: 1 }}
-                                title="Copy 4-digit PIN"
+                                title="Copy 6-digit PIN"
                               >
                                 {copiedStaffKey === `card_pin_${emp.id}` ? <Check size={11} color="#16A34A" /> : <Copy size={11} />}
                               </button>
@@ -5046,12 +5050,12 @@ export default function AdminView({
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                       <label style={{ fontSize: 11, fontWeight: 600, color: '#4C1D95' }}>
-                        4-Digit POS PIN *
+                        6-Digit POS PIN *
                       </label>
                       <button
                         type="button"
                         onClick={() => {
-                          const randPin = String(Math.floor(1000 + Math.random() * 9000));
+                          const randPin = String(Math.floor(100000 + Math.random() * 900000));
                           setStaffFormData((prev) => ({ ...prev, pin: randPin }));
                         }}
                         style={{ background: 'none', border: 'none', color: '#7C3AED', cursor: 'pointer', fontSize: 10, fontWeight: 700 }}
@@ -5063,9 +5067,9 @@ export default function AdminView({
                       type="text"
                       maxLength={6}
                       className="ios-input"
-                      placeholder="e.g. 4405"
+                      placeholder="e.g. 440100"
                       value={staffFormData.pin}
-                      onChange={(e) => setStaffFormData({ ...staffFormData, pin: e.target.value })}
+                      onChange={(e) => setStaffFormData({ ...staffFormData, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                       required
                       style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.1em' }}
                     />

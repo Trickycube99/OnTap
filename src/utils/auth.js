@@ -8,7 +8,7 @@ import {
   isDeveloperAuthenticated,
   getActiveBusiness,
   DEVELOPER_CREDENTIALS
-} from './businessManager';
+} from './businessManager.js';
 
 export const ROLES = {
   CUSTOMER: 'customer',
@@ -85,15 +85,15 @@ export const ROLE_CONFIGS = {
     description: 'Accept live dining orders, apply custom item modifiers, print 80mm GST thermal receipts, and reconcile EOD cash.',
     demoCredentials: {
       terminal: 'POS-01 (Flagship CP)',
-      pin: '4401'
+      pin: '440100'
     },
     validate: (creds) => {
       const pin = (creds?.pin || '').toString().trim();
-      if (!pin) {
-        return { valid: false, error: 'Please enter your 4-digit staff PIN.' };
+      if (!pin || !/^\d{6}$/.test(pin)) {
+        return { valid: false, error: 'Please enter your 6-digit staff PIN.' };
       }
       const activeBiz = getActiveBusiness();
-      const isOwnerOverride = activeBiz && (activeBiz.owner?.pin === pin || pin === '8821');
+      const isOwnerOverride = activeBiz && (activeBiz.owner?.pin === pin || pin === '882100' || pin === '8821');
 
       const staffList = Array.isArray(creds?.staffList) ? creds.staffList : [];
       const staffId = creds?.staffId;
@@ -122,7 +122,7 @@ export const ROLE_CONFIGS = {
               }
             };
           } else {
-            return { valid: false, error: `Incorrect PIN for "${targetStaff.name}". Please enter their 4-digit POS PIN.` };
+            return { valid: false, error: `Incorrect PIN for "${targetStaff.name}". Please enter their 6-digit POS PIN.` };
           }
         }
       }
@@ -217,7 +217,7 @@ export const ROLE_CONFIGS = {
       }
       const activeBiz = getActiveBusiness();
       const pin = (creds?.pin || '').toString().trim();
-      const isAdminOverride = activeBiz.owner.pin === pin || pin === '8821';
+      const isAdminOverride = activeBiz.owner.pin === pin || pin === '882100' || pin === '8821';
       return {
         role: ROLES.COUNTER,
         businessId: activeBiz.id,
@@ -241,7 +241,7 @@ export const ROLE_CONFIGS = {
     demoCredentials: {
       name: 'Sanjay Malhotra',
       email: 'admin@advaitkitchen.com',
-      pin: '8821'
+      pin: '882100'
     },
     validate: (creds) => {
       const email = (creds?.email || '').trim().toLowerCase();
@@ -249,8 +249,8 @@ export const ROLE_CONFIGS = {
         return { valid: false, error: 'Please enter a valid owner executive email address.' };
       }
       const pin = (creds?.pin || '').toString().trim();
-      if (!pin) {
-        return { valid: false, error: 'Please enter your 4-digit Owner Master PIN.' };
+      if (!pin || !/^\d{6}$/.test(pin)) {
+        return { valid: false, error: 'Please enter your 6-digit Owner Master PIN.' };
       }
 
       // Authenticate against multi-tenant business database

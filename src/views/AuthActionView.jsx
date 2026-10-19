@@ -91,8 +91,8 @@ export default function AuthActionView({
     playTapSound();
     setErrorMessage('');
 
-    if (!/^\d{4}$/.test(newPassword)) {
-      setErrorMessage('Master PIN must be exactly 4 numeric digits (e.g. 8821).');
+    if (!/^\d{6}$/.test(newPassword)) {
+      setErrorMessage('Master PIN must be exactly 6 numeric digits (e.g. 882100).');
       return;
     }
 
@@ -322,7 +322,7 @@ export default function AuthActionView({
             )}
 
             <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 20px', lineHeight: 1.45 }}>
-              Enter an authorized 4-digit numeric Master PIN to restore access to your owner dashboard.
+              Enter an authorized 6-digit numeric Master PIN to restore access to your owner dashboard.
             </p>
 
             {errorMessage && (
@@ -347,19 +347,19 @@ export default function AuthActionView({
             <form onSubmit={handleResetSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ textAlign: 'left' }}>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#CBD5E1', marginBottom: 4 }}>
-                  New 4-Digit Master PIN *
+                  New 6-Digit Master PIN *
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
                     autoFocus
-                    maxLength={4}
+                    maxLength={6}
                     pattern="[0-9]*"
                     inputMode="numeric"
-                    placeholder="Enter 4-digit PIN (e.g. 8821)"
+                    placeholder="Enter 6-digit PIN (e.g. 882100)"
                     value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    onChange={(e) => setNewPassword(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     style={{
                       width: '100%',
                       padding: '11px 40px 11px 14px',
@@ -395,17 +395,17 @@ export default function AuthActionView({
 
               <div style={{ textAlign: 'left' }}>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#CBD5E1', marginBottom: 4 }}>
-                  Confirm 4-Digit Master PIN *
+                  Confirm 6-Digit Master PIN *
                 </label>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
-                  maxLength={4}
+                  maxLength={6}
                   pattern="[0-9]*"
                   inputMode="numeric"
-                  placeholder="Re-enter 4-digit PIN"
+                  placeholder="Re-enter 6-digit PIN"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  onChange={(e) => setConfirmPassword(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   style={{
                     width: '100%',
                     padding: '11px 14px',

@@ -28,10 +28,10 @@ export const DEFAULT_BUSINESSES = [
     owner: {
       name: 'Sanjay Malhotra',
       email: 'admin@advaitkitchen.com',
-      pin: '8821'
+      pin: '882100'
     },
     counter: {
-      pin: '4421',
+      pin: '442100',
       terminalName: 'POS-01 (Flagship CP)'
     },
     upiId: '9119069179@nyes',
@@ -53,10 +53,10 @@ export const DEFAULT_BUSINESSES = [
     owner: {
       name: 'Priya Nair',
       email: 'priya@copperchimney.in',
-      pin: '5522'
+      pin: '552200'
     },
     counter: {
-      pin: '3311',
+      pin: '331100',
       terminalName: 'POS-01 (Bandra)'
     },
     upiId: 'copperchimney@upi',
@@ -78,10 +78,10 @@ export const DEFAULT_BUSINESSES = [
     owner: {
       name: 'Amit Deshmukh',
       email: 'amit@chaipoint.com',
-      pin: '7711'
+      pin: '771100'
     },
     counter: {
-      pin: '2200',
+      pin: '220000',
       terminalName: 'Express Counter 01'
     },
     upiId: 'chaipoint@upi',
@@ -108,7 +108,31 @@ export function getBusinesses() {
       localStorage.setItem(BUSINESSES_STORAGE_KEY, JSON.stringify(DEFAULT_BUSINESSES));
       return DEFAULT_BUSINESSES;
     }
-    return parsed;
+
+    // Automatically migrate any legacy 4-digit PINs to standard 6-digit PINs (e.g. 8821 -> 882100)
+    let needsMigration = false;
+    const migrated = parsed.map((b) => {
+      let updatedOwnerPin = b.owner?.pin ? String(b.owner.pin).trim() : '882100';
+      let updatedCounterPin = b.counter?.pin ? String(b.counter.pin).trim() : '442100';
+      if (updatedOwnerPin.length < 6) {
+        updatedOwnerPin = updatedOwnerPin.padEnd(6, '0');
+        needsMigration = true;
+      }
+      if (updatedCounterPin.length < 6) {
+        updatedCounterPin = updatedCounterPin.padEnd(6, '0');
+        needsMigration = true;
+      }
+      return {
+        ...b,
+        owner: { ...b.owner, pin: updatedOwnerPin },
+        counter: { ...b.counter, pin: updatedCounterPin }
+      };
+    });
+
+    if (needsMigration) {
+      localStorage.setItem(BUSINESSES_STORAGE_KEY, JSON.stringify(migrated));
+    }
+    return migrated;
   } catch (err) {
     console.error('Error loading businesses:', err);
     return DEFAULT_BUSINESSES;
@@ -116,11 +140,14 @@ export function getBusinesses() {
 }
 
 /**
- * Save businesses list to localStorage
+ * Save businesses list to localStorage and dispatch local event
  */
 export function saveBusinesses(businesses) {
   try {
     localStorage.setItem(BUSINESSES_STORAGE_KEY, JSON.stringify(businesses));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('flowscape_businesses_updated', { detail: businesses }));
+    }
   } catch (err) {
     console.error('Error saving businesses:', err);
   }
@@ -156,12 +183,12 @@ export function createBusiness(data) {
   const trimmedOwnerPin = (data.ownerPin || '').toString().trim();
   const trimmedCounterPin = (data.counterPin || '').toString().trim();
 
-  // Validate exactly 4-digit numeric PINs
-  if (!/^\d{4}$/.test(trimmedOwnerPin)) {
-    return { success: false, error: 'Owner Admin PIN must be exactly 4 digits.' };
+  // Validate exactly 6-digit numeric PINs
+  if (!/^\d{6}$/.test(trimmedOwnerPin)) {
+    return { success: false, error: 'Owner Admin PIN must be exactly 6 digits.' };
   }
-  if (!/^\d{4}$/.test(trimmedCounterPin)) {
-    return { success: false, error: 'Counter Staff POS PIN must be exactly 4 digits.' };
+  if (!/^\d{6}$/.test(trimmedCounterPin)) {
+    return { success: false, error: 'Counter Staff POS PIN must be exactly 6 digits.' };
   }
 
   // Validate unique PIN across all businesses
@@ -172,7 +199,7 @@ export function createBusiness(data) {
            b.counter.pin === trimmedCounterPin
   );
   if (pinInUse) {
-    return { success: false, error: 'Specified Owner PIN or Counter PIN is already in use by another business. Please choose unique 4-digit PINs.' };
+    return { success: false, error: 'Specified Owner PIN or Counter PIN is already in use by another business. Please choose unique 6-digit PINs.' };
   }
 
   // Validate duplicate email
@@ -239,8 +266,8 @@ export function updateBusiness(id, updates) {
     }
     if (updates.owner.pin !== undefined) {
       const cleanPin = String(updates.owner.pin).trim();
-      if (!/^\d{4}$/.test(cleanPin)) {
-        return { success: false, error: 'Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).' };
+      if (!/^\d{6}$/.test(cleanPin)) {
+        return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).' };
       }
       updates.owner.pin = cleanPin;
     }
@@ -249,8 +276,8 @@ export function updateBusiness(id, updates) {
   // Validate counter updates if provided
   if (updates.counter && updates.counter.pin !== undefined) {
     const cleanCounterPin = String(updates.counter.pin).trim();
-    if (!/^\d{4}$/.test(cleanCounterPin)) {
-      return { success: false, error: 'Counter POS PIN must be exactly 4 numeric digits (e.g. 4421).' };
+    if (!/^\d{6}$/.test(cleanCounterPin)) {
+      return { success: false, error: 'Counter POS PIN must be exactly 6 numeric digits (e.g. 442100).' };
     }
     updates.counter.pin = cleanCounterPin;
   }
@@ -441,8 +468,8 @@ export function authenticateBusinessOwner(email, pin) {
     return { success: false, error: 'Please enter a valid owner email address.' };
   }
 
-  if (!/^\d{4}$/.test(cleanPin)) {
-    return { success: false, error: 'Owner Master PIN must be exactly 4 numeric digits.' };
+  if (!/^\d{6}$/.test(cleanPin)) {
+    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits.' };
   }
 
   const business = businesses.find(
@@ -522,5 +549,5 @@ export function authenticateCounterByPin(pin, cashierName, activeBusinessId = nu
     };
   }
 
-  return { success: false, error: 'Invalid POS PIN. Enter the 4-digit PIN for your business counter terminal.' };
+  return { success: false, error: 'Invalid POS PIN. Enter the 6-digit PIN for your business counter terminal.' };
 }

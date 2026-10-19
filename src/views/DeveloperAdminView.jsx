@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Server,
   Building2,
@@ -36,7 +36,7 @@ import {
   updateOwnerCredentialsManually
 } from '../utils/firebaseAuth';
 import { deleteCloudOrdersForBusiness } from '../utils/firebaseSync';
-import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
+import { broadcastSyncEvent, subscribeSyncEvents, SYNC_EVENTS } from '../utils/sync';
 import {
   getBusinesses,
   getActiveBusiness,
@@ -105,8 +105,39 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
   ]);
 
   const refreshBusinesses = () => {
-    setBusinesses(getBusinesses());
+    const fresh = getBusinesses();
+    setBusinesses(fresh);
+    setShowCredentialsModal((curr) => {
+      if (!curr) return null;
+      return fresh.find((b) => b.id === curr.id) || curr;
+    });
   };
+
+  // Real-time synchronization: listen for credential updates, resets, and business modifications
+  useEffect(() => {
+    const handleSync = () => {
+      refreshBusinesses();
+    };
+
+    window.addEventListener('storage', handleSync);
+    window.addEventListener('flowscape_businesses_updated', handleSync);
+
+    const unsubscribe = subscribeSyncEvents((event) => {
+      if (
+        event?.type === SYNC_EVENTS.BUSINESSES_UPDATED ||
+        event?.type === SYNC_EVENTS.CREDENTIALS_UPDATED ||
+        event?.type === SYNC_EVENTS.CONFIG_UPDATED
+      ) {
+        handleSync();
+      }
+    }, null); // null tenant bypasses tenant isolation to catch all platform-level updates
+
+    return () => {
+      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('flowscape_businesses_updated', handleSync);
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -151,12 +182,12 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     const trimmedOwnerPin = newBiz.ownerPin.trim();
     const trimmedCounterPin = newBiz.counterPin.trim();
 
-    if (!/^\d{4}$/.test(trimmedOwnerPin)) {
-      setFormError('Owner Admin PIN must be exactly 4 digits (e.g. 8821).');
+    if (!/^\d{6}$/.test(trimmedOwnerPin)) {
+      setFormError('Owner Admin PIN must be exactly 6 digits (e.g. 882100).');
       return;
     }
-    if (!/^\d{4}$/.test(trimmedCounterPin)) {
-      setFormError('Counter Staff POS PIN must be exactly 4 digits (e.g. 4421).');
+    if (!/^\d{6}$/.test(trimmedCounterPin)) {
+      setFormError('Counter Staff POS PIN must be exactly 6 digits (e.g. 442100).');
       return;
     }
 
@@ -167,7 +198,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
              b.counter.pin === trimmedCounterPin
     );
     if (pinInUse) {
-      setFormError('Specified Owner PIN or Counter PIN is already assigned to another business. Please choose unique 4-digit PINs.');
+      setFormError('Specified Owner PIN or Counter PIN is already assigned to another business. Please choose unique 6-digit PINs.');
       return;
     }
 
@@ -191,14 +222,14 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     const tables = Array.from({ length: Number(newBiz.tableCount) || 6 }, (_, i) => `Table ${String(i + 1).padStart(2, '0')}`);
     tables.push('Takeaway / Counter');
 
-    // 2. Provision business in local multi-tenant database (marked as suspended pending email verification)
+    // 2. Provision business in local multi-tenant database (active & emailVerified by default in developer console)
     const res = createBusiness({
       ...newBiz,
       ownerPin: trimmedOwnerPin,
       counterPin: trimmedCounterPin,
       tables,
-      status: 'suspended',
-      emailVerified: false
+      status: 'active',
+      emailVerified: true
     });
 
     setIsCreating(false);
@@ -321,12 +352,14 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
 
   const handleOpenCredentialsModal = (biz) => {
     playTapSound();
-    setShowCredentialsModal(biz);
+    // Always fetch the freshest business record from database to prevent displaying stale state
+    const freshBiz = getBusinesses().find((b) => b.id === biz.id) || biz;
+    setShowCredentialsModal(freshBiz);
     setIsEditingCredentials(false);
-    setEditOwnerEmail(biz.owner?.email || '');
-    setEditOwnerPin(biz.owner?.pin || '');
-    setEditCounterPin(biz.counter?.pin || '');
-    setEditMarkVerified(biz.emailVerified !== false);
+    setEditOwnerEmail(freshBiz.owner?.email || '');
+    setEditOwnerPin(freshBiz.owner?.pin || '');
+    setEditCounterPin(freshBiz.counter?.pin || '');
+    setEditMarkVerified(freshBiz.emailVerified !== false);
     setEditOverrideError('');
     setActionStatus(null);
   };
@@ -347,15 +380,15 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       return;
     }
 
-    // Original app requirement: Owner Master PIN is strictly 4 numeric digits
-    if (!/^\d{4}$/.test(cleanPin)) {
-      setEditOverrideError('Owner Master PIN must be exactly 4 numeric digits (e.g. 8821).');
+    // Owner Master PIN is strictly 6 numeric digits
+    if (!/^\d{6}$/.test(cleanPin)) {
+      setEditOverrideError('Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).');
       playAlertChime();
       return;
     }
 
-    if (cleanCounterPin && !/^\d{4}$/.test(cleanCounterPin)) {
-      setEditOverrideError('Counter Staff POS PIN must be exactly 4 numeric digits (e.g. 4421).');
+    if (cleanCounterPin && !/^\d{6}$/.test(cleanCounterPin)) {
+      setEditOverrideError('Counter Staff POS PIN must be exactly 6 numeric digits (e.g. 442100).');
       playAlertChime();
       return;
     }
@@ -541,6 +574,30 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
               <span>{loginError}</span>
             </div>
           )}
+
+          {/* Developer Credentials Helper Badge */}
+          <div style={{
+            background: 'rgba(6, 182, 212, 0.08)',
+            border: '1px solid rgba(6, 182, 212, 0.25)',
+            borderRadius: 12,
+            padding: '10px 14px',
+            marginBottom: 20,
+            fontSize: 12,
+            color: '#94A3B8'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#38BDF8', fontWeight: 700, marginBottom: 4 }}>
+              <KeyRound size={14} />
+              <span>Developer Console Credentials</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+              <span>Email:</span>
+              <strong style={{ fontFamily: 'monospace', color: '#F8FAFC' }}>dev@platform.com</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Access Key:</span>
+              <strong style={{ fontFamily: 'monospace', color: '#F8FAFC' }}>dev@root2026</strong>
+            </div>
+          </div>
 
           {/* Form strictly manual - zero autofill button as requested */}
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1129,11 +1186,11 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           <span style={{ fontFamily: 'monospace', color: '#38BDF8', fontWeight: 600 }}>{biz.owner.email}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ color: '#94A3B8' }}>Owner PIN (4 Digits):</span>
+                          <span style={{ color: '#94A3B8' }}>Owner PIN (6 Digits):</span>
                           <span style={{ fontFamily: 'monospace', color: '#F59E0B', fontWeight: 700 }}>{biz.owner.pin}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: '#94A3B8' }}>Counter POS PIN (4 Digits):</span>
+                          <span style={{ color: '#94A3B8' }}>Counter POS PIN (6 Digits):</span>
                           <span style={{ fontFamily: 'monospace', color: '#10B981', fontWeight: 700 }}>{biz.counter.pin}</span>
                         </div>
                       </div>
@@ -1760,16 +1817,16 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     </div>
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, color: '#CBD5E1', marginBottom: 2 }}>Owner Master PIN (4 Digits) *</label>
+                    <label style={{ display: 'block', fontSize: 11, color: '#CBD5E1', marginBottom: 2 }}>Owner Master PIN (6 Digits) *</label>
                     <input
                       type="text"
                       required
-                      maxLength={4}
+                      maxLength={6}
                       pattern="[0-9]*"
                       inputMode="numeric"
-                      placeholder="e.g. 8821"
+                      placeholder="e.g. 882100"
                       value={newBiz.ownerPin}
-                      onChange={(e) => setNewBiz({ ...newBiz, ownerPin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                      onChange={(e) => setNewBiz({ ...newBiz, ownerPin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                       style={{
                         width: '100%',
                         padding: '8px 10px',
@@ -1784,7 +1841,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       }}
                     />
                     <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 4 }}>
-                      Original Constraint: Exactly 4 numeric digits. Account will remain in a <strong>suspended</strong> state until email verification is completed via Firebase.
+                      Exactly 6 numeric digits. Synchronized with Firebase Auth and active across all dashboards immediately.
                     </div>
                   </div>
                 </div>
@@ -1800,16 +1857,16 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 11, color: '#CBD5E1', marginBottom: 2 }}>Counter POS PIN (4 Digits) *</label>
+                      <label style={{ display: 'block', fontSize: 11, color: '#CBD5E1', marginBottom: 2 }}>Counter POS PIN (6 Digits) *</label>
                       <input
                         type="text"
                         required
-                        maxLength={4}
+                        maxLength={6}
                         pattern="[0-9]*"
                         inputMode="numeric"
-                        placeholder="e.g. 4421"
+                        placeholder="e.g. 442100"
                         value={newBiz.counterPin}
-                        onChange={(e) => setNewBiz({ ...newBiz, counterPin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                        onChange={(e) => setNewBiz({ ...newBiz, counterPin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                         style={{
                           width: '100%',
                           padding: '8px 10px',
@@ -1978,20 +2035,20 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                     <label style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8' }}>
-                      OWNER MASTER PIN / PASSWORD (4 DIGITS) *
+                      OWNER MASTER PIN / PASSWORD (6 DIGITS) *
                     </label>
-                    <span style={{ fontSize: 10, color: '#F59E0B' }}>Padded to 6-char in Firebase</span>
+                    <span style={{ fontSize: 10, color: '#F59E0B' }}>6-Digit Native PIN</span>
                   </div>
                   <input
                     type="text"
                     required
-                    maxLength={4}
+                    maxLength={6}
                     value={editOwnerPin}
                     onChange={(e) => {
                       const val = e.target.value.replace(/\D/g, '');
-                      if (val.length <= 4) setEditOwnerPin(val);
+                      if (val.length <= 6) setEditOwnerPin(val);
                     }}
-                    placeholder="4 numeric digits (e.g. 8821)"
+                    placeholder="6 numeric digits (e.g. 882100)"
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -2008,23 +2065,23 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     }}
                   />
                   <span style={{ fontSize: 10, color: '#64748B', display: 'block', marginTop: 4 }}>
-                    Strictly 4 numeric digits. Synchronized with Firebase Auth (${editOwnerPin || '****'}00).
+                    Strictly 6 numeric digits. Synchronized with Firebase Auth (${editOwnerPin || '******'}).
                   </span>
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', marginBottom: 5 }}>
-                    COUNTER STAFF POS PIN (4 DIGITS)
+                    COUNTER STAFF POS PIN (6 DIGITS)
                   </label>
                   <input
                     type="text"
-                    maxLength={4}
+                    maxLength={6}
                     value={editCounterPin}
                     onChange={(e) => {
                       const val = e.target.value.replace(/\D/g, '');
-                      if (val.length <= 4) setEditCounterPin(val);
+                      if (val.length <= 6) setEditCounterPin(val);
                     }}
-                    placeholder="4 numeric digits (e.g. 4421)"
+                    placeholder="6 numeric digits (e.g. 442100)"
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -2163,7 +2220,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   borderRadius: 12,
                   border: '1px solid rgba(255, 255, 255, 0.08)'
                 }}>
-                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>OWNER MASTER PIN (4 DIGITS)</div>
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>OWNER MASTER PIN (6 DIGITS)</div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#F59E0B' }}>
                       {showCredentialsModal.owner.pin}
@@ -2183,7 +2240,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   borderRadius: 12,
                   border: '1px solid rgba(255, 255, 255, 0.08)'
                 }}>
-                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>COUNTER STAFF POS PIN (4 DIGITS)</div>
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>COUNTER STAFF POS PIN (6 DIGITS)</div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#10B981' }}>
                       {showCredentialsModal.counter.pin}

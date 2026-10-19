@@ -191,14 +191,14 @@ export default function CounterView({
     setIsVerifyingSwitch(true);
 
     const pin = (switchStaffPin || '').trim();
-    if (!pin) {
-      setSwitchPinError('Please enter the 4-digit staff PIN.');
+    if (!pin || !/^\d{6}$/.test(pin)) {
+      setSwitchPinError('Please enter a valid 6-digit staff PIN.');
       setIsVerifyingSwitch(false);
       return;
     }
 
     const activeBiz = getActiveBusiness();
-    const isOwnerPin = (activeBiz && activeBiz.owner?.pin === pin) || pin === '8821';
+    const isOwnerPin = (activeBiz && (activeBiz.owner?.pin === pin || activeBiz.owner?.pin === `${pin}00`)) || pin === '882100' || pin === '8821';
 
     if (targetSwitchStaffId === '__owner_admin__') {
       if (isOwnerPin) {
@@ -218,7 +218,7 @@ export default function CounterView({
         return;
       } else {
         playAlertChime();
-        setSwitchPinError('Incorrect Master Owner PIN. Enter authorized owner PIN (8821).');
+        setSwitchPinError(`Incorrect Master Owner PIN. Enter authorized owner PIN (${activeBiz?.owner?.pin || '882100'}).`);
         setIsVerifyingSwitch(false);
         return;
       }
@@ -249,7 +249,7 @@ export default function CounterView({
       setIsVerifyingSwitch(false);
     } else {
       playAlertChime();
-      setSwitchPinError(`Incorrect PIN for "${targetStaff.name}". Enter their registered 4-digit staff PIN.`);
+      setSwitchPinError(`Incorrect PIN for "${targetStaff.name}". Enter their registered 6-digit staff PIN.`);
       setIsVerifyingSwitch(false);
     }
   };
@@ -2039,7 +2039,7 @@ export default function CounterView({
             </div>
 
             <div style={{ fontSize: 11.5, color: '#64748B', marginBottom: 14 }}>
-              Every staff member must verify their credentials with their 4-digit secret PIN before taking over this live POS terminal.
+              Every staff member must verify their credentials with their 6-digit secret PIN before taking over this live POS terminal.
             </div>
 
             {/* Error Message */}
@@ -2104,7 +2104,7 @@ export default function CounterView({
               <div style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155' }}>
-                    Enter 4-Digit Secret PIN *
+                    Enter 6-Digit Secret PIN *
                   </label>
                   <button
                     type="button"
@@ -2118,18 +2118,18 @@ export default function CounterView({
                 <input
                   type={showSwitchPin ? 'text' : 'password'}
                   className="ios-input"
-                  placeholder="Enter 4-digit PIN"
+                  placeholder="Enter 6-digit PIN"
                   value={switchStaffPin}
-                  onChange={(e) => setSwitchStaffPin(e.target.value)}
-                  maxLength={8}
+                  onChange={(e) => setSwitchStaffPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  maxLength={6}
                   required
                   autoFocus
                   style={{ letterSpacing: showSwitchPin ? 'normal' : '0.15em', fontWeight: 700, fontSize: 15 }}
                 />
                 <span style={{ fontSize: 10.5, color: '#64748B', marginTop: 4, display: 'block' }}>
                   {targetSwitchStaffId === '__owner_admin__'
-                    ? 'Enter Owner Master PIN (8821)'
-                    : 'Enter the personal 4-digit POS PIN assigned to this staff member.'}
+                    ? `Enter Owner Master PIN (${activeBiz?.owner?.pin || '882100'})`
+                    : 'Enter the personal 6-digit POS PIN assigned to this staff member.'}
                 </span>
               </div>
 
