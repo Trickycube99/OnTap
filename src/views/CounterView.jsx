@@ -218,7 +218,7 @@ export default function CounterView({
         return;
       } else {
         playAlertChime();
-        setSwitchPinError(`Incorrect Master Owner PIN. Enter authorized owner PIN (${activeBiz?.owner?.pin || '882100'}).`);
+        setSwitchPinError('Incorrect Master Owner PIN. Enter the authorized 6-digit owner PIN.');
         setIsVerifyingSwitch(false);
         return;
       }
@@ -2128,7 +2128,7 @@ export default function CounterView({
                 />
                 <span style={{ fontSize: 10.5, color: '#64748B', marginTop: 4, display: 'block' }}>
                   {targetSwitchStaffId === '__owner_admin__'
-                    ? `Enter Owner Master PIN (${activeBiz?.owner?.pin || '882100'})`
+                    ? 'Enter Owner Master 6-digit PIN'
                     : 'Enter the personal 6-digit POS PIN assigned to this staff member.'}
                 </span>
               </div>

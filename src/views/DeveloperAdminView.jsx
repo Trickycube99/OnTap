@@ -183,11 +183,11 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     const trimmedCounterPin = newBiz.counterPin.trim();
 
     if (!/^\d{6}$/.test(trimmedOwnerPin)) {
-      setFormError('Owner Admin PIN must be exactly 6 digits (e.g. 882100).');
+      setFormError('Owner Admin PIN must be exactly 6 numeric digits.');
       return;
     }
     if (!/^\d{6}$/.test(trimmedCounterPin)) {
-      setFormError('Counter Staff POS PIN must be exactly 6 digits (e.g. 442100).');
+      setFormError('Counter Staff POS PIN must be exactly 6 numeric digits.');
       return;
     }
 
@@ -382,13 +382,13 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
 
     // Owner Master PIN is strictly 6 numeric digits
     if (!/^\d{6}$/.test(cleanPin)) {
-      setEditOverrideError('Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).');
+      setEditOverrideError('Owner Master PIN must be exactly 6 numeric digits.');
       playAlertChime();
       return;
     }
 
     if (cleanCounterPin && !/^\d{6}$/.test(cleanCounterPin)) {
-      setEditOverrideError('Counter Staff POS PIN must be exactly 6 numeric digits (e.g. 442100).');
+      setEditOverrideError('Counter Staff POS PIN must be exactly 6 numeric digits.');
       playAlertChime();
       return;
     }
@@ -610,7 +610,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                 required
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder="dev@platform.com"
+                placeholder="developer@example.com"
                 style={{
                   width: '100%',
                   padding: '12px 14px',
@@ -1854,7 +1854,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       maxLength={6}
                       pattern="[0-9]*"
                       inputMode="numeric"
-                      placeholder="e.g. 882100"
+                      placeholder="Enter 6-digit PIN"
                       value={newBiz.ownerPin}
                       onChange={(e) => setNewBiz({ ...newBiz, ownerPin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                       style={{
@@ -1894,7 +1894,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         maxLength={6}
                         pattern="[0-9]*"
                         inputMode="numeric"
-                        placeholder="e.g. 442100"
+                        placeholder="Enter 6-digit PIN"
                         value={newBiz.counterPin}
                         onChange={(e) => setNewBiz({ ...newBiz, counterPin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                         style={{
@@ -2078,7 +2078,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       const val = e.target.value.replace(/\D/g, '');
                       if (val.length <= 6) setEditOwnerPin(val);
                     }}
-                    placeholder="6 numeric digits (e.g. 882100)"
+                    placeholder="Enter 6-digit PIN"
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -2111,7 +2111,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       const val = e.target.value.replace(/\D/g, '');
                       if (val.length <= 6) setEditCounterPin(val);
                     }}
-                    placeholder="6 numeric digits (e.g. 442100)"
+                    placeholder="Enter 6-digit PIN"
                     style={{
                       width: '100%',
                       padding: '10px 12px',

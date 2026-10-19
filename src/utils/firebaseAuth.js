@@ -70,7 +70,7 @@ export async function provisionOwnerAccountWithVerification({ email, password, o
 
   // App requirement: Owner Master PIN is strictly 6 numeric digits
   if (!/^\d{6}$/.test(cleanPin)) {
-    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).' };
+    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits.' };
   }
 
   // Firebase Auth minimum password requirement is 6 chars, satisfied directly by 6-digit PIN
@@ -143,7 +143,7 @@ export async function logInUserWithVerification({ email, password }) {
 
   // App requirement: Owner Master PIN is strictly 6 numeric digits
   if (!/^\d{6}$/.test(cleanPassword)) {
-    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).' };
+    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits.' };
   }
 
   const auth = getFirebaseAuth();
@@ -517,7 +517,7 @@ export async function handleConfirmPasswordReset(oobCode, newPassword, targetEma
 
   // App requirement: Master PIN must be exactly 6 numeric digits
   if (!/^\d{6}$/.test(cleanPin)) {
-    return { success: false, error: 'Master PIN must be exactly 6 numeric digits (e.g. 882100).' };
+    return { success: false, error: 'Master PIN must be exactly 6 numeric digits.' };
   }
 
   const auth = getFirebaseAuth();
@@ -663,7 +663,7 @@ export async function updateOwnerCredentialsManually({
 
   // App requirement: Owner Master PIN is strictly 6 numeric digits
   if (!/^\d{6}$/.test(cleanNewPin)) {
-    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).' };
+    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits.' };
   }
 
   const config = getFirebaseConfig();

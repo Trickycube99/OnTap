@@ -29,7 +29,7 @@ export default function AuthModal({
   activeSessionRole = null,
   onSuccess,
   onClose,
-  theme
+  theme: _theme
 }) {
   const [selectedStation, setSelectedStation] = useState(null);
   const currentStation = selectedStation || (targetRole === ROLES.COUNTER ? ROLES.COUNTER : ROLES.ADMIN);
@@ -93,7 +93,7 @@ export default function AuthModal({
       if (!trimmedLoginId) {
         playAlertChime();
         setIsSubmitting(false);
-        setErrorMessage('Please enter your Staff Login ID (e.g. @sunil.pos).');
+        setErrorMessage('Please enter your Staff Login ID (e.g. @username.pos).');
         return;
       }
 
@@ -148,7 +148,7 @@ export default function AuthModal({
       if (!/^\d{6}$/.test(pin.trim())) {
         playAlertChime();
         setIsSubmitting(false);
-        setErrorMessage('Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).');
+        setErrorMessage('Owner Master PIN must be exactly 6 numeric digits.');
         return;
       }
 
@@ -419,7 +419,7 @@ export default function AuthModal({
                     autoCorrect="off"
                     autoCapitalize="none"
                     spellCheck="false"
-                    placeholder="e.g. @sunil.pos"
+                    placeholder="e.g. @username.pos"
                     className="auth-input"
                     value={counterLoginId}
                     onChange={(e) => {
@@ -431,7 +431,7 @@ export default function AuthModal({
                   />
                 </div>
                 <span className="auth-hint">
-                  Enter your assigned Staff Login ID (e.g. @sunil.pos) to log into your shop&apos;s business dashboard.
+                  Enter your assigned Staff Login ID (e.g. @username.pos) to log into your shop&apos;s business dashboard.
                 </span>
               </div>
 
@@ -488,7 +488,7 @@ export default function AuthModal({
                 <input
                   type="email"
                   required
-                  placeholder="e.g. admin@advaitkitchen.com"
+                  placeholder="e.g. owner@example.com"
                   className="auth-input"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -531,7 +531,7 @@ export default function AuthModal({
                     maxLength={6}
                     pattern="[0-9]*"
                     inputMode="numeric"
-                    placeholder="Enter 6-digit PIN (e.g. 882100)"
+                    placeholder="Enter 6-digit PIN"
                     className="auth-input"
                     value={pin}
                     onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -580,7 +580,7 @@ export default function AuthModal({
                   type="email"
                   required
                   autoFocus
-                  placeholder="e.g. admin@advaitkitchen.com"
+                  placeholder="e.g. owner@example.com"
                   className="auth-input"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}

@@ -92,7 +92,7 @@ export default function AuthActionView({
     setErrorMessage('');
 
     if (!/^\d{6}$/.test(newPassword)) {
-      setErrorMessage('Master PIN must be exactly 6 numeric digits (e.g. 882100).');
+      setErrorMessage('Master PIN must be exactly 6 numeric digits.');
       return;
     }
 
@@ -357,7 +357,7 @@ export default function AuthActionView({
                     maxLength={6}
                     pattern="[0-9]*"
                     inputMode="numeric"
-                    placeholder="Enter 6-digit PIN (e.g. 882100)"
+                    placeholder="Enter new 6-digit PIN"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     style={{

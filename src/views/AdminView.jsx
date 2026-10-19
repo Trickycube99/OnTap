@@ -794,7 +794,7 @@ export default function AdminView({
     const cleanLoginId = (staffFormData.loginId || '').trim() || `${staffFormData.name.trim().toLowerCase().replace(/\s+/g, '')}.pos`;
     const cleanPin = (staffFormData.pin || '').trim() || String(Math.floor(100000 + Math.random() * 900000));
     if (!/^\d{6}$/.test(cleanPin)) {
-      alert('Staff POS PIN must be exactly 6 numeric digits (e.g. 440100).');
+      alert('Staff POS PIN must be exactly 6 numeric digits.');
       return;
     }
 
@@ -4119,7 +4119,7 @@ export default function AdminView({
                 <input
                   type="text"
                   className="ios-input"
-                  placeholder="e.g. 9119069179@nyes"
+                  placeholder="e.g. merchant@upi"
                   value={customizerDraft.upiId || ''}
                   onChange={(e) => {
                     setCustomizerDraft({ ...customizerDraft, upiId: e.target.value.trim() });
@@ -5299,7 +5299,7 @@ export default function AdminView({
                       type="text"
                       maxLength={6}
                       className="ios-input"
-                      placeholder="e.g. 440100"
+                      placeholder="Enter 6-digit PIN"
                       value={staffFormData.pin}
                       onChange={(e) => setStaffFormData({ ...staffFormData, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                       required

@@ -269,7 +269,7 @@ export function updateBusiness(id, updates) {
     if (updates.owner.pin !== undefined) {
       const cleanPin = String(updates.owner.pin).trim();
       if (!/^\d{6}$/.test(cleanPin)) {
-        return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits (e.g. 882100).' };
+        return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits.' };
       }
       updates.owner.pin = cleanPin;
     }
@@ -279,7 +279,7 @@ export function updateBusiness(id, updates) {
   if (updates.counter && updates.counter.pin !== undefined) {
     const cleanCounterPin = String(updates.counter.pin).trim();
     if (!/^\d{6}$/.test(cleanCounterPin)) {
-      return { success: false, error: 'Counter POS PIN must be exactly 6 numeric digits (e.g. 442100).' };
+      return { success: false, error: 'Counter POS PIN must be exactly 6 numeric digits.' };
     }
     updates.counter.pin = cleanCounterPin;
   }
@@ -564,7 +564,7 @@ export function authenticateStaffMemberByLoginId(loginId, pin) {
   const cleanPin = (pin || '').toString().trim();
 
   if (!cleanLoginId) {
-    return { success: false, error: 'Please enter your Staff Login ID (e.g. @sunil.pos).' };
+    return { success: false, error: 'Please enter your Staff Login ID (e.g. @username.pos).' };
   }
 
   if (!/^\d{6}$/.test(cleanPin)) {

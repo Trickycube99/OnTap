@@ -93,7 +93,7 @@ export const ROLE_CONFIGS = {
       const loginId = (creds?.loginId || '').trim();
 
       if (!loginId) {
-        return { valid: false, error: 'Please enter your Staff Login ID (e.g. @sunil.pos).' };
+        return { valid: false, error: 'Please enter your Staff Login ID (e.g. @username.pos).' };
       }
 
       if (!pin || !/^\d{6}$/.test(pin)) {
