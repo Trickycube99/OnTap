@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Plus,
   Minus,
@@ -104,18 +104,36 @@ export default function CustomerView({
   const secretTapCount = useRef(0);
   const secretTapTimer = useRef(null);
 
-  // Category translation list
-  const categoryKeys = [
-    { id: 'All', label: language === 'hi' ? 'सभी व्यंजन' : 'All' },
-    { id: 'Signatures', label: language === 'hi' ? 'शेफ स्पेशल' : 'Signatures' },
-    { id: 'Mains & Sides', label: language === 'hi' ? 'मुख्य भोजन व स्नैक्स' : 'Mains & Sides' },
-    { id: 'Beverages', label: language === 'hi' ? 'पेय पदार्थ' : 'Beverages' },
-    { id: 'Desserts', label: language === 'hi' ? 'मिठाइयां' : 'Desserts' }
-  ];
+  // Dynamic category list derived directly from active business menu
+  const categoryKeys = useMemo(() => {
+    const uniqueCats = Array.from(new Set((menu || []).map((item) => item.category).filter(Boolean)));
+    const allPill = { id: 'All', label: language === 'hi' ? 'सभी व्यंजन' : 'All' };
+    const customPills = uniqueCats.map((cat) => {
+      let label = cat;
+      if (language === 'hi') {
+        if (cat === 'Signatures') label = 'शेफ स्पेशल';
+        else if (cat === 'Mains & Sides') label = 'मुख्य भोजन व स्नैक्स';
+        else if (cat === 'Beverages') label = 'पेय पदार्थ';
+        else if (cat === 'Desserts') label = 'मिठाइयां';
+        else if (cat === 'Tandoor & Starters') label = 'तंदूर व स्टार्टर्स';
+        else if (cat === 'Biryani & Rice') label = 'बिरयानी व चावल';
+        else if (cat === 'Curries & Mains') label = 'करी व मुख्य भोजन';
+        else if (cat === 'Breads') label = 'रोटी व नान';
+        else if (cat === 'Specialty Teas') label = 'स्पेशल चाय';
+        else if (cat === 'Bakery & Bites') label = 'बेकरी व स्नैक्स';
+        else if (cat === 'Cold Brews') label = 'कोल्ड ब्रू';
+      }
+      return { id: cat, label };
+    });
+    return [allPill, ...customPills];
+  }, [menu, language]);
+
+  // Derive active category safely ensuring it exists in current menu
+  const effectiveCategory = categoryKeys.some((c) => c.id === selectedCategory) ? selectedCategory : 'All';
 
   // Filter menu
   const filteredMenu = menu.filter((item) => {
-    const matchesCat = selectedCategory === 'All' || item.category === selectedCategory;
+    const matchesCat = effectiveCategory === 'All' || item.category === effectiveCategory;
     const matchesVeg = !vegOnly || item.isVeg;
     const matchesSearch =
       !searchQuery ||
@@ -1644,7 +1662,7 @@ export default function CustomerView({
         {categoryKeys.map((cat) => (
           <button
             key={cat.id}
-            className={`capsule-tab ${selectedCategory === cat.id ? 'active' : ''}`}
+            className={`capsule-tab ${effectiveCategory === cat.id ? 'active' : ''}`}
             onClick={() => {
               playTapSound();
               setSelectedCategory(cat.id);

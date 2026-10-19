@@ -25,7 +25,8 @@ import {
   X,
   Mail,
   RefreshCw,
-  Send
+  Send,
+  QrCode
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import {
@@ -1316,6 +1317,32 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         title="Launch Counter POS for this business"
                       >
                         <span>POS</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          playTapSound();
+                          const table = (biz.tables && biz.tables[0]) ? biz.tables[0].replace(/\D/g, '').padStart(2, '0') : '01';
+                          const cleanBiz = biz.id || 'biz_advait';
+                          window.open(`/?biz=${encodeURIComponent(cleanBiz)}&table=${table}&qr=true#customer`, '_blank');
+                        }}
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          background: 'rgba(16, 185, 129, 0.15)',
+                          border: '1px solid rgba(16, 185, 129, 0.3)',
+                          color: '#34D399',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                        title="Open this business's live QR Table Menu"
+                      >
+                        <QrCode size={13} />
+                        <span>QR Menu</span>
                       </button>
 
                       {/* View & Override Credentials */}

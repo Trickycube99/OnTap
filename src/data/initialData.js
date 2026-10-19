@@ -426,6 +426,201 @@ export const initialStaffByBusiness = {
   ]
 };
 
+export const initialMenuByBusiness = {
+  biz_advait: initialMenu,
+  biz_copper_chimney: [
+    {
+      id: 101,
+      name: "Charcoal Smoked Reshmi Malai Tikka",
+      category: "Tandoor & Starters",
+      price: 380,
+      isVeg: false,
+      image: "/assets/butter_chicken_burger.jpg",
+      isAvailable: true,
+      tags: ["Chef's Charcoal Pick", "Smoked Malai"],
+      bullets: [
+        "Tender chicken thigh skewers marinated in velvety hung curd, cream & cardamom",
+        "Charcoal-roasted in traditional clay tandoor with roasted cumin glaze",
+        "Served with mint-coriander chutney & pickled shallots"
+      ],
+      prepTime: "12-15 mins",
+      calories: "490 kcal"
+    },
+    {
+      id: 102,
+      name: "Dum Gosht Awadhi Mutton Biryani",
+      category: "Biryani & Rice",
+      price: 460,
+      isVeg: false,
+      image: "/assets/butter_chicken_burger.jpg",
+      isAvailable: true,
+      tags: ["House Special", "Awadhi Dum"],
+      bullets: [
+        "Fragrant 2-year aged basmati rice layered with slow-cooked spiced mutton",
+        "Infused with saffron milk, mace, kewra essence and golden barista onions",
+        "Accompanied by chilled burani garlic raita and spicy salan"
+      ],
+      prepTime: "15-18 mins",
+      calories: "680 kcal"
+    },
+    {
+      id: 103,
+      name: "Angara Paneer Tikka Platter",
+      category: "Tandoor & Starters",
+      price: 340,
+      isVeg: true,
+      image: "/assets/burrata_paneer_pizza.jpg",
+      isAvailable: true,
+      tags: ["Bestseller", "Spicy Tandoor"],
+      bullets: [
+        "Thick cubes of fresh malai paneer steeped in fiery Kashmiri red chili & mustard oil",
+        "Charred bell peppers, crisp onions, sprinkled with dried fenugreek",
+        "Glazed with melted artisanal butter and chaat masala"
+      ],
+      prepTime: "10-12 mins",
+      calories: "450 kcal"
+    },
+    {
+      id: 104,
+      name: "Dal Maharaja 24-Hr Slow Simmered Lentils",
+      category: "Curries & Mains",
+      price: 290,
+      isVeg: true,
+      image: "/assets/butter_chicken_burger.jpg",
+      isAvailable: true,
+      tags: ["Classic Heritage", "Slow Cooked"],
+      bullets: [
+        "Whole black urad lentils slow simmered overnight over gentle coal embers",
+        "Enriched with vine-ripened tomatoes, ginger juliennes and churned makhan",
+        "Creamy, velvety texture without any overpowering spices"
+      ],
+      prepTime: "8-10 mins",
+      calories: "410 kcal"
+    },
+    {
+      id: 105,
+      name: "Charcoal Garlic Naan",
+      category: "Breads",
+      price: 90,
+      isVeg: true,
+      image: "/assets/burrata_paneer_pizza.jpg",
+      isAvailable: true,
+      tags: ["Fresh Baked"],
+      bullets: [
+        "Hand-stretched leavened dough baked on flaming tandoor clay walls",
+        "Topped with minced golden garlic and fresh cilantro leaves",
+        "Brushed generously with salted farmhouse butter"
+      ],
+      prepTime: "5 mins",
+      calories: "210 kcal"
+    },
+    {
+      id: 106,
+      name: "Smoked Masala Chaas & Mint Cooler",
+      category: "Beverages",
+      price: 120,
+      isVeg: true,
+      image: "/assets/artisanal_cooler.jpg",
+      isAvailable: true,
+      tags: ["Probiotic", "Digestive"],
+      bullets: [
+        "Light spiced buttermilk churned with roasted cumin seeds and Himalayan black salt",
+        "Gently smoked with a live clove ember for earthy rustic notes",
+        "Served ice-cold with hand-torn spearmint leaves"
+      ],
+      prepTime: "3 mins",
+      calories: "85 kcal"
+    }
+  ],
+  biz_chai_point: [
+    {
+      id: 201,
+      name: "Royal Kashmiri Saffron Kahwa",
+      category: "Specialty Teas",
+      price: 140,
+      isVeg: true,
+      image: "/assets/artisanal_cooler.jpg",
+      isAvailable: true,
+      tags: ["Signature Brew", "Antioxidant"],
+      bullets: [
+        "Slow-steeped Kashmiri whole-leaf green tea with royal saffron stigma threads",
+        "Crushed sweet almonds, whole cinnamon quills & green cardamom pods",
+        "Sweetened delicately with pure wild raw honey"
+      ],
+      prepTime: "4 mins",
+      calories: "95 kcal"
+    },
+    {
+      id: 202,
+      name: "Classic Dhabe Wali Ginger Cardamom Chai",
+      category: "Specialty Teas",
+      price: 90,
+      isVeg: true,
+      image: "/assets/artisanal_cooler.jpg",
+      isAvailable: true,
+      tags: ["Bestseller", "Immunity Boost"],
+      bullets: [
+        "Strong Assam CTC golden-tip black tea double-boiled with fresh crushed ginger root",
+        "Green Malabar cardamom pods and creamy full-cream dairy milk",
+        "Served piping hot in traditional terracotta kulhad style"
+      ],
+      prepTime: "5 mins",
+      calories: "125 kcal"
+    },
+    {
+      id: 203,
+      name: "Freshly Baked Bun Maska & Fruit Jam",
+      category: "Bakery & Bites",
+      price: 110,
+      isVeg: true,
+      image: "/assets/truffle_burger.jpg",
+      isAvailable: true,
+      tags: ["Irani Cafe Classic", "Sweet & Savory"],
+      bullets: [
+        "Ultra-soft sweet brioche bun split and loaded with whipped salted table butter",
+        "Layered with organic wild strawberry and berry compote",
+        "The ultimate pairing for your hot morning and evening cuppa"
+      ],
+      prepTime: "3 mins",
+      calories: "320 kcal"
+    },
+    {
+      id: 204,
+      name: "Golden Flaky Spinach & Sweet Corn Puff",
+      category: "Bakery & Bites",
+      price: 130,
+      isVeg: true,
+      image: "/assets/burrata_paneer_pizza.jpg",
+      isAvailable: true,
+      tags: ["Crispy Warm", "Vegetarian"],
+      bullets: [
+        "64-layer French puff pastry envelope baked to golden crisp perfection",
+        "Filled with creamed sweet corn, baby spinach, black pepper and melted cheddar",
+        "Served with zesty house tomato-chili dip"
+      ],
+      prepTime: "4 mins",
+      calories: "280 kcal"
+    },
+    {
+      id: 205,
+      name: "18-Hour Nitro Cold Brew Caramel Latte",
+      category: "Cold Brews",
+      price: 180,
+      isVeg: true,
+      image: "/assets/artisanal_cooler.jpg",
+      isAvailable: true,
+      tags: ["Single Estate", "Smooth Nitro"],
+      bullets: [
+        "18-hour cold water extraction of single-origin Chikmagalur Arabica beans",
+        "Infused with nitrogen for a rich Guinness-like velvety micro-foam head",
+        "Blended with oat milk and homemade salted sea salt caramel"
+      ],
+      prepTime: "2 mins",
+      calories: "140 kcal"
+    }
+  ]
+};
+
 export const initialOffers = [
   { id: "off-1", code: "ADVAIT10", type: "percent", value: 10, description: "10% Welcome Discount for Table QR Ordering", minOrderAmount: 0, expiryDate: "2026-12-31", isActive: true },
   { id: "off-2", code: "FLAT100", type: "flat", value: 100, description: "₹100 Off on orders above ₹600", minOrderAmount: 600, expiryDate: "2026-12-31", isActive: true },

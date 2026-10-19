@@ -12,6 +12,7 @@ import DeveloperAdminView from './views/DeveloperAdminView';
 import AuthActionView from './views/AuthActionView';
 import {
   initialMenu,
+  initialMenuByBusiness,
   verifiedChefData,
   initialOrders,
   initialExpenses,
@@ -99,16 +100,52 @@ export const normalizeStaffCredentials = (staffList) => {
   });
 };
 
+export const getInitialBusinessId = () => {
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search);
+    const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+    const hashParams = new URLSearchParams(hashQuery);
+    const bizParam = urlParams.get('biz') || hashParams.get('biz') || urlParams.get('b') || hashParams.get('b');
+    if (bizParam) {
+      const businesses = getBusinesses();
+      const match = businesses.find((b) => b.id.toLowerCase() === bizParam.toLowerCase());
+      if (match) {
+        setActiveBusiness(match.id);
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('flowscape_guest_scanned_biz', match.id);
+        }
+        return match.id;
+      }
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      const sessionBiz = sessionStorage.getItem('flowscape_guest_scanned_biz');
+      if (sessionBiz) {
+        const businesses = getBusinesses();
+        const match = businesses.find((b) => b.id === sessionBiz);
+        if (match) {
+          setActiveBusiness(match.id);
+          return match.id;
+        }
+      }
+    }
+  }
+  const currentActive = getActiveBusiness();
+  return currentActive?.id || 'biz_advait';
+};
+
 export default function App() {
-  const initialBiz = getActiveBusiness();
-  const initialBizId = initialBiz?.id || 'biz_advait';
+  const initialBizId = getInitialBusinessId();
+  const initialBiz = getBusinesses().find((b) => b.id === initialBizId) || getActiveBusiness();
   const isDefaultBiz = initialBizId === 'biz_advait';
 
   const [activeBusinessId, setActiveBusinessId] = useState(initialBizId);
   const loadedBusinessIdRef = useRef(initialBizId);
 
   // Global Shared States (Persisted in localStorage scoped by active business)
-  const [menu, setMenu] = useState(() => loadData(getScopedKey(STORAGE_KEYS.MENU, initialBizId), initialMenu));
+  const [menu, setMenu] = useState(() => {
+    const fallback = initialMenuByBusiness?.[initialBizId] || initialMenu;
+    return loadData(getScopedKey(STORAGE_KEYS.MENU, initialBizId), fallback);
+  });
   const [chef, setChef] = useState(() => loadData(getScopedKey(STORAGE_KEYS.CHEF, initialBizId), verifiedChefData));
   const [orders, setOrders] = useState(() => {
     const loaded = loadData(getScopedKey(STORAGE_KEYS.ORDERS, initialBizId), isDefaultBiz ? initialOrders : []);
@@ -457,6 +494,22 @@ export default function App() {
       const tableParam = urlParams.get('table') || hashParams.get('table') || urlParams.get('t') || hashParams.get('t');
       const qrParam = urlParams.get('qr') || hashParams.get('qr');
 
+      const bizParam = urlParams.get('biz') || hashParams.get('biz') || urlParams.get('b') || hashParams.get('b');
+      if (bizParam) {
+        const businesses = getBusinesses();
+        const match = businesses.find((b) => b.id.toLowerCase() === bizParam.toLowerCase());
+        if (match) {
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem('flowscape_guest_scanned_biz', match.id);
+          }
+          if (match.id !== activeBusinessId) {
+            setActiveBusiness(match.id);
+            setActiveBusinessId(match.id);
+            loadBusinessData(match.id, match);
+          }
+        }
+      }
+
       // 1. If QR parameters are present, initialize guest table session and open customer menu
       if (tableParam || qrParam) {
         const cleanTable = sanitizeTableFromParam(tableParam || '04');
@@ -568,7 +621,8 @@ export default function App() {
       resetAllDataToDefault(activeBusinessId);
       resetAllSessions();
       setAuthSessions(getStoredSessions());
-      setMenu(initialMenu);
+      const freshMenu = initialMenuByBusiness?.[activeBusinessId] || initialMenu;
+      setMenu(freshMenu);
       setChef(verifiedChefData);
       setOrders(activeBusinessId === 'biz_advait' ? initialOrders : []);
       setExpenses(activeBusinessId === 'biz_advait' ? initialExpenses : []);
@@ -598,7 +652,8 @@ export default function App() {
       }
     }
 
-    const loadedMenu = loadData(getScopedKey(STORAGE_KEYS.MENU, bizId), initialMenu);
+    const fallbackMenu = initialMenuByBusiness?.[bizId] || initialMenu;
+    const loadedMenu = loadData(getScopedKey(STORAGE_KEYS.MENU, bizId), fallbackMenu);
     const loadedOrders = loadData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), isDefault ? initialOrders : []);
     const loadedExpenses = loadData(getScopedKey(STORAGE_KEYS.EXPENSES, bizId), isDefault ? initialExpenses : []);
     const loadedStaff = normalizeStaffCredentials(loadData(getScopedKey(STORAGE_KEYS.STAFF, bizId), isDefault ? initialStaff : (initialStaffByBusiness?.[bizId] || [])));
@@ -1083,6 +1138,7 @@ export default function App() {
         restaurantName={theme.restaurantName}
         logo={theme.logo}
         tagline={theme.tagline}
+        businessId={activeBusinessId}
       />
     </div>
   );

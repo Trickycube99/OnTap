@@ -25,7 +25,8 @@ export default function TableQrModal({
   ],
   restaurantName = 'Restaurant',
   logo = null,
-  tagline = null
+  tagline = null,
+  businessId = 'biz_advait'
 }) {
   const [selectedTable, setSelectedTable] = useState(activeTable || 'Table 04');
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
@@ -35,9 +36,21 @@ export default function TableQrModal({
   // Compute table number e.g. "04" from "Table 04" or "Takeaway" for Counter / Takeaway
   const isTakeaway = (selectedTable || '').toLowerCase().includes('takeaway') || (selectedTable || '').toLowerCase().includes('counter');
   const tableNum = (selectedTable || 'Table 04').replace(/\D/g, '').padStart(2, '0');
+  const cleanBiz = businessId || 'biz_advait';
   const directMenuUrl = isTakeaway
-    ? `${baseUrl}/?table=Takeaway&qr=true#customer`
-    : `${baseUrl}/?table=${tableNum}&qr=true#customer`;
+    ? `${baseUrl}/?biz=${encodeURIComponent(cleanBiz)}&table=Takeaway&qr=true#customer`
+    : `${baseUrl}/?biz=${encodeURIComponent(cleanBiz)}&table=${tableNum}&qr=true#customer`;
+
+  // Sync selectedTable when modal opens or activeTable/tables changes
+  useEffect(() => {
+    if (isOpen) {
+      if (activeTable && tables.includes(activeTable)) {
+        setSelectedTable(activeTable);
+      } else if (tables && tables.length > 0) {
+        setSelectedTable(tables[0]);
+      }
+    }
+  }, [isOpen, activeTable, tables, businessId]);
 
   // Generate QR Code data URL whenever selectedTable or baseUrl changes
   useEffect(() => {
@@ -78,7 +91,7 @@ export default function TableQrModal({
     playTapSound();
     if (!qrDataUrl) return;
     const link = document.createElement('a');
-    link.download = `advait_qr_${selectedTable.toLowerCase().replace(/\s+/g, '_')}.png`;
+    link.download = `${cleanBiz}_qr_${selectedTable.toLowerCase().replace(/\s+/g, '_')}.png`;
     link.href = qrDataUrl;
     link.click();
     playSuccessChime();
@@ -170,7 +183,7 @@ export default function TableQrModal({
               />
             )}
             <span className="qr-standee-brand">{restaurantName}</span>
-            <span className="qr-standee-sub">{tagline || 'Artisanal Indian Dining • FSSAI Accredited'}</span>
+            <span className="qr-standee-sub">{tagline || 'Contactless Dining • FSSAI Accredited'}</span>
           </div>
 
           <div className="qr-standee-table-badge">

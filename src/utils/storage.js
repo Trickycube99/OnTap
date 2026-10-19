@@ -1,5 +1,6 @@
 import {
   initialMenu,
+  initialMenuByBusiness,
   verifiedChefData,
   initialOrders,
   initialExpenses,
@@ -45,7 +46,8 @@ export function saveData(key, value) {
 }
 
 export function resetAllDataToDefault(bizId = 'biz_advait') {
-  saveData(getScopedKey(STORAGE_KEYS.MENU, bizId), initialMenu);
+  const fallbackMenu = initialMenuByBusiness?.[bizId] || initialMenu;
+  saveData(getScopedKey(STORAGE_KEYS.MENU, bizId), fallbackMenu);
   saveData(getScopedKey(STORAGE_KEYS.CHEF, bizId), verifiedChefData);
   saveData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), bizId === 'biz_advait' ? initialOrders : []);
   saveData(getScopedKey(STORAGE_KEYS.EXPENSES, bizId), bizId === 'biz_advait' ? initialExpenses : []);
