@@ -4,6 +4,7 @@
 import {
   authenticateBusinessOwner,
   authenticateCounterByPin,
+  authenticateStaffMemberByLoginId,
   authenticateDeveloper,
   isDeveloperAuthenticated,
   getActiveBusiness,
@@ -89,126 +90,22 @@ export const ROLE_CONFIGS = {
     },
     validate: (creds) => {
       const pin = (creds?.pin || '').toString().trim();
+      const loginId = (creds?.loginId || '').trim();
+
+      if (!loginId) {
+        return { valid: false, error: 'Please enter your Staff Login ID (e.g. @sunil.pos).' };
+      }
+
       if (!pin || !/^\d{6}$/.test(pin)) {
-        return { valid: false, error: 'Please enter your 6-digit staff PIN.' };
-      }
-      const activeBiz = getActiveBusiness();
-      const isOwnerOverride = activeBiz && (activeBiz.owner?.pin === pin || pin === '882100' || pin === '8821');
-
-      const staffList = Array.isArray(creds?.staffList) ? creds.staffList : [];
-      const staffId = creds?.staffId;
-      const loginId = (creds?.loginId || '').trim().toLowerCase();
-
-      // If specific staff selected/entered
-      if (staffId && staffId !== '__owner_admin__') {
-        const targetStaff = staffList.find((s) => s.id === staffId);
-        if (targetStaff) {
-          if (targetStaff.pin === pin || isOwnerOverride) {
-            return {
-              valid: true,
-              business: activeBiz,
-              resolvedSession: {
-                role: ROLES.COUNTER,
-                businessId: activeBiz?.id || 'biz_advait',
-                businessName: activeBiz?.name || 'Advait Artisanal Kitchen',
-                staffId: targetStaff.id,
-                name: targetStaff.name,
-                staffRole: targetStaff.role,
-                loginId: targetStaff.loginId,
-                terminal: activeBiz?.counter?.terminalName || 'POS Terminal 01',
-                token: `pos_${activeBiz?.id || 'biz_advait'}_${Date.now()}`,
-                authenticatedAt: new Date().toISOString(),
-                authenticatedBy: isOwnerOverride ? 'admin' : 'counter'
-              }
-            };
-          } else {
-            return { valid: false, error: `Incorrect PIN for "${targetStaff.name}". Please enter their 6-digit POS PIN.` };
-          }
-        }
+        return { valid: false, error: 'Staff POS PIN must be exactly 6 numeric digits.' };
       }
 
-      // If login ID was provided
-      if (loginId) {
-        const targetStaff = staffList.find((s) => (s.loginId || '').toLowerCase() === loginId);
-        if (targetStaff) {
-          if (targetStaff.pin === pin || isOwnerOverride) {
-            return {
-              valid: true,
-              business: activeBiz,
-              resolvedSession: {
-                role: ROLES.COUNTER,
-                businessId: activeBiz?.id || 'biz_advait',
-                businessName: activeBiz?.name || 'Advait Artisanal Kitchen',
-                staffId: targetStaff.id,
-                name: targetStaff.name,
-                staffRole: targetStaff.role,
-                loginId: targetStaff.loginId,
-                terminal: activeBiz?.counter?.terminalName || 'POS Terminal 01',
-                token: `pos_${activeBiz?.id || 'biz_advait'}_${Date.now()}`,
-                authenticatedAt: new Date().toISOString(),
-                authenticatedBy: isOwnerOverride ? 'admin' : 'counter'
-              }
-            };
-          } else {
-            return { valid: false, error: `Incorrect PIN for login ID "${loginId}".` };
-          }
-        }
-      }
-
-      // If owner override explicitly selected
-      if (staffId === '__owner_admin__' || isOwnerOverride) {
-        if (isOwnerOverride) {
-          return {
-            valid: true,
-            business: activeBiz,
-            resolvedSession: {
-              role: ROLES.COUNTER,
-              businessId: activeBiz?.id || 'biz_advait',
-              businessName: activeBiz?.name || 'Advait Artisanal Kitchen',
-              staffId: '__owner_admin__',
-              name: `${activeBiz?.owner?.name || 'Owner'} (Master Override)`,
-              staffRole: 'Owner Admin',
-              loginId: 'admin.owner',
-              terminal: activeBiz?.counter?.terminalName || 'POS Terminal 01',
-              token: `pos_${activeBiz?.id || 'biz_advait'}_${Date.now()}`,
-              authenticatedAt: new Date().toISOString(),
-              authenticatedBy: 'admin'
-            }
-          };
-        } else {
-          return { valid: false, error: 'Incorrect Master Owner PIN for administrator override.' };
-        }
-      }
-
-      // Fallback: match by PIN across active staff list
-      if (staffList.length > 0) {
-        const matchingStaff = staffList.find((s) => s.pin === pin && s.status !== 'resigned');
-        if (matchingStaff) {
-          return {
-            valid: true,
-            business: activeBiz,
-            resolvedSession: {
-              role: ROLES.COUNTER,
-              businessId: activeBiz?.id || 'biz_advait',
-              businessName: activeBiz?.name || 'Advait Artisanal Kitchen',
-              staffId: matchingStaff.id,
-              name: matchingStaff.name,
-              staffRole: matchingStaff.role,
-              loginId: matchingStaff.loginId,
-              terminal: activeBiz?.counter?.terminalName || 'POS Terminal 01',
-              token: `pos_${activeBiz?.id || 'biz_advait'}_${Date.now()}`,
-              authenticatedAt: new Date().toISOString(),
-              authenticatedBy: 'counter'
-            }
-          };
-        }
-      }
-
-      // Fallback to terminal PIN
-      const authRes = authenticateCounterByPin(pin, 'Counter Staff');
+      // Cross-organization multi-tenant authentication by Login ID & PIN
+      const authRes = authenticateStaffMemberByLoginId(loginId, pin);
       if (!authRes.success) {
         return { valid: false, error: authRes.error };
       }
+
       return { valid: true, business: authRes.business, resolvedSession: authRes.session };
     },
     createSession: (creds, validationResult = null) => {

@@ -2270,6 +2270,27 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   borderRadius: 12,
                   border: '1px solid rgba(255, 255, 255, 0.08)'
                 }}>
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>COUNTER STAFF POS LOGIN ID</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#38BDF8' }}>
+                      @{showCredentialsModal.counter?.loginId || `${showCredentialsModal.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.pos`}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(`@${showCredentialsModal.counter?.loginId || `${showCredentialsModal.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.pos`}`, 'counterLoginId')}
+                      style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+                      title="Copy Staff Login ID"
+                    >
+                      {copiedKey === 'counterLoginId' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: 'rgba(15, 23, 42, 0.8)',
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}>
                   <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>COUNTER STAFF POS PIN (6 DIGITS)</div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#10B981' }}>
@@ -2278,6 +2299,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     <button
                       onClick={() => copyToClipboard(showCredentialsModal.counter.pin, 'counterPin')}
                       style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+                      title="Copy Staff POS PIN"
                     >
                       {copiedKey === 'counterPin' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
                     </button>

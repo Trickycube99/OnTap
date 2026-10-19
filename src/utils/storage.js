@@ -4,6 +4,7 @@ import {
   initialOrders,
   initialExpenses,
   initialStaff,
+  initialStaffByBusiness,
   initialOffers,
   initialTheme
 } from '../data/initialData';
@@ -48,7 +49,7 @@ export function resetAllDataToDefault(bizId = 'biz_advait') {
   saveData(getScopedKey(STORAGE_KEYS.CHEF, bizId), verifiedChefData);
   saveData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), bizId === 'biz_advait' ? initialOrders : []);
   saveData(getScopedKey(STORAGE_KEYS.EXPENSES, bizId), bizId === 'biz_advait' ? initialExpenses : []);
-  saveData(getScopedKey(STORAGE_KEYS.STAFF, bizId), bizId === 'biz_advait' ? initialStaff : []);
+  saveData(getScopedKey(STORAGE_KEYS.STAFF, bizId), initialStaffByBusiness?.[bizId] || (bizId === 'biz_advait' ? initialStaff : []));
   saveData(getScopedKey(STORAGE_KEYS.OFFERS, bizId), bizId === 'biz_advait' ? initialOffers : []);
   saveData(getScopedKey(STORAGE_KEYS.THEME, bizId), initialTheme);
   saveData(getScopedKey(STORAGE_KEYS.CHECKLISTS, bizId), []);

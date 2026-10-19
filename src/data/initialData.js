@@ -362,6 +362,70 @@ export const initialStaff = [
   }
 ];
 
+export const initialStaffByBusiness = {
+  biz_advait: initialStaff,
+  biz_copper_chimney: [
+    {
+      id: "st-cc-1",
+      loginId: "ravi.pos",
+      pin: "330100",
+      name: "Ravi Sharma",
+      role: "Counter Captain & POS Lead",
+      phone: "+91 98221-55011",
+      monthlyWage: 28000,
+      monthEndPay: 28000,
+      status: "active",
+      bankAccount: "982200551101",
+      ifsc: "HDFC0000128",
+      permissions: { canEditPrice: true, canCreateDiscounts: true, canViewPnL: false }
+    },
+    {
+      id: "st-cc-2",
+      loginId: "anjali.pos",
+      pin: "330200",
+      name: "Anjali Rao",
+      role: "Head Cashier & Service Lead",
+      phone: "+91 98334-66022",
+      monthlyWage: 25000,
+      monthEndPay: 25000,
+      status: "active",
+      bankAccount: "982200551102",
+      ifsc: "HDFC0000128",
+      permissions: { canEditPrice: false, canCreateDiscounts: true, canViewPnL: false }
+    }
+  ],
+  biz_chai_point: [
+    {
+      id: "st-cp-1",
+      loginId: "vikram.pos",
+      pin: "220100",
+      name: "Vikram Joshi",
+      role: "Counter Lead & Barista",
+      phone: "+91 98440-77011",
+      monthlyWage: 24000,
+      monthEndPay: 24000,
+      status: "active",
+      bankAccount: "982300771101",
+      ifsc: "HDFC0000128",
+      permissions: { canEditPrice: true, canCreateDiscounts: true, canViewPnL: false }
+    },
+    {
+      id: "st-cp-2",
+      loginId: "pooja.pos",
+      pin: "220200",
+      name: "Pooja Patel",
+      role: "Cashier & Dispatch Lead",
+      phone: "+91 98551-88022",
+      monthlyWage: 22000,
+      monthEndPay: 22000,
+      status: "active",
+      bankAccount: "982300771102",
+      ifsc: "HDFC0000128",
+      permissions: { canEditPrice: false, canCreateDiscounts: true, canViewPnL: false }
+    }
+  ]
+};
+
 export const initialOffers = [
   { id: "off-1", code: "ADVAIT10", type: "percent", value: 10, description: "10% Welcome Discount for Table QR Ordering", minOrderAmount: 0, expiryDate: "2026-12-31", isActive: true },
   { id: "off-2", code: "FLAT100", type: "flat", value: 100, description: "₹100 Off on orders above ₹600", minOrderAmount: 600, expiryDate: "2026-12-31", isActive: true },

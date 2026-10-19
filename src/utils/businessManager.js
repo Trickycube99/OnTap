@@ -3,6 +3,8 @@
 // and authenticate distinct business owners with their own credentials.
 
 
+import { initialStaff, initialStaffByBusiness } from '../data/initialData';
+
 export const BUSINESSES_STORAGE_KEY = 'flowscape_businesses_v1';
 export const ACTIVE_BUSINESS_ID_KEY = 'flowscape_active_business_id_v1';
 export const DEV_SESSION_STORAGE_KEY = 'flowscape_dev_session_v1';
@@ -550,4 +552,148 @@ export function authenticateCounterByPin(pin, cashierName, activeBusinessId = nu
   }
 
   return { success: false, error: 'Invalid POS PIN. Enter the 6-digit PIN for your business counter terminal.' };
+}
+
+/**
+ * Authenticate counter staff member by manual Login ID (e.g. @sunil.pos) and 6-digit PIN.
+ * Searches across ALL registered businesses and shops on the platform.
+ * Automatically resolves and switches to the staff member's respective business account dashboard.
+ */
+export function authenticateStaffMemberByLoginId(loginId, pin) {
+  const cleanLoginId = (loginId || '').replace(/^@/, '').trim().toLowerCase();
+  const cleanPin = (pin || '').toString().trim();
+
+  if (!cleanLoginId) {
+    return { success: false, error: 'Please enter your Staff Login ID (e.g. @sunil.pos).' };
+  }
+
+  if (!/^\d{6}$/.test(cleanPin)) {
+    return { success: false, error: 'Staff POS PIN must be exactly 6 numeric digits.' };
+  }
+
+  const businesses = getBusinesses();
+
+  // 1. Iterate across all registered businesses and check their active staff records
+  for (const b of businesses) {
+    let staffList = [];
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const key = b.id === 'biz_advait' ? 'flowscape_staff_inr_v2' : `flowscape_staff_inr_v2_${b.id}`;
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          staffList = JSON.parse(raw);
+        }
+      } catch {}
+    }
+
+    if (!Array.isArray(staffList) || staffList.length === 0) {
+      staffList = initialStaffByBusiness?.[b.id] || (b.id === 'biz_advait' ? initialStaff : []);
+    }
+
+    // Check staff in this business
+    for (const emp of staffList) {
+      const empLogin = (emp.loginId || (emp.name ? emp.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.pos' : '')).replace(/^@/, '').trim().toLowerCase();
+      
+      if (empLogin === cleanLoginId) {
+        if (b.status === 'suspended' || b.emailVerified === false) {
+          return {
+            success: false,
+            error: `Access Denied: Business "${b.name}" is currently suspended. Please contact the business owner.`
+          };
+        }
+
+        const storedPin = String(emp.pin || '').trim();
+        const ownerPin = String(b.owner?.pin || '').trim();
+        const counterPin = String(b.counter?.pin || '').trim();
+
+        if (storedPin === cleanPin || ownerPin === cleanPin || counterPin === cleanPin) {
+          setActiveBusiness(b.id);
+          return {
+            success: true,
+            business: b,
+            session: {
+              role: 'counter',
+              businessId: b.id,
+              businessName: b.name,
+              staffId: emp.id,
+              name: emp.name,
+              staffRole: emp.role || 'POS Associate',
+              loginId: emp.loginId || cleanLoginId,
+              terminal: b.counter?.terminalName || 'POS Terminal 01',
+              token: `pos_${b.id}_${Date.now()}`,
+              authenticatedAt: new Date().toISOString(),
+              authenticatedBy: 'counter'
+            }
+          };
+        } else {
+          return {
+            success: false,
+            error: `Incorrect PIN for staff member "@${emp.loginId || cleanLoginId}" at "${b.name}".`
+          };
+        }
+      }
+    }
+
+    // 2. Also check if login ID matches the business terminal name or owner override
+    const terminalSlug = (b.counter?.terminalName || '').toLowerCase().replace(/[^a-z0-9]/g, '') + '.pos';
+    const bizSlug = (b.id || '').replace(/^biz_/, '') + '.pos';
+    const bizNameSlug = (b.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') + '.pos';
+    const ownerEmail = (b.owner?.email || '').toLowerCase();
+
+    if (
+      cleanLoginId === terminalSlug ||
+      cleanLoginId === bizSlug ||
+      cleanLoginId === bizNameSlug ||
+      cleanLoginId === 'pos'
+    ) {
+      if (String(b.counter?.pin || '').trim() === cleanPin || String(b.owner?.pin || '').trim() === cleanPin) {
+        setActiveBusiness(b.id);
+        return {
+          success: true,
+          business: b,
+          session: {
+            role: 'counter',
+            businessId: b.id,
+            businessName: b.name,
+            staffId: `terminal_${b.id}`,
+            name: `${b.name} Counter`,
+            staffRole: 'Station Terminal',
+            loginId: cleanLoginId,
+            terminal: b.counter?.terminalName || 'POS Terminal 01',
+            token: `pos_${b.id}_${Date.now()}`,
+            authenticatedAt: new Date().toISOString(),
+            authenticatedBy: 'terminal'
+          }
+        };
+      }
+    }
+
+    if (cleanLoginId === 'admin.owner' || cleanLoginId === ownerEmail || cleanLoginId === 'owner') {
+      if (String(b.owner?.pin || '').trim() === cleanPin) {
+        setActiveBusiness(b.id);
+        return {
+          success: true,
+          business: b,
+          session: {
+            role: 'counter',
+            businessId: b.id,
+            businessName: b.name,
+            staffId: '__owner_admin__',
+            name: `${b.owner.name} (Master Override)`,
+            staffRole: 'Owner Admin',
+            loginId: 'admin.owner',
+            terminal: b.counter?.terminalName || 'POS Terminal 01',
+            token: `pos_${b.id}_${Date.now()}`,
+            authenticatedAt: new Date().toISOString(),
+            authenticatedBy: 'admin'
+          }
+        };
+      }
+    }
+  }
+
+  return {
+    success: false,
+    error: `No staff member or terminal found with Login ID "@${cleanLoginId}". Check your Staff Login ID or consult your shop manager.`
+  };
 }

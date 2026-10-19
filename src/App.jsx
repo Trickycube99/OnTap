@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BarChart3, QrCode, Lock, Utensils, Layers, ShieldCheck } from 'lucide-react';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import AuthModal from './components/AuthModal';
@@ -17,6 +16,7 @@ import {
   initialOrders,
   initialExpenses,
   initialStaff,
+  initialStaffByBusiness,
   initialOffers,
   initialTheme
 } from './data/initialData';
@@ -98,7 +98,7 @@ export default function App() {
   });
   const [expenses, setExpenses] = useState(() => loadData(getScopedKey(STORAGE_KEYS.EXPENSES, initialBizId), isDefaultBiz ? initialExpenses : []));
   const [staff, setStaff] = useState(() => {
-    const raw = loadData(getScopedKey(STORAGE_KEYS.STAFF, initialBizId), isDefaultBiz ? initialStaff : []);
+    const raw = loadData(getScopedKey(STORAGE_KEYS.STAFF, initialBizId), isDefaultBiz ? initialStaff : (initialStaffByBusiness?.[initialBizId] || []));
     return normalizeStaffCredentials(raw);
   });
   const [offers, setOffers] = useState(() => loadData(getScopedKey(STORAGE_KEYS.OFFERS, initialBizId), isDefaultBiz ? initialOffers : []));
@@ -519,7 +519,7 @@ export default function App() {
       setChef(verifiedChefData);
       setOrders(activeBusinessId === 'biz_advait' ? initialOrders : []);
       setExpenses(activeBusinessId === 'biz_advait' ? initialExpenses : []);
-      setStaff(activeBusinessId === 'biz_advait' ? initialStaff : []);
+      setStaff(initialStaffByBusiness?.[activeBusinessId] || (activeBusinessId === 'biz_advait' ? initialStaff : []));
       setOffers(activeBusinessId === 'biz_advait' ? initialOffers : []);
       setTheme(initialTheme);
       setChecklists([]);
@@ -544,7 +544,7 @@ export default function App() {
     const loadedMenu = loadData(getScopedKey(STORAGE_KEYS.MENU, bizId), initialMenu);
     const loadedOrders = loadData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), isDefault ? initialOrders : []);
     const loadedExpenses = loadData(getScopedKey(STORAGE_KEYS.EXPENSES, bizId), isDefault ? initialExpenses : []);
-    const loadedStaff = normalizeStaffCredentials(loadData(getScopedKey(STORAGE_KEYS.STAFF, bizId), isDefault ? initialStaff : []));
+    const loadedStaff = normalizeStaffCredentials(loadData(getScopedKey(STORAGE_KEYS.STAFF, bizId), isDefault ? initialStaff : (initialStaffByBusiness?.[bizId] || [])));
     const loadedOffers = loadData(getScopedKey(STORAGE_KEYS.OFFERS, bizId), isDefault ? initialOffers : []);
     const loadedChecklists = loadData(getScopedKey(STORAGE_KEYS.CHECKLISTS, bizId), []);
 
@@ -805,7 +805,6 @@ export default function App() {
             }
           }}
           theme={theme}
-          staff={staff}
         />
       </div>
     );
@@ -1017,7 +1016,6 @@ export default function App() {
           }
         }}
         theme={theme}
-        staff={staff}
       />
 
       {/* Table QR Standee & Direct Order Link Modal */}
