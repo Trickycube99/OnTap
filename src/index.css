@@ -1804,20 +1804,16 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #F1F5F9;
-  border: 1px solid #E2E8F0;
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
   border-radius: 20px;
   padding: 5px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.customer-table-pill:hover {
-  background: #EFF6FF;
-  border-color: #BFDBFE;
+  font-size: 12px;
+  font-weight: 700;
+  color: #15803D;
+  cursor: default;
+  user-select: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .lang-toggle-pill {

@@ -10,7 +10,6 @@ import {
   ShoppingBag,
   MapPin,
   CheckCircle2,
-  Utensils,
   User,
   LogOut,
   Volume2,
@@ -29,7 +28,7 @@ export default function Header({
   currentRole,
   onRoleSwitch,
   activeTable,
-  setActiveTable,
+  setActiveTable: _setActiveTable,
   searchQuery,
   setSearchQuery,
   isSearchOpen,
@@ -50,7 +49,6 @@ export default function Header({
 }) {
   const [activeBranch, setActiveBranch] = useState('Connaught Place, New Delhi');
   const [showBranchMenu, setShowBranchMenu] = useState(false);
-  const [showTableModal, setShowTableModal] = useState(false);
   const [cloudSyncState, setCloudSyncState] = useState(getCloudSyncState());
   const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
 
@@ -104,20 +102,15 @@ export default function Header({
             </div>
           </div>
 
-          {/* Center: Table Badge (Tap to change table if needed) */}
+          {/* Center: Table / Station Badge (Strictly Locked to Scanned Physical QR Code) */}
           <div className="header-center-table">
-            <button
-              className="customer-table-pill"
-              onClick={() => {
-                playTapSound();
-                setShowTableModal(true);
-              }}
-              title="Current Dine-in Table (Tap to switch)"
+            <div
+              className="customer-table-pill fixed-table-pill"
+              title={`QR Verified: ${activeTable} (Scan physical QR code to change)`}
             >
-              <Utensils size={13} color="#007AFF" />
+              <QrCode size={13} color="#16A34A" />
               <span className="table-name-text">{activeTable}</span>
-              <ChevronDown size={11} color="#6B7280" />
-            </button>
+            </div>
           </div>
 
           {/* Right: Language Switcher, Search, and Cart Tray */}
@@ -190,57 +183,6 @@ export default function Header({
           </div>
         )}
 
-        {/* Guest Table Selector Modal */}
-        {showTableModal && (
-          <div className="modal-overlay" onClick={() => setShowTableModal(false)}>
-            <div className="modal-content-sheet" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-drag-pill" />
-              <div className="card-heading" style={{ fontSize: 18, marginBottom: 4 }}>
-                {language === 'hi' ? 'अपनी टेबल चुनें' : 'Select Your Table'}
-              </div>
-              <div className="card-meta-text" style={{ marginBottom: 16 }}>
-                {language === 'hi'
-                  ? 'अपना ऑर्डर सीधे इसी टेबल पर प्राप्त करने के लिए नंबर चुनें'
-                  : 'Orders will be delivered directly to this table number by our service team.'}
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
-                {(theme?.tables || [
-                  'Table 01', 'Table 02', 'Table 03', 'Table 04',
-                  'Table 05', 'Table 06', 'Table 07', 'Counter / Takeaway'
-                ]).map((tbl) => (
-                  <button
-                    key={tbl}
-                    className={`btn-secondary-pill ${activeTable === tbl ? 'active' : ''}`}
-                    style={{
-                      padding: '10px 6px',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      justifyContent: 'center',
-                      background: activeTable === tbl ? '#EFF6FF' : '#F9FAFB',
-                      borderColor: activeTable === tbl ? '#007AFF' : '#E5E7EB',
-                      color: activeTable === tbl ? '#007AFF' : 'var(--text-primary)'
-                    }}
-                    onClick={() => {
-                      playTapSound();
-                      setActiveTable(tbl);
-                      setShowTableModal(false);
-                    }}
-                  >
-                    {tbl}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                className="btn-primary-pill full-width"
-                onClick={() => setShowTableModal(false)}
-              >
-                {language === 'hi' ? 'टेबल कन्फर्म करें' : `Confirm ${activeTable}`}
-              </button>
-            </div>
-          </div>
-        )}
       </>
     );
   }

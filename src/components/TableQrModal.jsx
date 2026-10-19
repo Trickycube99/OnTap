@@ -20,9 +20,10 @@ export default function TableQrModal({
   setActiveTable,
   tables = [
     'Table 01', 'Table 02', 'Table 03', 'Table 04', 'Table 05',
-    'Table 06', 'Table 07', 'Table 08', 'Table 09', 'Table 10'
+    'Table 06', 'Table 07', 'Table 08', 'Table 09', 'Table 10',
+    'Counter / Takeaway'
   ],
-  restaurantName = 'Advait Artisanal Indian Kitchen',
+  restaurantName = 'Restaurant',
   logo = null,
   tagline = null
 }) {
@@ -31,9 +32,12 @@ export default function TableQrModal({
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [isCopied, setIsCopied] = useState(false);
 
-  // Compute table number e.g. "04" from "Table 04"
+  // Compute table number e.g. "04" from "Table 04" or "Takeaway" for Counter / Takeaway
+  const isTakeaway = (selectedTable || '').toLowerCase().includes('takeaway') || (selectedTable || '').toLowerCase().includes('counter');
   const tableNum = (selectedTable || 'Table 04').replace(/\D/g, '').padStart(2, '0');
-  const directMenuUrl = `${baseUrl}/?table=${tableNum}&qr=true#customer`;
+  const directMenuUrl = isTakeaway
+    ? `${baseUrl}/?table=Takeaway&qr=true#customer`
+    : `${baseUrl}/?table=${tableNum}&qr=true#customer`;
 
   // Generate QR Code data URL whenever selectedTable or baseUrl changes
   useEffect(() => {
@@ -191,7 +195,7 @@ export default function TableQrModal({
 
           <div className="qr-standee-footer">
             <div className="qr-cta-bold">SCAN WITH CAMERA TO ORDER</div>
-            <div className="qr-cta-sub">Instant Table Service • No Sign-In Required</div>
+            <div className="qr-cta-sub">{isTakeaway ? 'Instant Counter / Takeaway Pick-Up • No Sign-In Required' : 'Instant Table Service • No Sign-In Required'}</div>
           </div>
         </div>
 

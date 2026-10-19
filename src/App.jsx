@@ -61,6 +61,28 @@ export const checkGuestQrAccess = () => {
   return hasTableParam || hasQrParam || hasSessionQr;
 };
 
+/**
+ * Sanitize and format the scanned table or takeaway station parameter
+ * Supports individual table numbers (e.g. '04', 'Table 04') and takeaway stations (e.g. 'Takeaway', 'Counter / Takeaway')
+ */
+export const sanitizeTableFromParam = (tableParam) => {
+  if (!tableParam) return 'Table 04';
+  const trimmed = String(tableParam).trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'takeaway' || lower.includes('takeaway') || lower.includes('counter')) {
+    return 'Counter / Takeaway';
+  }
+  if (lower.startsWith('table')) {
+    const numPart = lower.replace(/\D/g, '');
+    return numPart ? `Table ${numPart.padStart(2, '0')}` : trimmed;
+  }
+  const digits = lower.replace(/\D/g, '');
+  if (digits) {
+    return `Table ${digits.padStart(2, '0')}`;
+  }
+  return trimmed;
+};
+
 export const normalizeStaffCredentials = (staffList) => {
   if (!Array.isArray(staffList)) return [];
   return staffList.map((emp, idx) => {
@@ -174,11 +196,11 @@ export default function App() {
       const hashParams = new URLSearchParams(hashQuery);
       const t = urlParams.get('table') || hashParams.get('table') || urlParams.get('t') || hashParams.get('t');
       if (t) {
-        return t.toLowerCase().startsWith('table') ? t : `Table ${t.padStart(2, '0')}`;
+        return sanitizeTableFromParam(t);
       }
       if (typeof sessionStorage !== 'undefined') {
         const stored = sessionStorage.getItem('flowscape_guest_table');
-        if (stored) return stored;
+        if (stored) return sanitizeTableFromParam(stored);
       }
     }
     return 'Table 04';
@@ -439,10 +461,7 @@ export default function App() {
 
       // 1. If QR parameters are present, initialize guest table session and open customer menu
       if (tableParam || qrParam) {
-        const rawTable = tableParam || '04';
-        const cleanTable = rawTable.toLowerCase().startsWith('table')
-          ? rawTable
-          : `Table ${rawTable.padStart(2, '0')}`;
+        const cleanTable = sanitizeTableFromParam(tableParam || '04');
         setActiveTable(cleanTable);
         if (typeof sessionStorage !== 'undefined') {
           sessionStorage.setItem('flowscape_guest_scanned_qr', 'true');
@@ -572,7 +591,11 @@ export default function App() {
     const biz = bizObj || getBusinesses().find((b) => b.id === bizId);
 
     if (biz && Array.isArray(biz.tables) && biz.tables.length > 0) {
-      if (!biz.tables.includes(activeTable)) {
+      const hasSessionQr = typeof sessionStorage !== 'undefined' && (
+        sessionStorage.getItem('flowscape_guest_scanned_qr') === 'true' ||
+        Boolean(sessionStorage.getItem('flowscape_guest_table'))
+      );
+      if (!hasSessionQr && !biz.tables.includes(activeTable)) {
         setActiveTable(biz.tables[0]);
       }
     }
