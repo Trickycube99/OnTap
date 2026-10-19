@@ -50,8 +50,8 @@ export default function LoyaltyView({ theme: _theme }) {
     <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 85 }}>
       {/* Title */}
       <div style={{ marginBottom: 14 }}>
-        <div className="screen-title">Advait Diners Club & Loyalty</div>
-        <div className="screen-subtitle">Points Accrual (1 pt / ₹10), VIP Tiers & Reward Vouchers (Phase 3)</div>
+        <div className="screen-title">Customer Rewards & Points</div>
+        <div className="screen-subtitle">Give regular customers reward points and discount coupons</div>
       </div>
 
       {/* Customer Phone Search */}
@@ -77,7 +77,7 @@ export default function LoyaltyView({ theme: _theme }) {
             onClick={() => playTapSound()}
           >
             <Search size={14} />
-            <span>Lookup</span>
+            <span>Search</span>
           </button>
         </div>
       </div>
@@ -113,7 +113,7 @@ export default function LoyaltyView({ theme: _theme }) {
             <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--primary-blue)', lineHeight: 1.1 }}>
               {selectedMember.points}
             </div>
-            <div style={{ fontSize: 10, color: '#6B7280' }}>Pts (₹{Math.round(selectedMember.points * 0.8)} value)</div>
+            <div style={{ fontSize: 10, color: '#6B7280' }}>Points (Worth ₹{Math.round(selectedMember.points * 0.8)})</div>
           </div>
         </div>
 
@@ -132,15 +132,15 @@ export default function LoyaltyView({ theme: _theme }) {
           }}
         >
           <div>
-            <div style={{ color: 'var(--text-muted)' }}>Lifetime Spend</div>
+            <div style={{ color: 'var(--text-muted)' }}>Total Money Spent</div>
             <div style={{ fontWeight: 700, fontSize: 13 }}>₹{selectedMember.lifetimeSpent.toLocaleString('en-IN')}</div>
           </div>
           <div>
-            <div style={{ color: 'var(--text-muted)' }}>Dine-in Visits</div>
+            <div style={{ color: 'var(--text-muted)' }}>Total Visits</div>
             <div style={{ fontWeight: 700, fontSize: 13 }}>{selectedMember.visitsCount} times</div>
           </div>
           <div>
-            <div style={{ color: 'var(--text-muted)' }}>Next Tier</div>
+            <div style={{ color: 'var(--text-muted)' }}>Next Level</div>
             <div style={{ fontWeight: 700, fontSize: 13, color: '#8B5CF6' }}>Platinum (660 pts)</div>
           </div>
         </div>
@@ -162,8 +162,8 @@ export default function LoyaltyView({ theme: _theme }) {
       <div className="ios-card" style={{ marginBottom: 16 }}>
         <div className="card-top-row">
           <div className="card-title-group">
-            <span className="card-heading">Available Reward Vouchers</span>
-            <span className="card-meta-text">Redeem points for complimentary dishes & discounts</span>
+            <span className="card-heading">Free Dishes & Coupons</span>
+            <span className="card-meta-text">Use member points for free food or special discounts</span>
           </div>
           <Gift size={18} color="#007AFF" />
         </div>
@@ -189,7 +189,7 @@ export default function LoyaltyView({ theme: _theme }) {
                   <span>{voucher.title}</span>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                  Requires: <strong>{voucher.pointsCost} Points</strong> • Promo Code: <code style={{ background: '#E0F2FE', padding: '1px 5px', borderRadius: 4 }}>{voucher.code}</code>
+                  Cost: <strong>{voucher.pointsCost} Points</strong> • Coupon Code: <code style={{ background: '#E0F2FE', padding: '1px 5px', borderRadius: 4 }}>{voucher.code}</code>
                 </div>
               </div>
 
@@ -204,7 +204,7 @@ export default function LoyaltyView({ theme: _theme }) {
                     style={{ fontSize: 12, padding: '6px 12px' }}
                     onClick={() => handleRedeemVoucher(voucher)}
                   >
-                    <span>Redeem ({voucher.pointsCost} Pts)</span>
+                    <span>Use Coupon ({voucher.pointsCost} Pts)</span>
                   </button>
                 )}
               </div>
@@ -228,7 +228,7 @@ export default function LoyaltyView({ theme: _theme }) {
             }}
           >
             <CheckCircle2 size={16} />
-            <span>Success! Voucher code <strong>{redeemedCode}</strong> is now active. It can be applied at the checkout tray!</span>
+            <span>Success! Coupon code <strong>{redeemedCode}</strong> is ready to use on the bill!</span>
           </div>
         )}
       </div>

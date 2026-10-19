@@ -196,7 +196,7 @@ export default function AdminView({
         const filledAmt = msg.payload.actual?.total ?? 0;
         const submitter = msg.payload.submittedBy || 'Counter Staff';
         setLiveEodToast(
-          `⚡ Live EOD Closing Received: ${submitter} submitted calculated filled amount of ₹${Number(filledAmt).toLocaleString('en-IN')}`
+          `✅ Today's Cash Received: ${submitter} submitted ₹${Number(filledAmt).toLocaleString('en-IN')} for closing`
         );
         playSuccessChime();
         setTimeout(() => setLiveEodToast(''), 7000);
@@ -1125,8 +1125,8 @@ export default function AdminView({
       {/* Title & Executive Credentials Trigger */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
         <div>
-          <div className="screen-title">Owner Back-Office</div>
-          <div className="screen-subtitle">Indian Restaurant Analytics, P&amp;L, Operations &amp; Payroll — {activeBiz?.name}</div>
+          <div className="screen-title">Manager Dashboard</div>
+          <div className="screen-subtitle">{activeBiz?.name} — Daily Sales, Menu &amp; Staff</div>
         </div>
         <button
           type="button"
@@ -1151,7 +1151,7 @@ export default function AdminView({
           }}
         >
           <KeyRound size={15} />
-          <span>Executive Credentials Vault</span>
+          <span>My Logins &amp; PINs</span>
         </button>
       </div>
 
@@ -1193,17 +1193,17 @@ export default function AdminView({
       {/* Admin Tabs */}
       <div className="filter-tabs-container" style={{ padding: '0 0 12px' }}>
         {[
-          { id: 'sales', label: 'Sales Dashboard', inFooter: true },
-          { id: 'orders', label: 'Orders & CSV', inFooter: true },
-          { id: 'punch', label: '+ Punch Walk-in', inFooter: false },
-          { id: 'pnl', label: 'P&L & Cash Check', inFooter: true },
-          { id: 'eod-checklists', label: hasEodSubmitted ? 'EOD Closing Audit (Filled)' : 'EOD Closing Audit', inFooter: false },
-          { id: 'offers', label: 'Coupons & Offers', inFooter: true },
-          { id: 'bank-rec', label: 'Bank CSV Rec', inFooter: false },
-          { id: 'payroll', label: 'Staff Payroll', inFooter: true },
-          { id: 'inventory', label: 'Inventory & Wastage', inFooter: false },
-          { id: 'menu', label: 'Menu CRUD', inFooter: false },
-          { id: 'branding', label: 'App Customizer', inFooter: true }
+          { id: 'sales', label: "Today's Sales", inFooter: true },
+          { id: 'orders', label: 'Order History', inFooter: true },
+          { id: 'punch', label: '+ New Order', inFooter: false },
+          { id: 'pnl', label: 'Profits & Expenses', inFooter: true },
+          { id: 'eod-checklists', label: hasEodSubmitted ? 'Daily Cash (Done)' : 'Daily Cash Check', inFooter: false },
+          { id: 'offers', label: 'Discount Offers', inFooter: true },
+          { id: 'bank-rec', label: 'Bank Statements', inFooter: false },
+          { id: 'payroll', label: 'Staff & Salaries', inFooter: true },
+          { id: 'inventory', label: 'Kitchen Stock', inFooter: false },
+          { id: 'menu', label: 'Edit Menu', inFooter: false },
+          { id: 'branding', label: 'Store Settings', inFooter: true }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -1295,7 +1295,7 @@ export default function AdminView({
               <div className="card-title-group">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span className="card-heading" style={{ fontSize: 16 }}>
-                    Daily Closing EOD (Staff Filled vs Expected)
+                    Daily Cash & Closing Check
                   </span>
                   <span
                     style={{
@@ -1313,12 +1313,12 @@ export default function AdminView({
                     {hasEodSubmitted ? (
                       <>
                         <CheckCircle2 size={12} />
-                        <span>✓ EOD Filled & Audited</span>
+                        <span>✓ Today's Cash Submitted</span>
                       </>
                     ) : (
                       <>
                         <Clock size={12} />
-                        <span>⏳ Awaiting Staff Submission</span>
+                        <span>⏳ Cash Check Not Yet Submitted</span>
                       </>
                     )}
                   </span>
@@ -1326,7 +1326,7 @@ export default function AdminView({
                 <span className="card-meta-text">
                   {hasEodSubmitted
                     ? `Counted and submitted by ${latestEodReport.submittedBy || 'Counter Staff'} (${latestEodReport.staffRole || 'Operator'}) on ${latestEodReport.date} at ${latestEodReport.timestamp || ''}`
-                    : 'Actual physical cash in register, Pine Labs card batch, and UPI settlements'}
+                    : 'Actual physical cash in register, card machine totals, and UPI money'}
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -1592,9 +1592,9 @@ export default function AdminView({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: '#B45309', marginBottom: 4 }}>
                   <AlertTriangle size={15} />
-                  <span>Closing EOD count has not been submitted by counter staff yet today.</span>
+                  <span>Cashier has not submitted today's cash count yet.</span>
                 </div>
-                Currently, the sales dashboard displays <strong>System Expected Orders Total (₹{todayGrossSales.toFixed(0)})</strong>. As soon as the counter staff fills their physical count, re-confirms in the pop-up modal, and submits, the <strong>Calculated Filled Amount</strong> will be reflected here automatically in real time.
+                Currently, this dashboard shows <strong>Total Bills Received (₹{todayGrossSales.toFixed(0)})</strong>. As soon as the cashier counts drawer cash and submits, the <strong>Counted Cash & Money Received</strong> will appear here.
               </div>
             )}
           </div>
@@ -1615,7 +1615,7 @@ export default function AdminView({
                       color: '#15803D'
                     }}
                   >
-                    EOD Filled
+                    Cash Counted
                   </span>
                 )}
               </div>
@@ -1754,7 +1754,7 @@ export default function AdminView({
                   {hasEodSubmitted ? (
                     <strong style={{ color: '#15803D' }}>Total Reconciled Filled: ₹{filledTotalRevenue.toFixed(0)}</strong>
                   ) : (
-                    <span style={{ color: 'var(--text-muted)' }}>EOD Reconciliation Pending</span>
+                    <span style={{ color: 'var(--text-muted)' }}>Cash Check Pending</span>
                   )}
                 </span>
                 <span style={{ color: 'var(--text-muted)' }}>
@@ -2059,7 +2059,7 @@ export default function AdminView({
                   +₹{effectiveGrossSales.toFixed(0)}
                 </div>
                 <div style={{ fontSize: 9, color: hasEodSubmitted ? '#15803D' : 'var(--text-muted)', marginTop: 2 }}>
-                  {hasEodSubmitted ? `EOD Filled (Exp: ₹${todayGrossSales.toFixed(0)})` : '(System Expected)'}
+                  {hasEodSubmitted ? `Cash Counted (Bills: ₹${todayGrossSales.toFixed(0)})` : '(From Bills)'}
                 </div>
               </div>
               <div>
@@ -2091,11 +2091,11 @@ export default function AdminView({
           <div className="ios-card" style={{ marginBottom: 16 }}>
             <div className="card-top-row">
               <div className="card-title-group">
-                <span className="card-heading">Closing EOD Settlement Reconciliation</span>
+                <span className="card-heading">Daily Cash & Payment Matching</span>
                 <span className="card-meta-text">
                   {hasEodSubmitted
-                    ? `Audited report submitted by ${latestEodReport.submittedBy || 'Counter Staff'} on ${latestEodReport.date} at ${latestEodReport.timestamp || ''}`
-                    : 'Physical cash drawer & digital inflow verification status'}
+                    ? `Counted by ${latestEodReport.submittedBy || 'Counter Staff'} on ${latestEodReport.date} at ${latestEodReport.timestamp || ''}`
+                    : 'Physical cash in drawer & digital money status'}
                 </span>
               </div>
               <DollarSign size={18} color={hasEodSubmitted ? '#16A34A' : '#64748B'} />
@@ -2137,13 +2137,13 @@ export default function AdminView({
 
                 {latestEodReport.varianceReason && (
                   <div style={{ fontSize: 11, color: 'var(--text-secondary)', background: '#F9FAFB', padding: '6px 10px', borderRadius: 8, fontStyle: 'italic' }}>
-                    Audit Note: "{latestEodReport.varianceReason}"
+                    Cashier Note: "{latestEodReport.varianceReason}"
                   </div>
                 )}
               </div>
             ) : (
               <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                ⏳ Awaiting today's Closing EOD submission from counter staff. Once staff double-checks and confirms the numbers on the counter terminal, physical cash in drawer and verified settled revenue will be locked and audited here.
+                ⏳ Waiting for cashier to count drawer cash and submit. Once submitted at the counter, cash in drawer and verified bank money will appear here.
               </div>
             )}
           </div>
@@ -2256,10 +2256,10 @@ export default function AdminView({
             <div className="card-top-row">
               <div className="card-title-group">
                 <span className="card-heading" style={{ fontSize: 18 }}>
-                  End-of-Day (EOD) Closing Audit Trail
+                  Daily Cash &amp; Closing Reports
                 </span>
                 <span className="card-meta-text">
-                  Historical log of staff physical cash counts, Pine Labs batch settlement slips & UPI reconciliations
+                  View cash, card, and UPI closing counts submitted by your cashier staff at the end of each day
                 </span>
               </div>
               <FileSpreadsheet size={22} color="#16A34A" />
@@ -2275,7 +2275,7 @@ export default function AdminView({
               }}
             >
               <div style={{ background: '#FFFFFF', padding: '10px 12px', borderRadius: 12, border: '1px solid #E5E7EB' }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total EOD Reports</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Daily Reports</div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
                   {checklists.length}
                 </div>
@@ -2526,10 +2526,10 @@ export default function AdminView({
             >
               <FileSpreadsheet size={42} color="#9CA3AF" style={{ margin: '0 auto 12px' }} />
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-                No EOD Closing Reports Yet
+                No Daily Cash Reports Yet
               </div>
               <div style={{ fontSize: 13, maxWidth: 380, margin: '0 auto 16px', lineHeight: 1.4 }}>
-                When counter staff members verify their physical cash drawer, card POS slips, and UPI merchant app settlements at the end of the shift, they will complete the Closing EOD checklist with calculations confirmation. The audited reports will be recorded here permanently.
+                When your counter staff submits their cash count at the end of the day, their daily closing report will appear here.
               </div>
             </div>
           )}
@@ -2965,7 +2965,7 @@ export default function AdminView({
                       </span>
                     </div>
                     <div style={{ fontSize: 12, color: '#C7D2FE', marginTop: 2 }}>
-                      {activeBiz?.name} • Authorized Back-Office Partition (ID: <code style={{ color: '#E0E7FF' }}>{activeBiz?.id}</code>)
+                      {activeBiz?.name} • Restaurant Owner Account
                     </div>
                   </div>
                 </div>
@@ -3126,7 +3126,7 @@ export default function AdminView({
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 15, fontWeight: 800, color: '#4C1D95' }}>
-                        Staff POS Credentials &amp; Operator Security Vault
+                        Staff Login IDs &amp; PINs
                       </span>
                       <span
                         style={{
@@ -3815,7 +3815,7 @@ export default function AdminView({
           <div className="ios-card" style={{ marginBottom: 16 }}>
             <div className="card-top-row">
               <div className="card-title-group">
-                <span className="card-heading">Menu Management (Full CRUD)</span>
+                <span className="card-heading">Restaurant Menu Items</span>
                 <span className="card-meta-text">Create, edit & manage restaurant items</span>
               </div>
               <button
@@ -3886,8 +3886,8 @@ export default function AdminView({
           <div className="ios-card">
             <div className="card-top-row" style={{ marginBottom: 16 }}>
               <div className="card-title-group">
-                <span className="card-heading">App Customizer & Branding Studio</span>
-                <span className="card-meta-text">Upload your restaurant logo, customize colors, and configure live guest dining touchpoints</span>
+                <span className="card-heading">Restaurant Profile &amp; Brand</span>
+                <span className="card-meta-text">Upload your restaurant logo, customize colors, and set your UPI payment ID</span>
               </div>
               <div
                 style={{
@@ -4852,7 +4852,7 @@ export default function AdminView({
                 </button>
 
                 <div style={{ fontSize: 11, color: '#64748B', textAlign: 'center', marginTop: 8 }}>
-                  ⚡ Real-Time Sync: Changes are saved to this restaurant business and broadcasted immediately (&lt;50ms) to customer dining phones, QR menus, and POS stations.
+                  ⚡ All changes save automatically to your menu and cashier counter.
                 </div>
               </div>
             </div>
@@ -4869,7 +4869,7 @@ export default function AdminView({
                   </span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 540, lineHeight: 1.5 }}>
-                  Permanently erase {activeBiz?.name}. Clears user email and credentials from Firebase Authentication and completely destroys all orders, menus, staff payroll, and operational database records. Non-PII tax audit logs are sealed for legal retention (GST Act Sec 36).
+                  Permanently delete your restaurant account ({activeBiz?.name}). All menus, active orders, staff logins, and data will be erased. Past tax sales records are safely kept for government tax records.
                 </div>
               </div>
               <button
@@ -5744,10 +5744,10 @@ export default function AdminView({
                 </div>
                 <div>
                   <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#F8FAFC' }}>
-                    Executive Credentials Vault
+                    Your Logins &amp; PINs
                   </h3>
                   <span style={{ fontSize: 12, color: '#94A3B8' }}>
-                    {activeBiz?.name} • Multi-Tenant Partition ({activeBiz?.id})
+                    {activeBiz?.name} • Security PINs
                   </span>
                 </div>
               </div>
@@ -5787,7 +5787,7 @@ export default function AdminView({
               {/* 1. Owner Login Email */}
               <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  OWNER ADMIN LOGIN EMAIL
+                  OWNER LOGIN EMAIL
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 600, color: '#38BDF8', wordBreak: 'break-all' }}>
@@ -5807,7 +5807,7 @@ export default function AdminView({
               <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    OWNER MASTER PIN (6 DIGITS)
+                    OWNER 6-DIGIT PIN
                   </div>
                   <button
                     type="button"
@@ -5836,7 +5836,7 @@ export default function AdminView({
               <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    COUNTER POS PIN (6 DIGITS)
+                    COUNTER CASHIER 6-DIGIT PIN
                   </div>
                   <button
                     type="button"
@@ -5863,7 +5863,7 @@ export default function AdminView({
             </div>
 
             <p style={{ fontSize: 11.5, color: '#94A3B8', lineHeight: 1.5, margin: '0 0 16px' }}>
-              These credentials authenticate this specific restaurant tenant. Any credentials changes made in Developer Console (<strong>#manj</strong>) or via Password Reset are updated here in real time.
+              Use these details to log in as the Store Owner or Cashier Counter. Keep your PINs private.
             </p>
 
             <button
@@ -5872,7 +5872,7 @@ export default function AdminView({
               onClick={() => setShowOwnerCredentialsModal(false)}
               style={{ padding: '11px', justifyContent: 'center' }}
             >
-              Close Credentials Vault
+              Close
             </button>
 
             {/* Danger Zone: Account Deletion */}
@@ -5892,7 +5892,7 @@ export default function AdminView({
                 </span>
               </div>
               <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 10px', lineHeight: 1.4 }}>
-                Permanently delete this business account. Wipes user email &amp; credentials from Firebase Authentication and completely erases orders, menus, staff, and database history. Non-PII tax records are sealed for statutory legal retention (GST Act Sec 36).
+                Permanently delete your restaurant account. This will erase all menus, staff details, orders, and login access. (Past sales records are kept for legal tax records).
               </p>
               <button
                 type="button"
@@ -6010,11 +6010,11 @@ export default function AdminView({
               }}
             >
               <strong style={{ color: '#F87171', display: 'block', marginBottom: 4 }}>
-                ⚠️ Irreversible Data Erasure Notice:
+                ⚠️ Warning: This will delete your restaurant account:
               </strong>
-              • User email (<strong>{activeBiz?.owner?.email}</strong>) and password/credentials will be permanently wiped from Firebase Users &amp; Authentication.<br />
-              • All live orders, active menus, staff credentials, checklists, and local database partitions will be destroyed.<br />
-              • Statutory Compliance: Under Indian GST Act (Sec 36) &amp; DPDP Act 2023, a sealed, non-PII financial &amp; tax audit record will be preserved for the mandatory 7-year audit retention.
+              • Your login email (<strong>{activeBiz?.owner?.email}</strong>) and password will be deleted permanently.<br />
+              • All active menus, past orders, and staff logins will be removed.<br />
+              • Past tax sales records are safely kept for government tax compliance as required by law.
             </div>
 
             {deleteAccountError && (

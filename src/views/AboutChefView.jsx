@@ -186,7 +186,7 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
               }}
             >
               <FileCheck2 size={16} />
-              <span>Verify Official FSSAI License & Audit Hash</span>
+              <span>View Food Safety Certificate (FSSAI)</span>
             </button>
           </>
         )}
@@ -472,32 +472,32 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
               </div>
 
               <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cryptographic Verification Hash</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Food Safety Certificate No.</div>
                 <div
                   style={{
-                    fontFamily: 'monospace',
-                    fontSize: 11,
-                    background: '#E5E7EB',
-                    padding: '6px 8px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    background: '#F3F4F6',
+                    padding: '6px 10px',
                     borderRadius: 8,
-                    wordBreak: 'break-all',
                     marginTop: 2
                   }}
                 >
-                  0x8f9c9a41b2e88701cdfe4b12aa3190fc55b7194a
+                  FSSAI-CERT-2026-REG-9481
                 </div>
               </div>
 
               <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Accreditation Status</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Certification Status</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                  <span className="status-pill done">ACTIVE & 5-STAR VERIFIED</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Audit Oct 2026</span>
+                  <span className="status-pill done">VERIFIED & SAFE</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Checked Oct 2026</span>
                 </div>
               </div>
 
               <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Regulatory Authority Stamp</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Issued By</div>
                 <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginTop: 2 }}>
                   {chef.authorityName}
                 </div>
@@ -511,7 +511,7 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
                 setShowVerifyModal(false);
               }}
             >
-              <span>Close Verification Record</span>
+              <span>Close Certificate</span>
             </button>
           </div>
         </div>
@@ -551,10 +551,10 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
               </div>
               <div className="status-pill done">{selectedCert.badge}</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10, marginBottom: 4 }}>
-                Verification Security Key
+                Certificate ID
               </div>
-              <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)' }}>
-                VERIF-CERT-KEY-{selectedCert.id.toUpperCase()}-2026-IN
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                CERT-{selectedCert.id.toUpperCase()}-2026
               </div>
             </div>
 

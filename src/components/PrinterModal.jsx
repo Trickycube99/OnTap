@@ -29,8 +29,8 @@ export default function PrinterModal({ order, theme, chef, onClose }) {
         {/* Modal Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div>
-            <div className="card-heading" style={{ fontSize: 18 }}>Thermal Printer Station</div>
-            <div className="card-meta-text">ESC/POS Thermal Receipt & KOT Output (Phase 2)</div>
+            <div className="card-heading" style={{ fontSize: 18 }}>Print Bill & Kitchen Order</div>
+            <div className="card-meta-text">Print customer receipt or kitchen slip</div>
           </div>
           <button className="nav-icon-btn" onClick={onClose}>
             <X size={18} />
@@ -41,7 +41,7 @@ export default function PrinterModal({ order, theme, chef, onClose }) {
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
           <div style={{ flex: 1 }}>
             <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
-              Document Type
+              Print Option
             </label>
             <div style={{ display: 'flex', background: '#F3F4F6', borderRadius: 10, padding: 2 }}>
               <button
@@ -50,7 +50,7 @@ export default function PrinterModal({ order, theme, chef, onClose }) {
                 style={{ flex: 1, justifyContent: 'center' }}
                 onClick={() => setPrintType('bill')}
               >
-                Guest Bill
+                Customer Bill
               </button>
               <button
                 type="button"
@@ -58,14 +58,14 @@ export default function PrinterModal({ order, theme, chef, onClose }) {
                 style={{ flex: 1, justifyContent: 'center' }}
                 onClick={() => setPrintType('kot')}
               >
-                Kitchen KOT
+                Kitchen Slip (KOT)
               </button>
             </div>
           </div>
 
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
-              Paper Width
+              Paper Size
             </label>
             <div style={{ display: 'flex', background: '#F3F4F6', borderRadius: 10, padding: 2 }}>
               <button
@@ -241,7 +241,7 @@ export default function PrinterModal({ order, theme, chef, onClose }) {
 
               <div style={{ textAlign: 'center', marginTop: 8, fontSize: '11px' }}>
                 <div>================================</div>
-                <div>EXECUTIVE CHEF BRIGADE COPY</div>
+                <div>KITCHEN COOKING SLIP</div>
               </div>
             </>
           )}
@@ -251,7 +251,7 @@ export default function PrinterModal({ order, theme, chef, onClose }) {
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn-primary-pill full-width" onClick={handlePrint}>
             <Printer size={16} />
-            <span>Print {printType === 'bill' ? 'Customer Invoice' : 'Kitchen KOT'}</span>
+            <span>Print {printType === 'bill' ? 'Customer Bill' : 'Kitchen Slip'}</span>
           </button>
           <button className="btn-secondary-pill" onClick={onClose}>
             Close

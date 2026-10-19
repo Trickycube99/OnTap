@@ -218,8 +218,8 @@ export default function Header({
                   {currentRole === 'developer'
                     ? 'FlowScape Root Console'
                     : currentRole === 'counter'
-                    ? `${theme?.restaurantName ? `${theme.restaurantName} • ` : ''}POS Terminal 01`
-                    : `${theme?.restaurantName ? `${theme.restaurantName} • ` : ''}Owner Executive Back-Office`}
+                    ? `${theme?.restaurantName ? `${theme.restaurantName} • ` : ''}Billing Counter`
+                    : `${theme?.restaurantName ? `${theme.restaurantName} • ` : ''}Manager Dashboard`}
                 </span>
                 <span className="staff-online-dot" title="Workstation Online" />
               </div>
@@ -276,19 +276,19 @@ export default function Header({
               <button
                 className="nav-role-pill active"
                 onClick={() => onRoleSwitch('admin')}
-                title="Sales, Finance, P&L & Checklists"
+                title="Sales, Finance, Menu & Staff"
               >
                 <BarChart3 size={14} />
-                <span>Owner Admin</span>
+                <span>Owner Dashboard</span>
               </button>
 
               <button
                 className="nav-role-pill"
                 onClick={() => onRoleSwitch('counter')}
-                title="Admin Switching to Live Counter POS"
+                title="Switch to Billing Counter"
               >
                 <Layers size={14} />
-                <span>Live POS</span>
+                <span>Billing Counter</span>
                 {activeOrdersCount > 0 && (
                   <span className="nav-badge-pill">{activeOrdersCount}</span>
                 )}
@@ -302,10 +302,10 @@ export default function Header({
               <button
                 className="nav-role-pill active"
                 onClick={() => onRoleSwitch('counter')}
-                title="Live Counter POS Queue & Cash Check"
+                title="Kitchen Orders & Billing"
               >
                 <Layers size={14} />
-                <span>Live POS</span>
+                <span>Billing Counter</span>
                 {activeOrdersCount > 0 && (
                   <span className="nav-badge-pill">{activeOrdersCount}</span>
                 )}
@@ -316,11 +316,11 @@ export default function Header({
                 <button
                   className="nav-role-pill return-to-admin-pill"
                   onClick={() => onRoleSwitch('admin')}
-                  title="Return to Owner Admin"
+                  title="Return to Owner Dashboard"
                   style={{ borderColor: '#8B5CF6', color: '#8B5CF6', background: '#F5F3FF', fontWeight: 600 }}
                 >
                   <BarChart3 size={14} />
-                  <span>Owner Admin</span>
+                  <span>Owner Dashboard</span>
                 </button>
               )}
             </>
@@ -329,12 +329,14 @@ export default function Header({
 
         {/* Right: Staff Profile, Sound Toggle, QR Standees, Reset & Logout */}
         <div className="header-right">
-          {/* Real-Time Cloud Sync Indicator Pill */}
-          <button
+          {/* Cloud Sync Indicator Pill */}
+          <div
             className="btn-secondary-pill cloud-sync-badge-pill"
             onClick={() => {
-              playTapSound();
-              setShowCloudSyncModal(true);
+              if (currentRole === 'developer') {
+                playTapSound();
+                setShowCloudSyncModal(true);
+              }
             }}
             style={{
               padding: '4px 9px',
@@ -345,9 +347,10 @@ export default function Header({
               gap: 5,
               borderColor: cloudSyncState.status === 'connected' ? '#BBF7D0' : cloudSyncState.status === 'error' ? '#FECACA' : '#E5E7EB',
               background: cloudSyncState.status === 'connected' ? '#F0FDF4' : cloudSyncState.status === 'error' ? '#FEF2F2' : '#F9FAFB',
-              color: cloudSyncState.status === 'connected' ? '#15803D' : cloudSyncState.status === 'error' ? '#DC2626' : '#4B5563'
+              color: cloudSyncState.status === 'connected' ? '#15803D' : cloudSyncState.status === 'error' ? '#DC2626' : '#4B5563',
+              cursor: currentRole === 'developer' ? 'pointer' : 'default'
             }}
-            title="Cross-Device Cloud Sync Diagnostics (Tap to inspect)"
+            title={currentRole === 'developer' ? 'Cloud Diagnostics' : 'Online'}
           >
             <Cloud size={12} color={cloudSyncState.status === 'connected' ? '#16A34A' : cloudSyncState.status === 'error' ? '#DC2626' : '#64748B'} />
             <span style={{
@@ -357,9 +360,9 @@ export default function Header({
               backgroundColor: cloudSyncState.status === 'connected' ? '#16A34A' : cloudSyncState.status === 'error' ? '#DC2626' : '#9CA3AF'
             }} />
             <span className="cloud-sync-label">
-              {cloudSyncState.status === 'connected' ? 'Cloud Live' : cloudSyncState.status === 'error' ? 'Sync Issue' : 'Local Sync'}
+              {cloudSyncState.status === 'connected' ? 'Online' : cloudSyncState.status === 'error' ? 'Offline' : 'Online'}
             </span>
-          </button>
+          </div>
 
           {/* Active Staff Operator Badge */}
           <div className="header-auth-profile-pill">

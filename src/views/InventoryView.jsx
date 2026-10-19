@@ -62,28 +62,28 @@ export default function InventoryView({ menu: _menu }) {
     <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 85 }}>
       {/* Title */}
       <div style={{ marginBottom: 14 }}>
-        <div className="screen-title">Inventory & Recipe Costing</div>
-        <div className="screen-subtitle">Automated Stock Depletion & Kitchen Wastage Controls (Phase 3)</div>
+        <div className="screen-title">Kitchen Stock & Wastage</div>
+        <div className="screen-subtitle">Check raw ingredients in stock, low supplies, and wasted items</div>
       </div>
 
       {/* Top Inventory Metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Stock Asset Value</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Stock Value</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
             ₹{totalInventoryValue.toLocaleString('en-IN')}
           </div>
         </div>
 
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Low Stock Alerts</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Low Stock Warning</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: lowStockCount > 0 ? '#DC2626' : '#16A34A', marginTop: 2 }}>
             {lowStockCount} Items Low
           </div>
         </div>
 
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Weekly Wastage</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Wasted Items (This Week)</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#D97706', marginTop: 2 }}>
             ₹{wastageLog.reduce((s, w) => s + w.loss, 0).toLocaleString('en-IN')}
           </div>
@@ -94,8 +94,8 @@ export default function InventoryView({ menu: _menu }) {
       <div className="ios-card" style={{ marginBottom: 16 }}>
         <div className="card-top-row">
           <div className="card-title-group">
-            <span className="card-heading">Raw Kitchen Ingredients</span>
-            <span className="card-meta-text">Real-time stock balance & reorder threshold</span>
+            <span className="card-heading">Kitchen Ingredients & Supplies</span>
+            <span className="card-meta-text">Current stock in kitchen and minimum required</span>
           </div>
           <Boxes size={20} color="#007AFF" />
         </div>
@@ -122,7 +122,7 @@ export default function InventoryView({ menu: _menu }) {
                     <span style={{ fontWeight: 600, fontSize: 13 }}>{ing.name}</span>
                     {isLow && (
                       <span className="status-pill tag" style={{ background: '#FEE2E2', color: '#DC2626', fontSize: 9 }}>
-                        Reorder Alert
+                        Buy Soon
                       </span>
                     )}
                   </div>
@@ -136,7 +136,7 @@ export default function InventoryView({ menu: _menu }) {
                     {ing.inStock} {ing.unit}
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                    Min: {ing.reorderLevel} {ing.unit}
+                    Min Needed: {ing.reorderLevel} {ing.unit}
                   </div>
                 </div>
               </div>
@@ -149,8 +149,8 @@ export default function InventoryView({ menu: _menu }) {
       <div className="ios-card">
         <div className="card-top-row">
           <div className="card-title-group">
-            <span className="card-heading">Log Kitchen Discard & Wastage</span>
-            <span className="card-meta-text">Track expired, prep-loss or over-cooked inventory</span>
+            <span className="card-heading">Record Wasted or Spoiled Food</span>
+            <span className="card-meta-text">Keep track of expired, spilled, or spoiled food items</span>
           </div>
           <TrendingDown size={20} color="#DC2626" />
         </div>
@@ -158,7 +158,7 @@ export default function InventoryView({ menu: _menu }) {
         <form onSubmit={handleLogWastage} style={{ marginBottom: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Ingredient</label>
+              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Select Item</label>
               <select
                 className="ios-select"
                 value={selectedIng}
@@ -172,7 +172,7 @@ export default function InventoryView({ menu: _menu }) {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Quantity to Discard</label>
+              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Quantity Wasted</label>
               <input
                 type="number"
                 step="0.1"
@@ -186,24 +186,24 @@ export default function InventoryView({ menu: _menu }) {
           </div>
 
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Reason for Discard</label>
+            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Reason (e.g. Expired, Burnt)</label>
             <input
               type="text"
               className="ios-input"
-              placeholder="e.g. Spoilage, cold-chain excursion, test recipe batch"
+              placeholder="e.g. Expired, burnt during cooking, spilled"
               value={wasteReason}
               onChange={(e) => setWasteReason(e.target.value)}
             />
           </div>
 
           <button type="submit" className="btn-primary-pill full-width" style={{ background: '#DC2626' }}>
-            <span>Record Discard & Auto-Deduct Stock</span>
+            <span>Save & Deduct from Stock</span>
           </button>
         </form>
 
         {/* Wastage History */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>Recent Discard Logs:</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>Recent Wasted Items:</div>
           {wastageLog.map((w) => (
             <div
               key={w.id}

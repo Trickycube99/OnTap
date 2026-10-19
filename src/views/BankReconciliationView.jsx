@@ -45,16 +45,16 @@ export default function BankReconciliationView({ orders: _orders, theme: _theme 
     <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 85 }}>
       {/* Title */}
       <div style={{ marginBottom: 14 }}>
-        <div className="screen-title">Bank Statement CSV Reconciliation</div>
-        <div className="screen-subtitle">Automated Bank Matching for Card, UPI & Aggregator Settlements (Phase 2)</div>
+        <div className="screen-title">Bank Statements & Matching</div>
+        <div className="screen-subtitle">Check your daily UPI, Card, and Cash deposits with your bank statement</div>
       </div>
 
       {/* Top Upload Card */}
       <div className="ios-card active-gradient" style={{ marginBottom: 16 }}>
         <div className="card-top-row">
           <div className="card-title-group">
-            <span className="card-heading">Import Current Account Statement</span>
-            <span className="card-meta-text">HDFC, ICICI, SBI, Axis Bank CSV Format Supported</span>
+            <span className="card-heading">Upload Bank Statement</span>
+            <span className="card-meta-text">Upload your bank passbook / statement (Excel or CSV file)</span>
           </div>
           <FileSpreadsheet size={20} color="#007AFF" />
         </div>
@@ -67,7 +67,7 @@ export default function BankReconciliationView({ orders: _orders, theme: _theme 
             disabled={isUploading}
           >
             <Upload size={14} />
-            <span>{isUploading ? 'Parsing Statement...' : 'Import Bank Statement (CSV)'}</span>
+            <span>{isUploading ? 'Reading Statement...' : 'Upload Statement (Excel / CSV)'}</span>
           </button>
 
           <button
@@ -76,14 +76,14 @@ export default function BankReconciliationView({ orders: _orders, theme: _theme 
             onClick={handleReconcileAll}
           >
             <CheckCircle2 size={14} color="#16A34A" />
-            <span>Auto-Match All Discrepancies</span>
+            <span>Match All Deposits</span>
           </button>
         </div>
 
         {uploadSuccess && (
           <div style={{ marginTop: 10, fontSize: 12, color: '#16A34A', display: 'flex', alignItems: 'center', gap: 6 }}>
             <Check size={14} strokeWidth={3} />
-            <span>Successfully imported 5 statement rows from ICICI_CurrentAccount_Oct2026.csv</span>
+            <span>Successfully loaded 5 bank entries from ICICI_CurrentAccount_Oct2026.csv</span>
           </div>
         )}
       </div>
@@ -91,23 +91,23 @@ export default function BankReconciliationView({ orders: _orders, theme: _theme 
       {/* Summary KPI Strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Bank Credits</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Money in Bank</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
             ₹{totalBankCredits.toLocaleString('en-IN')}
           </div>
         </div>
 
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Match Rate</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Matched with Bills</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#16A34A', marginTop: 2 }}>
             {((matchedCount / bankEntries.length) * 100).toFixed(0)}%
           </div>
         </div>
 
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Card MDR Deductions</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Card Machine Fees</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#D97706', marginTop: 2 }}>
-            ₹78.00 (1.5%)
+            ₹78.00 (Bank Charge)
           </div>
         </div>
       </div>
@@ -116,8 +116,8 @@ export default function BankReconciliationView({ orders: _orders, theme: _theme 
       <div className="ios-card">
         <div className="card-top-row">
           <div className="card-title-group">
-            <span className="card-heading">Matched Settlement Ledger</span>
-            <span className="card-meta-text">Bank statement line items vs recorded POS register</span>
+            <span className="card-heading">Bank Deposit History</span>
+            <span className="card-meta-text">Compare money received in bank vs counter bills</span>
           </div>
         </div>
 
@@ -147,7 +147,7 @@ export default function BankReconciliationView({ orders: _orders, theme: _theme 
                 </div>
                 {txn.mdrDeduction && (
                   <div style={{ fontSize: 10, color: '#D97706', marginTop: 2 }}>
-                    Expected ₹{txn.expectedCredit} • ₹{txn.mdrDeduction} deducted by Bank Gateway (1.5% MDR)
+                    Bill was ₹{txn.expectedCredit} • ₹{txn.mdrDeduction} deducted as card swipe charge
                   </div>
                 )}
               </div>
@@ -160,7 +160,7 @@ export default function BankReconciliationView({ orders: _orders, theme: _theme 
                   className={`status-pill ${txn.status === 'matched' ? 'done' : 'tag'}`}
                   style={{ fontSize: 9, padding: '2px 6px', marginTop: 4 }}
                 >
-                  {txn.status === 'matched' ? '✓ Reconciled' : '⚠️ Fee Discrepancy'}
+                  {txn.status === 'matched' ? '✓ Matched' : '⚠️ Fee Difference'}
                 </span>
               </div>
             </div>

@@ -574,8 +574,8 @@ export default function CounterView({
 
       {/* Top Title & Sub-tabs */}
       <div style={{ marginBottom: 14 }}>
-        <div className="screen-title">Counter Order Queue</div>
-        <div className="screen-subtitle">Live Kitchen Stack, POS Punching & EOD Cash Checklist</div>
+        <div className="screen-title">Cashier Billing &amp; Orders</div>
+        <div className="screen-subtitle">Live kitchen orders, billing, and day-end cash count</div>
       </div>
 
       {/* Real-time Server Call Alert Banner */}
@@ -802,7 +802,7 @@ export default function CounterView({
             setActiveSubTab('manual');
           }}
         >
-          + Punch Walk-in
+          + New Order
         </button>
 
         <button
@@ -812,7 +812,7 @@ export default function CounterView({
             setActiveSubTab('stock');
           }}
         >
-          Menu & Rates
+          Items &amp; Rates
         </button>
 
         <button
@@ -822,7 +822,7 @@ export default function CounterView({
             setActiveSubTab('checklist');
           }}
         >
-          Closing EOD
+          Daily Cash Check
         </button>
       </div>
 
@@ -1626,7 +1626,7 @@ export default function CounterView({
 
               <button type="submit" className="btn-primary-pill full-width">
                 <CheckCircle2 size={16} />
-                <span>Verify Calculations & Submit Closing EOD</span>
+                <span>Check &amp; Submit Today&apos;s Cash</span>
               </button>
             </form>
 
@@ -1643,10 +1643,10 @@ export default function CounterView({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13 }}>
                   <CheckCircle2 size={18} />
-                  <span>Daily Sales Closing EOD Reconciled & Successfully Recorded!</span>
+                  <span>Today&apos;s Cash Count Successfully Saved!</span>
                 </div>
                 <div style={{ marginTop: 4, fontSize: 12, color: '#166534', lineHeight: 1.4 }}>
-                  Calculated filled total of <strong>₹{(Number(actualCash || 0) + Number(actualCard || 0) + Number(actualUpi || 0)).toFixed(0)}</strong> has been synchronized and is now reflected live on the Owner Admin Dashboard.
+                  Total of <strong>₹{(Number(actualCash || 0) + Number(actualCard || 0) + Number(actualUpi || 0)).toFixed(0)}</strong> has been sent to the Store Owner.
                 </div>
                 <button
                   type="button"
@@ -1657,7 +1657,7 @@ export default function CounterView({
                     setChecklistSubmitted(false);
                   }}
                 >
-                  Enter New EOD Count / Revise
+                  Recount / Edit Cash
                 </button>
               </div>
             )}
@@ -1696,10 +1696,10 @@ export default function CounterView({
               </div>
               <div>
                 <div className="card-heading" style={{ fontSize: 17 }}>
-                  Re-confirm EOD Numbers & Calculations
+                  Confirm Cash Count
                 </div>
                 <div className="card-meta-text" style={{ fontSize: 11 }}>
-                  Double-check your physical counts before submitting to Owner Dashboard
+                  Double-check your numbers before submitting to Owner Dashboard
                 </div>
               </div>
             </div>
@@ -1717,7 +1717,7 @@ export default function CounterView({
                 lineHeight: 1.45
               }}
             >
-              <strong>⚠️ Please Double Check:</strong> Ensure that your physical cash tally, Pine Labs batch settlement slips, and UPI Merchant App summaries are 100% verified. When you click <strong>"Confirm & Submit EOD"</strong>, this calculated report will be locked and reflected immediately on the Owner's Dashboard.
+              <strong>⚠️ Please Double Check:</strong> Ensure your cash and UPI totals are counted correctly. Clicking <strong>&quot;Confirm &amp; Submit Cash&quot;</strong> will send today&apos;s closing report directly to the Store Owner.
             </div>
 
             {/* Operator Submitting Pill */}
@@ -1939,7 +1939,7 @@ export default function CounterView({
                 onClick={handleConfirmAndSubmitClosing}
               >
                 <CheckCircle2 size={16} />
-                <span>Confirm & Submit EOD</span>
+                <span>Confirm &amp; Submit Cash</span>
               </button>
             </div>
           </div>

@@ -117,8 +117,8 @@ export default function TableQrModal({
               <QrCode size={22} color="#007AFF" />
             </div>
             <div>
-              <div className="table-qr-badge">Zero Auth • Contactless Table QR</div>
-              <h3 className="table-qr-title">Instant Menu & Ordering QR Code</h3>
+              <div className="table-qr-badge">Table QR Code</div>
+              <h3 className="table-qr-title">Table QR Code for Menu</h3>
             </div>
           </div>
           <button
@@ -137,10 +137,10 @@ export default function TableQrModal({
         <div className="table-qr-banner">
           <div className="table-qr-banner-title">
             <Sparkles size={14} color="#16A34A" />
-            <span>Friction-Free Guest Experience</span>
+            <span>Easy Customer Ordering</span>
           </div>
           <p className="table-qr-banner-text">
-            Guests scan this QR code with their phone camera to instantly view the menu, add artisanal dishes to their tray, and place orders directly to the kitchen. <strong>Zero login, zero passwords, and zero app downloads required.</strong>
+            Customers simply open their mobile camera and scan this QR code to view the menu and order food. <strong>No app download or sign-in needed.</strong>
           </p>
         </div>
 
@@ -183,7 +183,7 @@ export default function TableQrModal({
               />
             )}
             <span className="qr-standee-brand">{restaurantName}</span>
-            <span className="qr-standee-sub">{tagline || 'Contactless Dining • FSSAI Accredited'}</span>
+            <span className="qr-standee-sub">{tagline || 'Scan to View Menu & Order'}</span>
           </div>
 
           <div className="qr-standee-table-badge">
@@ -215,7 +215,7 @@ export default function TableQrModal({
         {/* Direct Link & Base URL Controls */}
         <div className="qr-url-box">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Encoded Direct Order URL:</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Menu Web Link:</span>
             <a
               href={directMenuUrl}
               target="_blank"
@@ -223,7 +223,7 @@ export default function TableQrModal({
               className="qr-test-link"
               onClick={playTapSound}
             >
-              <span>Test Link</span>
+              <span>Open Link</span>
               <ExternalLink size={11} />
             </a>
           </div>
@@ -237,7 +237,7 @@ export default function TableQrModal({
             onClick={handleCopyLink}
           >
             {isCopied ? <CheckCircle2 size={15} color="#16A34A" /> : <Copy size={15} />}
-            <span>{isCopied ? 'Link Copied!' : 'Copy Direct Link'}</span>
+            <span>{isCopied ? 'Link Copied!' : 'Copy Link'}</span>
           </button>
 
           <button
@@ -245,7 +245,7 @@ export default function TableQrModal({
             onClick={handleDownloadQr}
           >
             <Download size={15} />
-            <span>Download PNG</span>
+            <span>Download QR Image</span>
           </button>
 
           <button
@@ -253,7 +253,7 @@ export default function TableQrModal({
             onClick={handlePrintTentCard}
           >
             <Printer size={15} />
-            <span>Print Tent Card</span>
+            <span>Print QR Card</span>
           </button>
         </div>
       </div>

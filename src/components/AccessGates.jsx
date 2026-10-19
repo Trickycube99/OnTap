@@ -79,7 +79,7 @@ export function AdminOwnerLoginGate({ onOpenLogin, onSwitchRole }) {
             marginBottom: '14px'
           }}
         >
-          <Lock size={12} /> Owner Back-Office Portal
+          <Lock size={12} /> Restaurant Owner Portal
         </div>
 
         <h1
@@ -91,7 +91,7 @@ export function AdminOwnerLoginGate({ onOpenLogin, onSwitchRole }) {
             color: '#F8FAFC'
           }}
         >
-          OnTap Management Portal
+          OnTap Restaurant Manager
         </h1>
 
         <div
@@ -121,7 +121,7 @@ export function AdminOwnerLoginGate({ onOpenLogin, onSwitchRole }) {
             maxWidth: '420px'
           }}
         >
-          Welcome to OnTap. Sign in to your business account to access your shop's live sales telemetry, menu engineering, staff rosters, and financial records.
+          Welcome to OnTap! Sign in to view today&apos;s sales, manage your menu items, staff salaries, and order history.
         </p>
 
         {/* Main Sign In Action */}
@@ -157,7 +157,7 @@ export function AdminOwnerLoginGate({ onOpenLogin, onSwitchRole }) {
             e.currentTarget.style.boxShadow = '0 12px 28px -6px rgba(99, 102, 241, 0.5)';
           }}
         >
-          <Lock size={18} /> Sign In as Owner / Admin
+          <Lock size={18} /> Sign In as Store Owner
         </button>
 
         {/* Secondary Station Navigation & Notes */}
@@ -207,7 +207,7 @@ export function AdminOwnerLoginGate({ onOpenLogin, onSwitchRole }) {
                 e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
               }}
             >
-              <BarChart3 size={14} color="#10B981" /> Staff Counter POS Login
+              <BarChart3 size={14} color="#10B981" /> Cashier / Counter Login
             </button>
           </div>
 
@@ -219,7 +219,7 @@ export function AdminOwnerLoginGate({ onOpenLogin, onSwitchRole }) {
               lineHeight: 1.5
             }}
           >
-            🔒 Dining menus are strictly accessible via physical table QR codes.
+            🔒 Customers can view the menu by scanning the QR code on their table.
           </div>
         </div>
       </div>
@@ -288,7 +288,7 @@ export function CounterLoginGate({ onOpenLogin, onReturnToAdmin }) {
             marginBottom: '14px'
           }}
         >
-          <Lock size={12} /> Counter Terminal Locked
+          <Lock size={12} /> Cashier Counter
         </div>
 
         <h1
@@ -299,7 +299,7 @@ export function CounterLoginGate({ onOpenLogin, onReturnToAdmin }) {
             color: '#F8FAFC'
           }}
         >
-          OnTap Counter POS
+          Billing &amp; Cashier Login
         </h1>
 
         <div
@@ -329,7 +329,7 @@ export function CounterLoginGate({ onOpenLogin, onReturnToAdmin }) {
             maxWidth: '380px'
           }}
         >
-          Enter your staff Login ID (e.g. @username.pos) and 6-digit PIN to unlock your shop's live counter POS station.
+          Enter your Cashier Login ID and 6-digit PIN to open the billing counter.
         </p>
 
         <button
@@ -356,7 +356,7 @@ export function CounterLoginGate({ onOpenLogin, onReturnToAdmin }) {
             transition: 'all 0.2s ease'
           }}
         >
-          <Lock size={18} /> Sign In to Counter Station
+          <Lock size={18} /> Log In to Billing Counter
         </button>
 
         <button
@@ -377,7 +377,7 @@ export function CounterLoginGate({ onOpenLogin, onReturnToAdmin }) {
             transition: 'background 0.2s'
           }}
         >
-          Return to Owner Back-Office
+          Go to Store Owner Login
         </button>
       </div>
     </div>
@@ -445,7 +445,7 @@ export function QrCodeGate({ onReturnToAdmin }) {
             marginBottom: '14px'
           }}
         >
-          <QrCode size={12} /> Table Standee Required
+          <QrCode size={12} /> Scan Table QR Code
         </div>
 
         <h1
@@ -456,7 +456,7 @@ export function QrCodeGate({ onReturnToAdmin }) {
             color: '#F8FAFC'
           }}
         >
-          OnTap Contactless Dining
+          Welcome to Our Restaurant
         </h1>
 
         <div
@@ -486,7 +486,7 @@ export function QrCodeGate({ onReturnToAdmin }) {
             maxWidth: '380px'
           }}
         >
-          The guest dining and contactless ordering experience is strictly accessible by scanning the physical QR code standee on your dining table.
+          To view our full menu and place your order, please scan the QR code sticker placed on your dining table.
         </p>
 
         <div
@@ -501,7 +501,7 @@ export function QrCodeGate({ onReturnToAdmin }) {
             lineHeight: 1.5
           }}
         >
-          📷 Please point your mobile camera at the standee QR code placed on your table to open your live table order tray.
+          📷 Open your mobile camera and scan the QR code on your table to see dishes and prices.
         </div>
 
         <button
@@ -527,7 +527,7 @@ export function QrCodeGate({ onReturnToAdmin }) {
             transition: 'all 0.2s ease'
           }}
         >
-          <ShieldCheck size={18} /> Access OnTap Back-Office <ArrowRight size={16} />
+          <ShieldCheck size={18} /> Owner Login <ArrowRight size={16} />
         </button>
       </div>
     </div>

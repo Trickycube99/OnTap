@@ -66,8 +66,8 @@ export default function AuthModal({
 
   // Station switcher tabs - Strictly Counter & Owner Admin
   const allTabs = [
-    { id: ROLES.COUNTER, label: 'Counterperson POS', icon: Layers },
-    { id: ROLES.ADMIN, label: 'Business Owner Admin', icon: BarChart3 }
+    { id: ROLES.COUNTER, label: 'Cashier Counter', icon: Layers },
+    { id: ROLES.ADMIN, label: 'Store Owner', icon: BarChart3 }
   ];
 
   const allowedTabs = allTabs.filter((t) => {
@@ -239,17 +239,17 @@ export default function AuthModal({
                 <span>
                   {currentStation === ROLES.ADMIN
                     ? adminAuthMode === 'forgot'
-                      ? 'Password Recovery'
-                      : 'Executive Verification'
-                    : 'Station Authentication'}
+                      ? 'Reset Password'
+                      : 'Owner Login'
+                    : 'Cashier Login'}
                 </span>
               </div>
               <h3 className="auth-modal-title">
                 {currentStation === ROLES.ADMIN
                   ? adminAuthMode === 'forgot'
                     ? 'Reset Password'
-                    : 'Owner Back-Office'
-                  : roleConfig.name}
+                    : 'Store Owner Login'
+                  : 'Cashier Counter Login'}
               </h3>
             </div>
           </div>
@@ -300,17 +300,17 @@ export default function AuthModal({
             <span>
               {currentStation === ROLES.ADMIN
                 ? adminAuthMode === 'forgot'
-                  ? 'Authorized Password Reset'
-                  : 'Verified Email & Master Credentials'
-                : roleConfig.securityLevel}
+                  ? 'Password Reset'
+                  : 'Owner Login'
+                : 'Cashier Login'}
             </span>
           </div>
           <p className="auth-description">
             {currentStation === ROLES.ADMIN
               ? adminAuthMode === 'forgot'
-                ? 'Enter your registered owner email address and we will dispatch a secure password reset link to your inbox.'
-                : 'Access real-time sales KPIs, payroll, and financials. Unverified accounts cannot log in.'
-              : roleConfig.description}
+                ? 'Enter your registered email address to receive a password reset link.'
+                : 'Sign in to view today\'s sales, menu, and orders.'
+              : 'Enter your Cashier Login ID and 6-digit PIN to open the billing counter.'}
           </p>
         </div>
 
@@ -408,7 +408,7 @@ export default function AuthModal({
               <div className="auth-input-group" style={{ marginBottom: 14 }}>
                 <label className="auth-label">
                   <User size={13} />
-                  <span>Staff Member Login ID *</span>
+                  <span>Cashier Login ID *</span>
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -419,7 +419,7 @@ export default function AuthModal({
                     autoCorrect="off"
                     autoCapitalize="none"
                     spellCheck="false"
-                    placeholder="e.g. @username.pos"
+                    placeholder="Enter Cashier Login ID"
                     className="auth-input"
                     value={counterLoginId}
                     onChange={(e) => {
@@ -431,7 +431,7 @@ export default function AuthModal({
                   />
                 </div>
                 <span className="auth-hint">
-                  Enter your assigned Staff Login ID (e.g. @username.pos) to log into your shop&apos;s business dashboard.
+                  Enter the Cashier Login ID for this restaurant.
                 </span>
               </div>
 
@@ -439,7 +439,7 @@ export default function AuthModal({
                 <label className="auth-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <KeyRound size={13} />
-                    <span>6-Digit Secret POS PIN *</span>
+                    <span>6-Digit PIN *</span>
                   </div>
                   <button
                     type="button"
@@ -455,7 +455,7 @@ export default function AuthModal({
                     type={showPin ? 'text' : 'password'}
                     required
                     autoComplete="off"
-                    placeholder="Enter your 6-Digit Secret PIN"
+                    placeholder="••••••"
                     className="auth-input"
                     maxLength={6}
                     pattern="[0-9]*"
@@ -469,7 +469,7 @@ export default function AuthModal({
                   />
                 </div>
                 <span className="auth-hint">
-                  Enter your personal 6-digit staff PIN (or Owner master PIN) to unlock this station.
+                  Enter your 6-digit cashier PIN.
                 </span>
               </div>
             </>
@@ -483,12 +483,12 @@ export default function AuthModal({
               <div className="auth-input-group">
                 <label className="auth-label">
                   <Mail size={13} />
-                  <span>Business Owner Email *</span>
+                  <span>Owner Email *</span>
                 </label>
                 <input
                   type="email"
                   required
-                  placeholder="e.g. owner@example.com"
+                  placeholder="Enter your email"
                   className="auth-input"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -500,7 +500,7 @@ export default function AuthModal({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                   <label className="auth-label" style={{ margin: 0 }}>
                     <KeyRound size={13} />
-                    <span>Owner Master PIN (6 Digits) *</span>
+                    <span>Owner 6-Digit PIN *</span>
                   </label>
                   <button
                     type="button"

@@ -75,30 +75,30 @@ export default function MultiBranchView({ theme: _theme, chef: _chef }) {
     <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 85 }}>
       {/* Title */}
       <div style={{ marginBottom: 14 }}>
-        <div className="screen-title">Multi-Branch Outlets</div>
-        <div className="screen-subtitle">Consolidated Restaurant Network Operations & Menu Sync (Phase 3)</div>
+        <div className="screen-title">All Restaurant Branches</div>
+        <div className="screen-subtitle">View today's sales and staff across all your restaurant locations</div>
       </div>
 
       {/* Network KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Network Gross Sales</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Sales (All Branches)</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
             ₹{totalNetworkSales.toLocaleString('en-IN')}
           </div>
-          <div style={{ fontSize: 10, color: '#16A34A' }}>3 Outlets Live</div>
+          <div style={{ fontSize: 10, color: '#16A34A' }}>3 Branches Open</div>
         </div>
 
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Active Network Tables</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Tables Dining Now</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#D97706', marginTop: 2 }}>
             {totalActiveOrders} Tables Dining
           </div>
-          <div style={{ fontSize: 10, color: '#9CA3AF' }}>Avg 75% occupancy</div>
+          <div style={{ fontSize: 10, color: '#9CA3AF' }}>75% Tables Full</div>
         </div>
 
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Brigade on Floor</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Staff on Duty</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginTop: 2 }}>
             {totalStaffCount} Staff Active
           </div>
@@ -120,10 +120,10 @@ export default function MultiBranchView({ theme: _theme, chef: _chef }) {
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
             <ShieldCheck size={16} color="#007AFF" />
-            <span>Master Menu & Verified Standards Sync</span>
+            <span>Copy Menu & Prices to All Branches</span>
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-            Push Chef Rakesh Sharma's certified recipes & price updates to all 3 branches
+            Update prices and dishes in all 3 branches with one click
           </div>
         </div>
 
@@ -134,7 +134,7 @@ export default function MultiBranchView({ theme: _theme, chef: _chef }) {
           disabled={isSyncing}
         >
           <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} />
-          <span>{isSyncing ? 'Pushing Updates...' : 'Broadcast to All'}</span>
+          <span>{isSyncing ? 'Updating All...' : 'Update All Branches'}</span>
         </button>
       </div>
 
@@ -154,7 +154,7 @@ export default function MultiBranchView({ theme: _theme, chef: _chef }) {
           }}
         >
           <CheckCircle2 size={16} />
-          <span>Master menu, recipes and FSSAI standards synchronized to Connaught Place, Cyber Hub, and Indiranagar.</span>
+          <span>Menu items and prices have been updated in Connaught Place, Cyber Hub, and Indiranagar.</span>
         </div>
       )}
 
@@ -201,7 +201,7 @@ export default function MultiBranchView({ theme: _theme, chef: _chef }) {
                   <span>{branch.address}</span>
                 </div>
                 <div style={{ fontSize: 11, color: '#4B5563', marginTop: 4 }}>
-                  👨‍🍳 Brigade Lead: <strong>{branch.headChef}</strong>
+                  👨‍🍳 Head Chef: <strong>{branch.headChef}</strong>
                 </div>
               </div>
 
@@ -236,7 +236,7 @@ export default function MultiBranchView({ theme: _theme, chef: _chef }) {
                 <div style={{ fontWeight: 700 }}>{branch.activeOrders}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--text-muted)' }}>Avg Prep Speed</div>
+                <div style={{ color: 'var(--text-muted)' }}>Kitchen Speed</div>
                 <div style={{ fontWeight: 700 }}>{branch.avgPrepTime}</div>
               </div>
               <div>

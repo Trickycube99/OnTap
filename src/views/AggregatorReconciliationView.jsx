@@ -101,34 +101,34 @@ export default function AggregatorReconciliationView() {
     <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 85 }}>
       {/* Title */}
       <div style={{ marginBottom: 14 }}>
-        <div className="screen-title">Aggregator Payout Reconciliation</div>
-        <div className="screen-subtitle">Zomato & Swiggy Commission, Tax & Settlement Audit (Phase 3)</div>
+        <div className="screen-title">Online Delivery Payouts</div>
+        <div className="screen-subtitle">Track your Zomato & Swiggy orders, commissions, and bank deposits</div>
       </div>
 
       {/* KPI Cards Strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Pending Receivables</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Pending Payouts</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#D97706', marginTop: 2 }}>
             ₹{totalPendingReceivables.toLocaleString('en-IN')}
           </div>
-          <div style={{ fontSize: 10, color: '#9CA3AF' }}>Due next clearing cycle</div>
+          <div style={{ fontSize: 10, color: '#9CA3AF' }}>Expected this week</div>
         </div>
 
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Commission + GST</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Commission Paid</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#DC2626', marginTop: 2 }}>
             ₹{totalCommissionPaid.toLocaleString('en-IN')}
           </div>
-          <div style={{ fontSize: 10, color: '#9CA3AF' }}>Avg 20.8% take rate</div>
+          <div style={{ fontSize: 10, color: '#9CA3AF' }}>Average ~21% fee</div>
         </div>
 
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>MDR & Tech Fees</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Online Payment Fees</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
             ₹{batches.reduce((s, b) => s + b.pgFee, 0).toLocaleString('en-IN')}
           </div>
-          <div style={{ fontSize: 10, color: '#9CA3AF' }}>1.84% payment gateway</div>
+          <div style={{ fontSize: 10, color: '#9CA3AF' }}>Gateway processing charge</div>
         </div>
       </div>
 
@@ -136,9 +136,9 @@ export default function AggregatorReconciliationView() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ display: 'flex', gap: 6 }}>
           {[
-            { id: 'all', label: 'All Partners' },
-            { id: 'zomato', label: 'Zomato Payouts' },
-            { id: 'swiggy', label: 'Swiggy Payouts' }
+            { id: 'all', label: 'All Platforms' },
+            { id: 'zomato', label: 'Zomato Orders' },
+            { id: 'swiggy', label: 'Swiggy Orders' }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -168,7 +168,7 @@ export default function AggregatorReconciliationView() {
             onClick={() => setActiveTab('settled')}
             style={{ fontSize: 11, padding: '4px 10px' }}
           >
-            Settled ({batches.filter((b) => b.status === 'settled').length})
+            Deposited ({batches.filter((b) => b.status === 'settled').length})
           </button>
         </div>
       </div>
@@ -195,13 +195,13 @@ export default function AggregatorReconciliationView() {
                   <span style={{ fontSize: 13, fontWeight: 700 }}>{batch.period}</span>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                  Batch Ref: {batch.id} • Expected Settlement: <strong>{batch.payoutDate}</strong>
+                  Payout ID: {batch.id} • Expected Deposit: <strong>{batch.payoutDate}</strong>
                 </div>
               </div>
 
               <div style={{ textAlign: 'right' }}>
                 <span className={`status-pill ${batch.status === 'settled' ? 'done' : 'pending'}`}>
-                  {batch.status === 'settled' ? 'Bank Cleared' : 'Receivable'}
+                  {batch.status === 'settled' ? 'Deposited in Bank' : 'Waiting Payout'}
                 </span>
                 <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary-blue)', marginTop: 4 }}>
                   ₹{batch.expectedPayout.toLocaleString('en-IN')}
@@ -224,7 +224,7 @@ export default function AggregatorReconciliationView() {
               }}
             >
               <div>
-                <div style={{ color: 'var(--text-muted)' }}>Gross Orders</div>
+                <div style={{ color: 'var(--text-muted)' }}>Total Orders</div>
                 <div style={{ fontWeight: 700 }}>₹{batch.grossSales.toLocaleString('en-IN')}</div>
               </div>
               <div>
@@ -232,11 +232,11 @@ export default function AggregatorReconciliationView() {
                 <div style={{ fontWeight: 700, color: '#DC2626' }}>-₹{batch.commissionAmount.toLocaleString('en-IN')}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--text-muted)' }}>GST on Fee (18%)</div>
+                <div style={{ color: 'var(--text-muted)' }}>Tax on Fee (18%)</div>
                 <div style={{ fontWeight: 700, color: '#DC2626' }}>-₹{batch.gstOnCommission}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--text-muted)' }}>MDR Charges</div>
+                <div style={{ color: 'var(--text-muted)' }}>Payment Fee</div>
                 <div style={{ fontWeight: 700, color: '#6B7280' }}>-₹{batch.pgFee}</div>
               </div>
             </div>
@@ -256,14 +256,14 @@ export default function AggregatorReconciliationView() {
                   alignItems: 'center'
                 }}
               >
-                <span>⚠️ Penalty Deduction: ₹{batch.penaltiesOrAdjustments} (Rider kitchen delay)</span>
+                <span>⚠️ Delay Fee Deducted: ₹{batch.penaltiesOrAdjustments} (Rider waiting delay)</span>
                 <button
                   className="btn-secondary-pill"
                   style={{ padding: '2px 8px', fontSize: 10, color: '#DC2626' }}
                   onClick={() => handleRaiseDispute(batch.id)}
                   disabled={disputeLogged}
                 >
-                  {disputeLogged ? 'Logging Ticket...' : 'Dispute Deduction'}
+                  {disputeLogged ? 'Reporting...' : 'Report Deduction'}
                 </button>
               </div>
             )}

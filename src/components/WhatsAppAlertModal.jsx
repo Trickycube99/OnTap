@@ -7,9 +7,9 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      sender: 'Advait Verified Kitchen',
+      sender: `${theme?.restaurantName || 'Restaurant'} Kitchen`,
       time: 'Just now',
-      text: `*Namaste ${order?.customerName || 'Diner'}!* 🙏\n\nYour order *#${order?.id || 'ORD-8821'}* from *${theme.restaurantName}* has been received by Executive Chef ${chef.name}'s kitchen brigade.\n\n🍽️ *Table:* ${order?.table || 'Table 04'}\n💰 *Total:* ₹${order?.total || 546}\n⚡ *Status:* In Kitchen Preparation\n\nTrack your order in real-time or verify Chef credentials: https://advait.menu/t/4`,
+      text: `*Namaste ${order?.customerName || 'Guest'}!* 🙏\n\nYour order *#${order?.id || 'ORD-8821'}* from *${theme.restaurantName}* has been received by our kitchen team.\n\n🍽️ *Table:* ${order?.table || 'Table 04'}\n💰 *Total:* ₹${order?.total || 546}\n⚡ *Status:* Cooking in Kitchen\n\nTrack your order: https://advait.menu/t/4`,
       status: 'read'
     }
   ]);
@@ -18,9 +18,9 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
     playTapSound();
     const newMsg = {
       id: Date.now(),
-      sender: 'Advait Verified Kitchen',
+      sender: `${theme?.restaurantName || 'Restaurant'} Kitchen`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      text: `*Order Update #${order?.id}* 🔔\n\n${statusText}\n\nPrepared with 100% A2 Organic Ghee under FSSAI 5-Star Clean Dining Standards. Thank you!`,
+      text: `*Order Update #${order?.id}* 🔔\n\n${statusText}\n\nFreshly prepared with top hygiene and care. Thank you!`,
       status: 'read'
     };
     setMessages((prev) => [...prev, newMsg]);
@@ -31,9 +31,9 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
     playTapSound();
     const ownerMsg = {
       id: Date.now(),
-      sender: 'Advait POS Bot',
+      sender: 'Store Manager Bot',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      text: `📊 *Advait Daily EOD Closing Report*\n\n📅 Date: ${new Date().toLocaleDateString('en-IN')}\n\n💰 *Total Sales:* ₹24,850\n💳 *Cash:* ₹8,400\n⚡ *UPI:* ₹11,250\n💳 *Card POS:* ₹5,200\n\n📉 *Logged Expenses:* ₹13,050\n📈 *Estimated Net Profit:* ₹11,800\n\n⚠️ *Pending Zomato/Swiggy:* ₹28,500 due on Monday.`,
+      text: `📊 *Today's Sales & Cash Summary*\n\n📅 Date: ${new Date().toLocaleDateString('en-IN')}\n\n💰 *Total Sales:* ₹24,850\n💵 *Cash:* ₹8,400\n⚡ *UPI:* ₹11,250\n💳 *Card:* ₹5,200\n\n📉 *Today's Expenses:* ₹13,050\n📈 *Net Profit:* ₹11,800\n\n⚠️ *Pending Zomato/Swiggy:* ₹28,500 expected this week.`,
       status: 'read'
     };
     setMessages((prev) => [...prev, ownerMsg]);
@@ -54,8 +54,8 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
               <MessageSquare size={18} color="#FFFFFF" />
             </div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>Advait Verified WhatsApp Bot</div>
-              <div style={{ fontSize: 10, color: '#D1E7DD' }}>Official Business Account • Online</div>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{theme.restaurantName} WhatsApp</div>
+              <div style={{ fontSize: 10, color: '#D1E7DD' }}>Official Store Account • Online</div>
             </div>
           </div>
           <button style={{ border: 'none', background: 'transparent', color: '#FFFFFF', cursor: 'pointer' }} onClick={onClose}>
@@ -77,7 +77,7 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
             }}
             onClick={() => setActiveTab('customer')}
           >
-            Diner Order Alerts
+            Customer Alerts
           </button>
           <button
             type="button"
@@ -91,7 +91,7 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
             }}
             onClick={() => setActiveTab('owner')}
           >
-            Owner EOD Summary
+            Owner Daily Summary
           </button>
         </div>
 
@@ -125,7 +125,7 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
         {/* Quick Send Action Buttons */}
         <div style={{ background: '#F0F2F5', padding: '12px 14px', borderTop: '1px solid #D1D5DB' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#4B5563', marginBottom: 6 }}>
-            {activeTab === 'customer' ? 'Trigger Live Customer Notification:' : 'Trigger Owner Daily Briefing:'}
+            {activeTab === 'customer' ? 'Send Customer Message:' : 'Send Daily Sales to Owner:'}
           </div>
 
           {activeTab === 'customer' ? (
@@ -133,16 +133,16 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
               <button
                 className="btn-secondary-pill"
                 style={{ flex: 1, padding: '7px 8px', fontSize: 11, background: '#FFFFFF' }}
-                onClick={() => handleSendUpdate('Your hot fresh food is Ready to Serve at Table 04!')}
+                onClick={() => handleSendUpdate('Your hot food is Ready to Serve at Table 04!')}
               >
                 Send "Order Ready"
               </button>
               <button
                 className="btn-secondary-pill"
                 style={{ flex: 1, padding: '7px 8px', fontSize: 11, background: '#FFFFFF' }}
-                onClick={() => handleSendUpdate('Thank you for dining at Advait! Please rate Chef Rakesh Sharma.')}
+                onClick={() => handleSendUpdate('Thank you for dining with us! Hope you enjoyed the food.')}
               >
-                Send Feedback Prompt
+                Ask for Rating
               </button>
             </div>
           ) : (
@@ -151,7 +151,7 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
               style={{ background: '#128C7E', fontSize: 12, padding: '8px 12px' }}
               onClick={handleSendOwnerSummary}
             >
-              Send EOD Sales & P&L Summary to Owner WhatsApp
+              Send Today's Sales & Cash Report to Owner WhatsApp
             </button>
           )}
         </div>
