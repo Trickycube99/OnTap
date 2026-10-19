@@ -19,7 +19,8 @@ import {
   initialStaff,
   initialStaffByBusiness,
   initialOffers,
-  initialTheme
+  initialTheme,
+  getInitialThemeForBusiness
 } from './data/initialData';
 import { loadData, saveData, resetAllDataToDefault, getScopedKey, STORAGE_KEYS } from './utils/storage';
 import {
@@ -140,10 +141,11 @@ export default function App() {
 
   const [activeBusinessId, setActiveBusinessId] = useState(initialBizId);
   const loadedBusinessIdRef = useRef(initialBizId);
+  const isSwitchingTenantRef = useRef(false);
 
   // Global Shared States (Persisted in localStorage scoped by active business)
   const [menu, setMenu] = useState(() => {
-    const fallback = initialMenuByBusiness?.[initialBizId] || initialMenu;
+    const fallback = initialMenuByBusiness?.[initialBizId] || (initialBizId === 'biz_advait' ? initialMenu : []);
     return loadData(getScopedKey(STORAGE_KEYS.MENU, initialBizId), fallback);
   });
   const [chef, setChef] = useState(() => loadData(getScopedKey(STORAGE_KEYS.CHEF, initialBizId), verifiedChefData));
@@ -162,22 +164,23 @@ export default function App() {
   });
   const [offers, setOffers] = useState(() => loadData(getScopedKey(STORAGE_KEYS.OFFERS, initialBizId), isDefaultBiz ? initialOffers : []));
   const [theme, setTheme] = useState(() => {
-    const loaded = loadData(getScopedKey(STORAGE_KEYS.THEME, initialBizId), initialTheme);
-    const activeBiz = getActiveBusiness();
+    const initialBizTheme = getInitialThemeForBusiness(initialBizId);
+    const loaded = loadData(getScopedKey(STORAGE_KEYS.THEME, initialBizId), initialBizTheme);
+    const activeBiz = getBusinesses().find((b) => b.id === initialBizId) || getActiveBusiness();
     const bizOverride = activeBiz ? {
       restaurantName: activeBiz.name,
-      tagline: activeBiz.tagline || loaded?.tagline,
-      upiId: activeBiz.upiId || loaded?.upiId,
-      accentColor: activeBiz.accentColor || loaded?.accentColor,
+      tagline: activeBiz.tagline || loaded?.tagline || initialBizTheme.tagline,
+      upiId: activeBiz.upiId || loaded?.upiId || initialBizTheme.upiId,
+      accentColor: activeBiz.accentColor || loaded?.accentColor || initialBizTheme.accentColor,
       logo: activeBiz.logo !== undefined ? activeBiz.logo : (loaded?.logo || null),
-      tables: Array.isArray(activeBiz.tables) && activeBiz.tables.length > 0 ? activeBiz.tables : (loaded?.tables || initialTheme.tables)
+      tables: Array.isArray(activeBiz.tables) && activeBiz.tables.length > 0 ? activeBiz.tables : (loaded?.tables || initialBizTheme.tables)
     } : {};
     return {
-      ...initialTheme,
+      ...initialBizTheme,
       ...loaded,
       ...bizOverride,
       logo: bizOverride.logo !== undefined ? bizOverride.logo : (loaded?.logo || null),
-      upiId: loaded?.upiId || bizOverride.upiId || initialTheme.upiId || '9119069179@nyes'
+      upiId: loaded?.upiId || bizOverride.upiId || initialBizTheme.upiId || '9119069179@nyes'
     };
   });
   const [checklists, setChecklists] = useState(() => loadData(getScopedKey(STORAGE_KEYS.CHECKLISTS, initialBizId), []));
@@ -300,45 +303,45 @@ export default function App() {
     }
   }, [showAboutChef, activeTab, currentRole]);
 
-  // Save changes to localStorage scoped by active business (guarded by loaded business ref to prevent cross-tenant writes)
+  // Save changes to localStorage scoped by active business (guarded by loaded business ref and switching flag to prevent cross-tenant writes)
   useEffect(() => {
-    if (loadedBusinessIdRef.current === activeBusinessId) {
+    if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
       saveData(getScopedKey(STORAGE_KEYS.MENU, activeBusinessId), menu);
     }
   }, [menu, activeBusinessId]);
 
   useEffect(() => {
-    if (loadedBusinessIdRef.current === activeBusinessId) {
+    if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
       saveData(getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId), orders);
     }
   }, [orders, activeBusinessId]);
 
   useEffect(() => {
-    if (loadedBusinessIdRef.current === activeBusinessId) {
+    if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
       saveData(getScopedKey(STORAGE_KEYS.EXPENSES, activeBusinessId), expenses);
     }
   }, [expenses, activeBusinessId]);
 
   useEffect(() => {
-    if (loadedBusinessIdRef.current === activeBusinessId) {
+    if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
       saveData(getScopedKey(STORAGE_KEYS.STAFF, activeBusinessId), staff);
     }
   }, [staff, activeBusinessId]);
 
   useEffect(() => {
-    if (loadedBusinessIdRef.current === activeBusinessId) {
+    if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
       saveData(getScopedKey(STORAGE_KEYS.OFFERS, activeBusinessId), offers);
     }
   }, [offers, activeBusinessId]);
 
   useEffect(() => {
-    if (loadedBusinessIdRef.current === activeBusinessId) {
+    if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
       saveData(getScopedKey(STORAGE_KEYS.THEME, activeBusinessId), theme);
     }
   }, [theme, activeBusinessId]);
 
   useEffect(() => {
-    if (loadedBusinessIdRef.current === activeBusinessId) {
+    if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
       saveData(getScopedKey(STORAGE_KEYS.CHECKLISTS, activeBusinessId), checklists);
     }
   }, [checklists, activeBusinessId]);
@@ -502,7 +505,7 @@ export default function App() {
           if (typeof sessionStorage !== 'undefined') {
             sessionStorage.setItem('flowscape_guest_scanned_biz', match.id);
           }
-          if (match.id !== activeBusinessId) {
+          if (match.id !== activeBusinessId || loadedBusinessIdRef.current !== match.id) {
             setActiveBusiness(match.id);
             setActiveBusinessId(match.id);
             loadBusinessData(match.id, match);
@@ -592,7 +595,7 @@ export default function App() {
       window.removeEventListener('hashchange', syncFromUrl);
       window.removeEventListener('popstate', syncFromUrl);
     };
-  }, [currentRole, showAboutChef, canReturnToAdmin]);
+  }, [currentRole, showAboutChef, canReturnToAdmin, activeBusinessId]);
 
   // Active in-progress orders count
   const activeOrdersCount = orders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length;
@@ -636,6 +639,7 @@ export default function App() {
 
   // Helper to load scoped tenant business data
   const loadBusinessData = (bizId, bizObj = null) => {
+    isSwitchingTenantRef.current = true;
     loadedBusinessIdRef.current = bizId;
     setCart([]); // Clear any items left in cart from another restaurant
 
@@ -652,7 +656,7 @@ export default function App() {
       }
     }
 
-    const fallbackMenu = initialMenuByBusiness?.[bizId] || initialMenu;
+    const fallbackMenu = initialMenuByBusiness?.[bizId] || (bizId === 'biz_advait' ? initialMenu : []);
     const loadedMenu = loadData(getScopedKey(STORAGE_KEYS.MENU, bizId), fallbackMenu);
     const loadedOrders = loadData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), isDefault ? initialOrders : []);
     const loadedExpenses = loadData(getScopedKey(STORAGE_KEYS.EXPENSES, bizId), isDefault ? initialExpenses : []);
@@ -660,14 +664,15 @@ export default function App() {
     const loadedOffers = loadData(getScopedKey(STORAGE_KEYS.OFFERS, bizId), isDefault ? initialOffers : []);
     const loadedChecklists = loadData(getScopedKey(STORAGE_KEYS.CHECKLISTS, bizId), []);
 
-    const loadedTheme = loadData(getScopedKey(STORAGE_KEYS.THEME, bizId), initialTheme);
+    const initialBizTheme = getInitialThemeForBusiness(bizId);
+    const loadedTheme = loadData(getScopedKey(STORAGE_KEYS.THEME, bizId), initialBizTheme);
     const bizOverride = biz ? {
       restaurantName: biz.name,
-      tagline: biz.tagline || loadedTheme?.tagline,
-      upiId: biz.upiId || loadedTheme?.upiId,
-      accentColor: biz.accentColor || loadedTheme?.accentColor,
+      tagline: biz.tagline || loadedTheme?.tagline || initialBizTheme.tagline,
+      upiId: biz.upiId || loadedTheme?.upiId || initialBizTheme.upiId,
+      accentColor: biz.accentColor || loadedTheme?.accentColor || initialBizTheme.accentColor,
       logo: biz.logo !== undefined ? biz.logo : (loadedTheme?.logo || null),
-      tables: Array.isArray(biz.tables) && biz.tables.length > 0 ? biz.tables : (loadedTheme?.tables || initialTheme.tables)
+      tables: Array.isArray(biz.tables) && biz.tables.length > 0 ? biz.tables : (loadedTheme?.tables || initialBizTheme.tables)
     } : {};
 
     setMenu(loadedMenu);
@@ -678,11 +683,15 @@ export default function App() {
     setOffers(loadedOffers);
     setChecklists(loadedChecklists);
     setTheme({
-      ...initialTheme,
+      ...initialBizTheme,
       ...loadedTheme,
       ...bizOverride,
       logo: bizOverride.logo !== undefined ? bizOverride.logo : (loadedTheme?.logo || null)
     });
+
+    setTimeout(() => {
+      isSwitchingTenantRef.current = false;
+    }, 50);
   };
 
   // Launch / Switch to Tenant Workspace from Developer Superadmin
@@ -691,8 +700,8 @@ export default function App() {
     setActiveBusinessId(biz.id);
     loadBusinessData(biz.id, biz);
 
+    const currentSessions = getStoredSessions();
     if (targetRole === 'admin') {
-      const currentSessions = getStoredSessions();
       currentSessions.admin = {
         role: 'admin',
         businessId: biz.id,
@@ -709,6 +718,19 @@ export default function App() {
         sessionStorage.setItem('flowscape_switched_from_admin', 'true');
       }
       setSwitchedFromAdmin(true);
+    } else if (targetRole === 'counter') {
+      currentSessions.counter = {
+        role: 'counter',
+        businessId: biz.id,
+        businessName: biz.name,
+        name: `${biz.owner.name} (Dev Bypass)`,
+        terminal: biz.counter?.terminalName || 'POS Terminal 01',
+        token: `pos_${biz.id}_${Date.now()}`,
+        authenticatedAt: new Date().toISOString(),
+        authenticatedBy: 'counter'
+      };
+      saveStoredSessions(currentSessions);
+      setAuthSessions(currentSessions);
     }
 
     setCurrentRole(targetRole);

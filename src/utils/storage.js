@@ -7,24 +7,46 @@ import {
   initialStaff,
   initialStaffByBusiness,
   initialOffers,
-  initialTheme
-} from '../data/initialData';
+  initialTheme,
+  getInitialThemeForBusiness
+} from '../data/initialData.js';
 
 const STORAGE_KEYS = {
-  MENU: 'flowscape_menu_inr_v2',
-  CHEF: 'flowscape_chef_inr_v2',
-  ORDERS: 'flowscape_orders_inr_v2',
-  EXPENSES: 'flowscape_expenses_inr_v2',
-  STAFF: 'flowscape_staff_inr_v2',
-  OFFERS: 'flowscape_offers_inr_v2',
-  THEME: 'flowscape_theme_inr_v2',
-  CHECKLISTS: 'flowscape_checklists_inr_v2'
+  MENU: 'menu',
+  CHEF: 'chef',
+  ORDERS: 'orders',
+  EXPENSES: 'expenses',
+  STAFF: 'staff',
+  OFFERS: 'offers',
+  THEME: 'theme',
+  CHECKLISTS: 'checklists'
 };
 
+const STORAGE_PREFIX = 'ontap_v5';
+
 export function getScopedKey(baseKey, bizId) {
-  const cleanId = bizId || 'biz_advait';
-  return cleanId === 'biz_advait' ? baseKey : `${baseKey}_${cleanId}`;
+  const cleanId = (bizId || 'biz_advait').trim().toLowerCase();
+  return `${STORAGE_PREFIX}_${baseKey}_${cleanId}`;
 }
+
+export function purgeLegacyStorage() {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('flowscape_') || k.startsWith('ontap_v1_') || k.startsWith('ontap_v2_') || k.startsWith('ontap_v3_') || k.startsWith('ontap_v4_'))) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+  } catch (e) {
+    console.warn('Storage purge error:', e);
+  }
+}
+
+// Auto-purge legacy corrupted keys once on import
+purgeLegacyStorage();
 
 export function loadData(key, fallback) {
   try {
@@ -46,15 +68,16 @@ export function saveData(key, value) {
 }
 
 export function resetAllDataToDefault(bizId = 'biz_advait') {
-  const fallbackMenu = initialMenuByBusiness?.[bizId] || initialMenu;
-  saveData(getScopedKey(STORAGE_KEYS.MENU, bizId), fallbackMenu);
-  saveData(getScopedKey(STORAGE_KEYS.CHEF, bizId), verifiedChefData);
-  saveData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), bizId === 'biz_advait' ? initialOrders : []);
-  saveData(getScopedKey(STORAGE_KEYS.EXPENSES, bizId), bizId === 'biz_advait' ? initialExpenses : []);
-  saveData(getScopedKey(STORAGE_KEYS.STAFF, bizId), initialStaffByBusiness?.[bizId] || (bizId === 'biz_advait' ? initialStaff : []));
-  saveData(getScopedKey(STORAGE_KEYS.OFFERS, bizId), bizId === 'biz_advait' ? initialOffers : []);
-  saveData(getScopedKey(STORAGE_KEYS.THEME, bizId), initialTheme);
-  saveData(getScopedKey(STORAGE_KEYS.CHECKLISTS, bizId), []);
+  const cleanId = (bizId || 'biz_advait').trim().toLowerCase();
+  const fallbackMenu = initialMenuByBusiness?.[cleanId] || (cleanId === 'biz_advait' ? initialMenu : []);
+  saveData(getScopedKey(STORAGE_KEYS.MENU, cleanId), fallbackMenu);
+  saveData(getScopedKey(STORAGE_KEYS.CHEF, cleanId), verifiedChefData);
+  saveData(getScopedKey(STORAGE_KEYS.ORDERS, cleanId), cleanId === 'biz_advait' ? initialOrders : []);
+  saveData(getScopedKey(STORAGE_KEYS.EXPENSES, cleanId), cleanId === 'biz_advait' ? initialExpenses : []);
+  saveData(getScopedKey(STORAGE_KEYS.STAFF, cleanId), initialStaffByBusiness?.[cleanId] || (cleanId === 'biz_advait' ? initialStaff : []));
+  saveData(getScopedKey(STORAGE_KEYS.OFFERS, cleanId), cleanId === 'biz_advait' ? initialOffers : []);
+  saveData(getScopedKey(STORAGE_KEYS.THEME, cleanId), getInitialThemeForBusiness(cleanId));
+  saveData(getScopedKey(STORAGE_KEYS.CHECKLISTS, cleanId), []);
 }
 
-export { STORAGE_KEYS };
+export { STORAGE_KEYS, STORAGE_PREFIX };

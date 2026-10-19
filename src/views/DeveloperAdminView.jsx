@@ -29,6 +29,7 @@ import {
   QrCode
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
+import TableQrModal from '../components/TableQrModal';
 import {
   provisionOwnerAccountWithVerification,
   resendVerificationLink,
@@ -66,6 +67,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCredentialsModal, setShowCredentialsModal] = useState(null); // business object
+  const [tableQrBiz, setTableQrBiz] = useState(null); // business object for Table QR standees modal
   const [copiedKey, setCopiedKey] = useState(null);
 
   // Manual Credentials Override State (for technical anomaly recovery)
@@ -1345,6 +1347,30 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         <span>QR Menu</span>
                       </button>
 
+                      <button
+                        onClick={() => {
+                          playTapSound();
+                          setTableQrBiz(biz);
+                        }}
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          background: 'rgba(56, 189, 248, 0.15)',
+                          border: '1px solid rgba(56, 189, 248, 0.3)',
+                          color: '#38BDF8',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                        title="View & Download printable QR tent standees for this business"
+                      >
+                        <QrCode size={13} />
+                        <span>Table QRs</span>
+                      </button>
+
                       {/* View & Override Credentials */}
                       <button
                         onClick={() => handleOpenCredentialsModal(biz)}
@@ -2547,6 +2573,19 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
             )}
           </div>
         </div>
+      )}
+
+      {/* Business-Specific Table QR Standees & Direct Order Link Modal */}
+      {tableQrBiz && (
+        <TableQrModal
+          isOpen={Boolean(tableQrBiz)}
+          onClose={() => setTableQrBiz(null)}
+          tables={tableQrBiz.tables || ['Table 01', 'Table 02', 'Table 03', 'Takeaway']}
+          restaurantName={tableQrBiz.name}
+          logo={tableQrBiz.logo}
+          tagline={tableQrBiz.tagline}
+          businessId={tableQrBiz.id}
+        />
       )}
     </div>
   );
