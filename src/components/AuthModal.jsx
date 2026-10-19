@@ -23,6 +23,7 @@ import {
   sendPasswordReset,
   resendVerificationLink
 } from '../utils/firebaseAuth';
+import { getActiveBusiness, getBusinesses, setActiveBusiness } from '../utils/businessManager';
 
 export default function AuthModal({
   isOpen,
@@ -41,6 +42,10 @@ export default function AuthModal({
   const activeStaffList = Array.isArray(staff)
     ? staff.filter((emp) => emp.status !== 'resigned')
     : [];
+
+  const businesses = getBusinesses();
+  const [activeBizId, setActiveBizId] = useState(() => getActiveBusiness()?.id || businesses[0]?.id || 'biz_advait');
+  const currentBiz = businesses.find((b) => b.id === activeBizId) || getActiveBusiness() || businesses[0];
 
   // Form states: login vs forgot password (Accounts can only be created via Developer Dashboard)
   const [adminAuthMode, setAdminAuthMode] = useState('login'); // 'login' | 'forgot'
@@ -473,6 +478,105 @@ export default function AuthModal({
           {/* ============================================================== */}
           {currentStation === ROLES.ADMIN && adminAuthMode === 'login' && (
             <>
+              {/* Authorized Account Credential Helper Banner */}
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #F0FDF4 0%, #EFF6FF 100%)',
+                  border: '1.5px solid #BAE6FD',
+                  borderRadius: 12,
+                  padding: '10px 12px',
+                  marginBottom: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <ShieldCheck size={14} color="#0284C7" />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0369A1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Authorized Tenant Credentials
+                    </span>
+                  </div>
+                  {businesses.length > 1 && (
+                    <select
+                      value={currentBiz?.id}
+                      onChange={(e) => {
+                        const sel = businesses.find((b) => b.id === e.target.value);
+                        if (sel) {
+                          playTapSound();
+                          setActiveBizId(sel.id);
+                          setActiveBusiness(sel.id);
+                          setEmail(sel.owner.email);
+                          setPin(sel.owner.pin);
+                          setErrorMessage('');
+                        }
+                      }}
+                      style={{
+                        fontSize: 11,
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        border: '1px solid #93C5FD',
+                        background: '#FFFFFF',
+                        color: '#1E293B',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {businesses.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.owner.name})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: 11.5,
+                    background: 'rgba(255, 255, 255, 0.85)',
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: '1px solid rgba(186, 230, 253, 0.6)'
+                  }}
+                >
+                  <div>
+                    <div style={{ color: '#475569' }}>
+                      Login: <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{currentBiz?.owner?.email}</strong>
+                    </div>
+                    <div style={{ color: '#475569', marginTop: 2 }}>
+                      Master PIN: <strong style={{ color: '#D97706', fontFamily: 'monospace', letterSpacing: '0.1em' }}>{currentBiz?.owner?.pin}</strong>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapSound();
+                      if (currentBiz?.owner?.email) setEmail(currentBiz.owner.email);
+                      if (currentBiz?.owner?.pin) setPin(currentBiz.owner.pin);
+                      setErrorMessage('');
+                    }}
+                    style={{
+                      background: '#0284C7',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: 6,
+                      padding: '5px 10px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 3px rgba(2, 132, 199, 0.3)'
+                    }}
+                  >
+                    Auto-Fill
+                  </button>
+                </div>
+              </div>
+
               <div className="auth-input-group">
                 <label className="auth-label">
                   <Mail size={13} />

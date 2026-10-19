@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Receipt,
-  Users,
   User,
   Palette,
   TrendingUp,
@@ -34,9 +33,8 @@ import {
   Clock,
   AlertTriangle,
   FileSpreadsheet,
-  CheckSquare,
   KeyRound,
-  Lock
+  ExternalLink
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import BankReconciliationView from './BankReconciliationView';
@@ -45,7 +43,7 @@ import PunchWalkInOrders from '../components/PunchWalkInOrders';
 import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
 import { STORAGE_KEYS, saveData } from '../utils/storage';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
-import { getActiveBusiness, updateBusiness } from '../utils/businessManager';
+import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
 
 // Coupons & Offers Helpers (placed outside component for purity)
 const isOfferExpired = (offer) => {
@@ -83,6 +81,45 @@ export default function AdminView({
   const [showWalkInPunch, setShowWalkInPunch] = useState(false);
   const [payrollDisbursed, setPayrollDisbursed] = useState(false);
   const [liveEodToast, setLiveEodToast] = useState('');
+
+  // Owner Credentials Vault State
+  const [showOwnerCredentialsModal, setShowOwnerCredentialsModal] = useState(false);
+  const [showOwnerPin, setShowOwnerPin] = useState(false);
+  const [showCounterPin, setShowCounterPin] = useState(false);
+  const [copiedOwnerKey, setCopiedOwnerKey] = useState(null);
+  const [activeBiz, setActiveBiz] = useState(() => getActiveBusiness() || getBusinesses()[0]);
+
+  // Real-time synchronization for business & credential updates
+  useEffect(() => {
+    const handleBizUpdate = () => {
+      setActiveBiz(getActiveBusiness() || getBusinesses()[0]);
+    };
+    window.addEventListener('storage', handleBizUpdate);
+    window.addEventListener('flowscape_businesses_updated', handleBizUpdate);
+    const unsub = subscribeSyncEvents((event) => {
+      if (
+        event?.type === SYNC_EVENTS.BUSINESSES_UPDATED ||
+        event?.type === SYNC_EVENTS.CREDENTIALS_UPDATED ||
+        event?.type === SYNC_EVENTS.CONFIG_UPDATED
+      ) {
+        handleBizUpdate();
+      }
+    });
+    return () => {
+      window.removeEventListener('storage', handleBizUpdate);
+      window.removeEventListener('flowscape_businesses_updated', handleBizUpdate);
+      if (unsub) unsub();
+    };
+  }, [activeBusinessId]);
+
+  const handleCopyOwnerCredential = (text, key) => {
+    playTapSound();
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedOwnerKey(key);
+    playSuccessChime();
+    setTimeout(() => setCopiedOwnerKey(null), 2000);
+  };
 
   // Real-time synchronization: listen for live EOD checklist submissions from Counter Staff (Tenant Scoped)
   useEffect(() => {
@@ -1030,10 +1067,37 @@ export default function AdminView({
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 85 }}>
-      {/* Title */}
-      <div style={{ marginBottom: 14 }}>
-        <div className="screen-title">Owner Back-Office</div>
-        <div className="screen-subtitle">Indian Restaurant Analytics, P&L, Operations & Payroll</div>
+      {/* Title & Executive Credentials Trigger */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        <div>
+          <div className="screen-title">Owner Back-Office</div>
+          <div className="screen-subtitle">Indian Restaurant Analytics, P&amp;L, Operations &amp; Payroll — {activeBiz?.name}</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            playTapSound();
+            setShowOwnerCredentialsModal(true);
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '7px 14px',
+            borderRadius: 12,
+            background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+            color: '#FFFFFF',
+            border: 'none',
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(124, 58, 237, 0.35)',
+            transition: 'all 0.2s'
+          }}
+        >
+          <KeyRound size={15} />
+          <span>Executive Credentials Vault</span>
+        </button>
       </div>
 
       {/* Live EOD Submission Notification Toast */}
@@ -2797,6 +2861,174 @@ export default function AdminView({
                 </span>
               </div>
             )}
+
+            {/* Business Owner Executive Master Credentials (Owner Back-Office) */}
+            <div
+              style={{
+                marginBottom: 20,
+                padding: '18px 20px',
+                background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 50%, #4338CA 100%)',
+                color: '#FFFFFF',
+                borderRadius: 18,
+                boxShadow: '0 10px 25px -5px rgba(49, 46, 129, 0.3)',
+                border: '1.5px solid rgba(165, 180, 252, 0.3)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: 12,
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.3)'
+                    }}
+                  >
+                    <ShieldCheck size={24} color="#FBBF24" />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>
+                        Executive Owner Master Login Credentials
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 8,
+                          background: (activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? 'rgba(52, 211, 153, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                          color: (activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? '#6EE7B7' : '#FCA5A5',
+                          border: `1px solid ${(activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? 'rgba(52, 211, 153, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`
+                        }}
+                      >
+                        {(activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? '● Verified & Active' : '○ Suspended'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#C7D2FE', marginTop: 2 }}>
+                      {activeBiz?.name} • Authorized Back-Office Partition (ID: <code style={{ color: '#E0E7FF' }}>{activeBiz?.id}</code>)
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowOwnerCredentialsModal(true)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      color: '#FFFFFF',
+                      border: '1px solid rgba(255, 255, 255, 0.25)',
+                      borderRadius: 10,
+                      padding: '6px 12px',
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}
+                  >
+                    <ExternalLink size={13} />
+                    <span>Open Credentials Card</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 3-Column Master Credentials Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+                {/* 1. Owner Login Email */}
+                <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: 14, padding: '12px 14px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, letterSpacing: '0.04em' }}>
+                    Owner Login Email
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: '#38BDF8', wordBreak: 'break-all' }}>
+                      {activeBiz?.owner?.email}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyOwnerCredential(activeBiz?.owner?.email, 'owner_email')}
+                      style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+                      title="Copy Owner Email"
+                    >
+                      {copiedOwnerKey === 'owner_email' ? <Check size={16} color="#34D399" /> : <Copy size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Owner Master PIN */}
+                <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: 14, padding: '12px 14px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Owner Master PIN (6 Digits)
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowOwnerPin(!showOwnerPin)}
+                      style={{ background: 'none', border: 'none', color: '#CBD5E1', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5 }}
+                    >
+                      {showOwnerPin ? <EyeOff size={13} /> : <Eye size={13} />}
+                      <span>{showOwnerPin ? 'Hide' : 'Reveal'}</span>
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 800, color: '#FBBF24', letterSpacing: showOwnerPin ? '0.15em' : '0.3em' }}>
+                      {showOwnerPin ? activeBiz?.owner?.pin : '••••••'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyOwnerCredential(activeBiz?.owner?.pin, 'owner_pin')}
+                      style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+                      title="Copy Master PIN"
+                    >
+                      {copiedOwnerKey === 'owner_pin' ? <Check size={16} color="#34D399" /> : <Copy size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Counter POS PIN */}
+                <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: 14, padding: '12px 14px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Counter POS PIN (6 Digits)
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowCounterPin(!showCounterPin)}
+                      style={{ background: 'none', border: 'none', color: '#CBD5E1', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5 }}
+                    >
+                      {showCounterPin ? <EyeOff size={13} /> : <Eye size={13} />}
+                      <span>{showCounterPin ? 'Hide' : 'Reveal'}</span>
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 800, color: '#34D399', letterSpacing: showCounterPin ? '0.15em' : '0.3em' }}>
+                      {showCounterPin ? activeBiz?.counter?.pin : '••••••'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyOwnerCredential(activeBiz?.counter?.pin, 'counter_pin')}
+                      style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+                      title="Copy Counter POS PIN"
+                    >
+                      {copiedOwnerKey === 'counter_pin' ? <Check size={16} color="#34D399" /> : <Copy size={16} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 11.5, color: '#C7D2FE' }}>
+                <KeyRound size={13} color="#A5B4FC" />
+                <span>
+                  Synchronized in real-time with Developer Console (<strong>#manj</strong>). Use Owner Master PIN to access financial KPIs and Counter PIN to unlock POS stations.
+                </span>
+              </div>
+            </div>
 
             {/* Staff POS Credentials & Operator Security Vault (Owner Only) */}
             <div
@@ -5361,6 +5593,187 @@ export default function AdminView({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* EXECUTIVE OWNER CREDENTIALS MODAL */}
+      {showOwnerCredentialsModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 16
+          }}
+          onClick={() => setShowOwnerCredentialsModal(false)}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 480,
+              background: '#0F172A',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: 20,
+              padding: 24,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
+              color: '#F8FAFC'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 8px rgba(124, 58, 237, 0.4)'
+                  }}
+                >
+                  <KeyRound size={20} color="#FFFFFF" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#F8FAFC' }}>
+                    Executive Credentials Vault
+                  </h3>
+                  <span style={{ fontSize: 12, color: '#94A3B8' }}>
+                    {activeBiz?.name} • Multi-Tenant Partition ({activeBiz?.id})
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOwnerCredentialsModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Status Pill */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '8px 12px',
+                borderRadius: 10,
+                background: (activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                border: `1px solid ${(activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                marginBottom: 16
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: (activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? '#34D399' : '#F87171' }}>
+                <ShieldCheck size={15} />
+                <span>{(activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? 'Account Active & Verified' : 'Account Suspended'}</span>
+              </div>
+              <span style={{ fontSize: 11, color: '#94A3B8' }}>
+                Plan: <strong style={{ color: '#E2E8F0' }}>{activeBiz?.plan || 'Enterprise'}</strong>
+              </span>
+            </div>
+
+            {/* Credentials Rows */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18 }}>
+              {/* 1. Owner Login Email */}
+              <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  OWNER ADMIN LOGIN EMAIL
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 600, color: '#38BDF8', wordBreak: 'break-all' }}>
+                    {activeBiz?.owner?.email}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyOwnerCredential(activeBiz?.owner?.email, 'modal_email')}
+                    style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+                  >
+                    {copiedOwnerKey === 'modal_email' ? <Check size={16} color="#34D399" /> : <Copy size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. Owner Master PIN */}
+              <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    OWNER MASTER PIN (6 DIGITS)
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowOwnerPin(!showOwnerPin)}
+                    style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  >
+                    {showOwnerPin ? <EyeOff size={13} /> : <Eye size={13} />}
+                    <span>{showOwnerPin ? 'Hide' : 'Show'}</span>
+                  </button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, color: '#F59E0B', letterSpacing: showOwnerPin ? '0.15em' : '0.25em' }}>
+                    {showOwnerPin ? activeBiz?.owner?.pin : '••••••'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyOwnerCredential(activeBiz?.owner?.pin, 'modal_pin')}
+                    style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+                  >
+                    {copiedOwnerKey === 'modal_pin' ? <Check size={16} color="#34D399" /> : <Copy size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Counter Staff POS PIN */}
+              <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    COUNTER POS PIN (6 DIGITS)
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCounterPin(!showCounterPin)}
+                    style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  >
+                    {showCounterPin ? <EyeOff size={13} /> : <Eye size={13} />}
+                    <span>{showCounterPin ? 'Hide' : 'Show'}</span>
+                  </button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, color: '#10B981', letterSpacing: showCounterPin ? '0.15em' : '0.25em' }}>
+                    {showCounterPin ? activeBiz?.counter?.pin : '••••••'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyOwnerCredential(activeBiz?.counter?.pin, 'modal_counter_pin')}
+                    style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+                  >
+                    {copiedOwnerKey === 'modal_counter_pin' ? <Check size={16} color="#34D399" /> : <Copy size={16} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <p style={{ fontSize: 11.5, color: '#94A3B8', lineHeight: 1.5, margin: '0 0 16px' }}>
+              These credentials authenticate this specific restaurant tenant. Any credentials changes made in Developer Console (<strong>#manj</strong>) or via Password Reset are updated here in real time.
+            </p>
+
+            <button
+              type="button"
+              className="btn-primary-pill full-width"
+              onClick={() => setShowOwnerCredentialsModal(false)}
+              style={{ padding: '11px', justifyContent: 'center' }}
+            >
+              Close Credentials Vault
+            </button>
           </div>
         </div>
       )}

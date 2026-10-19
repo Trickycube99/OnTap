@@ -1177,21 +1177,51 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         marginBottom: 14,
                         fontSize: 12
                       }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                           <span style={{ color: '#94A3B8' }}>Owner:</span>
                           <span style={{ fontWeight: 600, color: '#F8FAFC' }}>{biz.owner.name}</span>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                           <span style={{ color: '#94A3B8' }}>Owner Login:</span>
-                          <span style={{ fontFamily: 'monospace', color: '#38BDF8', fontWeight: 600 }}>{biz.owner.email}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontFamily: 'monospace', color: '#38BDF8', fontWeight: 600 }}>{biz.owner.email}</span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(biz.owner.email, `card_email_${biz.id}`)}
+                              style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 2 }}
+                              title="Copy Email"
+                            >
+                              {copiedKey === `card_email_${biz.id}` ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
+                            </button>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                           <span style={{ color: '#94A3B8' }}>Owner PIN (6 Digits):</span>
-                          <span style={{ fontFamily: 'monospace', color: '#F59E0B', fontWeight: 700 }}>{biz.owner.pin}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontFamily: 'monospace', color: '#F59E0B', fontWeight: 700 }}>{biz.owner.pin}</span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(biz.owner.pin, `card_pin_${biz.id}`)}
+                              style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 2 }}
+                              title="Copy Owner Master PIN"
+                            >
+                              {copiedKey === `card_pin_${biz.id}` ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
+                            </button>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: '#94A3B8' }}>Counter POS PIN (6 Digits):</span>
-                          <span style={{ fontFamily: 'monospace', color: '#10B981', fontWeight: 700 }}>{biz.counter.pin}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontFamily: 'monospace', color: '#10B981', fontWeight: 700 }}>{biz.counter.pin}</span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(biz.counter.pin, `card_counter_${biz.id}`)}
+                              style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 2 }}
+                              title="Copy Counter PIN"
+                            >
+                              {copiedKey === `card_counter_${biz.id}` ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
+                            </button>
+                          </div>
                         </div>
                       </div>
 

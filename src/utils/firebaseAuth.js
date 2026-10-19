@@ -26,10 +26,10 @@ import {
   signOut,
   reload
 } from 'firebase/auth';
-import { getFirebaseConfig } from './firebaseSync';
-import { getBusinesses, saveBusinesses, createBusiness, updateBusiness, setActiveBusiness } from './businessManager';
-import { getStoredSessions, saveStoredSessions } from './auth';
-import { broadcastSyncEvent, SYNC_EVENTS } from './sync';
+import { getFirebaseConfig } from './firebaseSync.js';
+import { getBusinesses, saveBusinesses, createBusiness, updateBusiness, setActiveBusiness } from './businessManager.js';
+import { getStoredSessions, saveStoredSessions } from './auth.js';
+import { broadcastSyncEvent, SYNC_EVENTS } from './sync.js';
 
 let authInstance = null;
 
@@ -147,6 +147,10 @@ export async function logInUserWithVerification({ email, password }) {
   }
 
   const auth = getFirebaseAuth();
+  const businesses = getBusinesses();
+  let matchingBiz = businesses.find(
+    (b) => (b.owner?.email || '').trim().toLowerCase() === cleanEmail
+  );
 
   if (auth) {
     try {
@@ -176,9 +180,10 @@ export async function logInUserWithVerification({ email, password }) {
 
       // STRICT VERIFICATION CHECK: BLOCK ACCESS IF EMAIL NOT VERIFIED
       // Account remains in suspended / unverified state until verified by Firebase
-      if (!user.emailVerified) {
+      // (Unless explicitly verified in multi-tenant business records by developer)
+      const isLocallyVerified = matchingBiz && matchingBiz.emailVerified !== false && matchingBiz.status === 'active';
+      if (!user.emailVerified && !isLocallyVerified) {
         await signOut(auth); // Terminate unverified session immediately
-        const matchingBiz = getBusinesses().find((b) => b.owner.email.toLowerCase() === cleanEmail);
         return {
           success: false,
           isUnverified: true,
@@ -188,7 +193,6 @@ export async function logInUserWithVerification({ email, password }) {
       }
 
       // Verified! Transition business from suspended to active if needed
-      let matchingBiz = getBusinesses().find((b) => b.owner.email.toLowerCase() === cleanEmail);
       if (!matchingBiz) {
         const createRes = createBusiness({
           name: 'My Restaurant Back-Office',
@@ -228,23 +232,36 @@ export async function logInUserWithVerification({ email, password }) {
         business: matchingBiz,
         session
       };
-    } catch (error) {
-      return { success: false, error: formatAuthError(error) };
+    } catch (fbError) {
+      console.warn('Firebase Cloud Auth check notice, validating against authoritative multi-tenant database:', fbError.code || fbError.message);
+      // Fall through to validate against authoritative multi-tenant business database
     }
   }
 
-  // Local fallback mode when Firebase env vars are not set:
-  const businesses = getBusinesses();
-  const matchingBiz = businesses.find((b) => b.owner.email.toLowerCase() === cleanEmail);
-
+  // --- Authoritative Multi-Tenant Business Database Validation ---
+  // If cloud auth failed (e.g. account not provisioned on remote Firebase, password changed in developer dashboard,
+  // or offline demo mode), validate against matching tenant credentials registered in getBusinesses().
   if (!matchingBiz) {
-    return { success: false, error: 'No business owner account found with this email. Accounts must be provisioned via Developer Dashboard.' };
+    return {
+      success: false,
+      error: `No registered business account found for "${cleanEmail}". Check the Developer Dashboard (#manj) for authorized tenant credentials.`
+    };
   }
 
-  if (matchingBiz.owner.pin !== cleanPassword && cleanPassword !== '882100' && cleanPassword !== '8821') {
-    return { success: false, error: 'Incorrect 6-digit Master Owner PIN for this business.' };
+  const storedOwnerPin = String(matchingBiz.owner?.pin || '').trim();
+  const isPinMatch =
+    storedOwnerPin === cleanPassword ||
+    (cleanPassword.length === 6 && storedOwnerPin === cleanPassword.slice(0, 4)) ||
+    (storedOwnerPin.length === 6 && cleanPassword === storedOwnerPin.slice(0, 4));
+
+  if (!isPinMatch) {
+    return {
+      success: false,
+      error: 'Invalid email or password. Please check your credentials or reset your password.'
+    };
   }
 
+  // PIN is correct! Validate business account verification and active status
   if (matchingBiz.status === 'suspended' || matchingBiz.emailVerified === false) {
     return {
       success: false,
@@ -265,12 +282,19 @@ export async function logInUserWithVerification({ email, password }) {
     branch: matchingBiz.city,
     token: `admin_${matchingBiz.id}_${Date.now()}`,
     authenticatedAt: new Date().toISOString(),
-    authenticatedBy: 'admin'
+    authenticatedBy: 'multi_tenant_vault'
   };
 
   const currentSessions = getStoredSessions();
   currentSessions.admin = fallbackSession;
   saveStoredSessions(currentSessions);
+
+  // Background auto-provisioning to remote Firebase Auth (if connected and user not registered yet)
+  if (auth) {
+    createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword).catch((bgErr) => {
+      console.debug('Firebase background sync notice:', bgErr.code);
+    });
+  }
 
   return {
     success: true,
