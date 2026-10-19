@@ -301,6 +301,42 @@ export default function App() {
     }
   }, [theme?.accentColor, currentRole]);
 
+  // Dynamic Browser Tab Title based on Role, Auth State & OnTap Branding
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    if (currentRole === 'developer') {
+      document.title = 'OnTap • Developer Superadmin Console';
+      return;
+    }
+
+    if (currentRole === 'customer' || currentRole === 'chef') {
+      const hasQr = checkGuestQrAccess() || canReturnToAdmin || isDeveloperAuthenticated();
+      if (hasQr) {
+        document.title = `${theme?.restaurantName || 'OnTap'} • Dining & Menu`;
+      } else {
+        document.title = 'OnTap • Local Food and drinks | Your community';
+      }
+      return;
+    }
+
+    if (currentRole === 'counter') {
+      if (isAuthenticated('counter') || canReturnToAdmin || isDeveloperAuthenticated()) {
+        document.title = `${theme?.restaurantName || 'OnTap'} • Counter POS`;
+      } else {
+        document.title = 'OnTap • Counter POS Terminal';
+      }
+      return;
+    }
+
+    // Default / Admin Owner
+    if (isAuthenticated('admin') || isDeveloperAuthenticated()) {
+      document.title = `${theme?.restaurantName || 'OnTap'} • Owner Back-Office`;
+    } else {
+      document.title = 'OnTap • Local Food and drinks | Your community';
+    }
+  }, [currentRole, authSessions, theme?.restaurantName, canReturnToAdmin]);
+
   // Real-Time Cross-Tab / Cross-Device Synchronization Listener (Tenant-Scoped)
   useEffect(() => {
     const unsubscribe = subscribeSyncEvents((msg) => {
@@ -930,7 +966,6 @@ export default function App() {
               <AdminOwnerLoginGate
                 onOpenLogin={() => setAuthModal({ isOpen: true, targetRole: 'admin' })}
                 onSwitchRole={handleRoleSwitch}
-                theme={theme}
               />
             ) : (
               <AdminView

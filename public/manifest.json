@@ -1,17 +1,17 @@
 {
-  "short_name": "Advait Kitchen",
-  "name": "Advait Artisanal Indian Kitchen & Back-Office POS",
+  "short_name": "OnTap",
+  "name": "OnTap — Local Food and drinks | Your community",
   "icons": [
     {
-      "src": "/favicon.svg",
-      "type": "image/svg+xml",
+      "src": "/ontap_logo.png",
+      "type": "image/png",
       "sizes": "192x192 512x512"
     }
   ],
   "start_url": "/",
-  "background_color": "#F8FAFC",
-  "theme_color": "#007AFF",
+  "background_color": "#0B0F19",
+  "theme_color": "#D97706",
   "display": "standalone",
   "orientation": "any",
-  "description": "Progressive Indian QR table ordering, kitchen KDS, live counter and back-office restaurant web app with FSSAI verified chef accreditation."
+  "description": "OnTap — Unified restaurant management, counter POS, and contactless QR table dining platform."
 }
