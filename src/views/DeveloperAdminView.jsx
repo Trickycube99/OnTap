@@ -575,30 +575,6 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
             </div>
           )}
 
-          {/* Developer Credentials Helper Badge */}
-          <div style={{
-            background: 'rgba(6, 182, 212, 0.08)',
-            border: '1px solid rgba(6, 182, 212, 0.25)',
-            borderRadius: 12,
-            padding: '10px 14px',
-            marginBottom: 20,
-            fontSize: 12,
-            color: '#94A3B8'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#38BDF8', fontWeight: 700, marginBottom: 4 }}>
-              <KeyRound size={14} />
-              <span>Developer Console Credentials</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-              <span>Email:</span>
-              <strong style={{ fontFamily: 'monospace', color: '#F8FAFC' }}>dev@platform.com</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Access Key:</span>
-              <strong style={{ fontFamily: 'monospace', color: '#F8FAFC' }}>dev@root2026</strong>
-            </div>
-          </div>
-
           {/* Form strictly manual - zero autofill button as requested */}
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
@@ -610,7 +586,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                 required
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder="developer@example.com"
+                placeholder="Enter developer email"
                 style={{
                   width: '100%',
                   padding: '12px 14px',
@@ -635,7 +611,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   required
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="Enter developer access key"
+                  placeholder="••••••••••••"
                   style={{
                     width: '100%',
                     padding: '12px 42px 12px 14px',
