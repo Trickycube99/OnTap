@@ -207,7 +207,7 @@ export function AdminOwnerLoginGate({ onOpenLogin, onSwitchRole }) {
                 e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
               }}
             >
-              <BarChart3 size={14} color="#10B981" /> Counter Terminal
+              <BarChart3 size={14} color="#10B981" /> Staff Counter POS Login
             </button>
           </div>
 

@@ -181,9 +181,7 @@ export default function App() {
   });
 
   const canReturnToAdmin = Boolean(
-    switchedFromAdmin ||
-    Boolean(authSessions?.admin?.token) ||
-    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('flowscape_switched_from_admin') === 'true') ||
+    (Boolean(authSessions?.admin?.token) && (switchedFromAdmin || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('flowscape_switched_from_admin') === 'true'))) ||
     isDeveloperAuthenticated()
   );
 
@@ -513,7 +511,7 @@ export default function App() {
 
       if (targetRole === 'counter') {
         setCurrentRole('counter');
-        if (isAuthenticated('counter')) {
+        if (isAuthenticated('counter') || isDeveloperAuthenticated()) {
           setActiveTab('orders');
           setCounterSubTab('orders');
         } else {
@@ -676,29 +674,28 @@ export default function App() {
       isDeveloperAuthenticated()
     );
 
-    // If switching from admin to counter, record that this session originated from admin
-    if (currentRole === 'admin' && role === 'counter') {
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('flowscape_switched_from_admin', 'true');
-      }
-      setSwitchedFromAdmin(true);
+    // If switching to counter terminal:
+    if (role === 'counter') {
+      const isOwnerLoggedIn = Boolean(sessions?.admin?.token);
+      const isCounterLoggedIn = Boolean(sessions?.counter?.token);
 
-      // Ensure an active admin session token is recorded
-      const currentSessions = getStoredSessions();
-      if (!currentSessions.admin?.token) {
-        const activeBiz = getActiveBusiness();
-        currentSessions.admin = {
-          role: 'admin',
-          businessId: activeBiz.id,
-          businessName: activeBiz.name,
-          name: activeBiz.owner.name,
-          email: activeBiz.owner.email,
-          token: `admin_${activeBiz.id}_${Date.now()}`,
-          authenticatedAt: new Date().toISOString(),
-          authenticatedBy: 'admin'
-        };
-        saveStoredSessions(currentSessions);
-        setAuthSessions(currentSessions);
+      if (isOwnerLoggedIn) {
+        // Authenticated owner switching into their counter terminal
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('flowscape_switched_from_admin', 'true');
+        }
+        setSwitchedFromAdmin(true);
+      } else if (!isCounterLoggedIn && !isDeveloperAuthenticated()) {
+        // User is NEITHER signed in to owner's dashboard NOR directly logged into counter POS:
+        // Must show counter login modal! Zero unauthorized access.
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem('flowscape_switched_from_admin');
+        }
+        setSwitchedFromAdmin(false);
+        setCurrentRole('counter');
+        window.location.hash = 'counter';
+        setAuthModal({ isOpen: true, targetRole: 'counter' });
+        return;
       }
     }
 
@@ -955,7 +952,7 @@ export default function App() {
           )}
 
           {currentRole === 'counter' && (
-            !(isAuthenticated('counter') || canReturnToAdmin || isDeveloperAuthenticated()) ? (
+            !(isAuthenticated('counter') || isDeveloperAuthenticated()) ? (
               <CounterLoginGate
                 onOpenLogin={() => setAuthModal({ isOpen: true, targetRole: 'counter' })}
                 onReturnToAdmin={() => handleRoleSwitch('admin')}
