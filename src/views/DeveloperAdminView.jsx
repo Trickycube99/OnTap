@@ -26,10 +26,17 @@ import {
   Mail,
   RefreshCw,
   Send,
-  QrCode
+  QrCode,
+  ShieldCheck
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import TableQrModal from '../components/TableQrModal';
+import {
+  purgeBusinessAccountComplete,
+  getLegalComplianceRecords,
+  syncAllBusinessesToCloud,
+  syncBusinessToCloud
+} from '../utils/systematicDatabase';
 import {
   provisionOwnerAccountWithVerification,
   resendVerificationLink,
@@ -68,6 +75,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCredentialsModal, setShowCredentialsModal] = useState(null); // business object
   const [tableQrBiz, setTableQrBiz] = useState(null); // business object for Table QR standees modal
+  const [showComplianceModal, setShowComplianceModal] = useState(false);
   const [copiedKey, setCopiedKey] = useState(null);
 
   // Manual Credentials Override State (for technical anomaly recovery)
@@ -239,6 +247,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
 
     if (res.success) {
       playSuccessChime();
+      syncBusinessToCloud(res.business).catch(() => {});
       refreshBusinesses();
       setCreatedSuccessBiz({
         ...res.business,
@@ -272,51 +281,36 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
   const handleDeleteBusiness = async (biz) => {
     playTapSound();
     const confirmed = window.confirm(
-      `Permanently delete account "${biz.name}" (${biz.owner.email})?\n\nThis will permanently delete:\n• All restaurant info, profile, and settings\n• Complete order history, revenue, and sales data\n• Menu, inventory, staff credentials, and checklists\n• Firebase Authentication user account\n• Email verification status and any password changes\n\nThis action cannot be undone.`
+      `Permanently delete account "${biz.name}" (${biz.owner.email})?\n\nThis will execute a complete irreversible erasure:\n• Clear user email & credentials permanently from Firebase Users & Authentication\n• Purge all cloud Firestore collections & order history\n• Wipe menus, inventory, staff credentials, and local partitions\n• Seal a non-PII statutory compliance ledger record for legal/tax matters\n\nThis action cannot be undone.`
     );
     if (!confirmed) return;
 
     setIsActionLoading(true);
 
-    // 1. Delete owner from Firebase Auth (deletes email verification & any password changes)
-    try {
-      await deleteOwnerAccountFromFirebase({
-        email: biz.owner.email,
-        password: biz.owner.pin
-      });
-    } catch (e) {
-      console.warn('Firebase Auth account deletion note:', e);
-    }
+    const res = await purgeBusinessAccountComplete({
+      businessId: biz.id,
+      actorRole: 'developer_superadmin',
+      reason: 'Permanently deleted via Developer Admin Dashboard'
+    });
 
-    // 2. Delete cloud orders in Firestore if connected
-    try {
-      await deleteCloudOrdersForBusiness(biz.id);
-    } catch (e) {
-      console.warn('Firestore orders cleanup note:', e);
-    }
-
-    // 3. Delete business and purge all local history, orders, and database partitions
-    const res = deleteBusiness(biz.id);
     setIsActionLoading(false);
 
     if (res.success) {
       playSuccessChime();
       refreshBusinesses();
-      try {
-        broadcastSyncEvent(SYNC_EVENTS.BUSINESS_DELETED, { businessId: biz.id });
-      } catch {}
       setLogs((prev) => [
         {
           id: Date.now(),
           time: 'Just now',
           type: 'biz',
-          text: `Permanently deleted business "${biz.name}" — purged all data, order history, email verification, and password records.`
+          text: `Purged account "${biz.name}" (${biz.owner.email}) from Firebase Users, Auth & Database. Legal compliance record sealed: ${res.complianceRecord?.complianceId}.`
         },
         ...prev
       ]);
       if (showCredentialsModal && showCredentialsModal.id === biz.id) {
         setShowCredentialsModal(null);
       }
+      alert(res.message);
     } else {
       playAlertChime();
       alert(res.error);
@@ -327,6 +321,8 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     playTapSound();
     const newStatus = biz.status === 'active' ? 'suspended' : 'active';
     updateBusiness(biz.id, { status: newStatus });
+    const fresh = getBusinesses().find((b) => b.id === biz.id);
+    if (fresh) syncBusinessToCloud(fresh).catch(() => {});
     refreshBusinesses();
     setLogs((prev) => [
       { id: Date.now(), time: 'Just now', type: 'biz', text: `Updated "${biz.name}" status to ${newStatus}` },
@@ -436,6 +432,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       }
 
       setShowCredentialsModal(freshBiz);
+      syncBusinessToCloud(freshBiz).catch(() => {});
       refreshBusinesses();
       setIsEditingCredentials(false);
       setActionStatus({
@@ -876,6 +873,30 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
           >
             <Download size={13} />
             <span>Export Backup</span>
+          </button>
+
+          <button
+            onClick={() => {
+              playTapSound();
+              setShowComplianceModal(true);
+            }}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              background: 'rgba(16, 185, 129, 0.15)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              color: '#34D399',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+            title="View 7-Year Statutory Legal & Tax Compliance Archive for deleted accounts"
+          >
+            <ShieldCheck size={13} />
+            <span>Compliance Archive</span>
           </button>
 
           <button
@@ -2586,6 +2607,211 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
           tagline={tableQrBiz.tagline}
           businessId={tableQrBiz.id}
         />
+      )}
+
+      {/* Statutory Legal & Tax Compliance Archive Modal */}
+      {showComplianceModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.82)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: 16
+          }}
+          onClick={() => setShowComplianceModal(false)}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 680,
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              background: '#0F172A',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: 20,
+              padding: 24,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.85)',
+              color: '#F8FAFC'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)'
+                }}>
+                  <ShieldCheck size={20} color="#FFFFFF" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#F8FAFC' }}>
+                    Statutory Legal & Tax Compliance Archive
+                  </h3>
+                  <span style={{ fontSize: 12, color: '#94A3B8' }}>
+                    Section 36 GST Act & DPDP Act 2023 Ledger (7-Year Non-PII Retention)
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowComplianceModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 12, color: '#94A3B8', lineHeight: 1.5, margin: '0 0 16px' }}>
+              Whenever an account is deleted by an owner or admin, all personal identifying data (PII), credentials, emails, and diner records are permanently purged from Firebase Users & Authentication and operational databases. Only statutory non-PII financial and tax aggregate metrics are cryptographically sealed here for audit compliance.
+            </p>
+
+            {(() => {
+              const records = getLegalComplianceRecords();
+              if (records.length === 0) {
+                return (
+                  <div style={{
+                    padding: '36px 20px',
+                    textAlign: 'center',
+                    background: 'rgba(30, 41, 59, 0.4)',
+                    borderRadius: 14,
+                    border: '1px dashed rgba(255, 255, 255, 0.1)',
+                    color: '#94A3B8'
+                  }}>
+                    <ShieldCheck size={32} color="#10B981" style={{ margin: '0 auto 10px', opacity: 0.8 }} />
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#F8FAFC', marginBottom: 4 }}>
+                      No Deleted Accounts in Compliance Archive
+                    </div>
+                    <div style={{ fontSize: 12 }}>
+                      All current business accounts are active and operational. When any business account is purged, its statutory certificate will appear here.
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 }}>
+                  {records.map((rec) => (
+                    <div
+                      key={rec.complianceId}
+                      style={{
+                        background: 'rgba(30, 41, 59, 0.6)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        borderRadius: 14,
+                        padding: 16
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: '#F8FAFC' }}>
+                            {rec.businessName}
+                          </span>
+                          <span style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(16, 185, 129, 0.15)',
+                            color: '#34D399',
+                            border: '1px solid rgba(16, 185, 129, 0.3)'
+                          }}>
+                            ✓ {rec.complianceSealStatus}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#38BDF8' }}>
+                          {rec.complianceId}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12, marginBottom: 10 }}>
+                        <div style={{ color: '#94A3B8' }}>
+                          Deletion Timestamp: <strong style={{ color: '#F8FAFC' }}>{new Date(rec.deletionTimestamp).toLocaleString('en-IN')}</strong>
+                        </div>
+                        <div style={{ color: '#94A3B8' }}>
+                          Triggered By: <strong style={{ color: '#F8FAFC' }}>{rec.deletionActor}</strong>
+                        </div>
+                        <div style={{ color: '#94A3B8' }}>
+                          Masked Owner ID: <span style={{ fontFamily: 'monospace', color: '#F8FAFC' }}>{rec.maskedIdentifier}</span>
+                        </div>
+                        <div style={{ color: '#94A3B8' }}>
+                          Fiscal Period: <strong style={{ color: '#F8FAFC' }}>{rec.statutoryFinancialSummary?.fiscalAccountingPeriod || '2026'}</strong>
+                        </div>
+                      </div>
+
+                      {/* Financial Tax Summary Grid */}
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gap: 8,
+                        background: 'rgba(15, 23, 42, 0.6)',
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(255, 255, 255, 0.06)',
+                        marginBottom: 10
+                      }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: '#94A3B8' }}>Invoices Processed</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: '#F8FAFC' }}>
+                            {rec.statutoryFinancialSummary?.totalTaxInvoicesIssued || 0}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: '#94A3B8' }}>Gross Turnover (GMV)</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: '#10B981' }}>
+                            ₹{(rec.statutoryFinancialSummary?.grossTurnoverVolumeINR || 0).toLocaleString('en-IN')}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: '#94A3B8' }}>Estimated GST Tax</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: '#F59E0B' }}>
+                            ₹{(rec.statutoryFinancialSummary?.estimatedCompositeGstTaxINR || 0).toLocaleString('en-IN')}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Verification Badges */}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 10.5, color: '#34D399' }}>
+                        <span>✓ Firebase Auth User Purged</span> •
+                        <span>✓ Passwords & Credentials Erased</span> •
+                        <span>✓ Cloud Firestore Orders Cleared</span> •
+                        <span>✓ Local Partitions Wiped</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            <button
+              type="button"
+              onClick={() => setShowComplianceModal(false)}
+              style={{
+                width: '100%',
+                padding: '11px',
+                borderRadius: 10,
+                background: '#0284C7',
+                border: 'none',
+                color: '#FFFFFF',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Close Compliance Ledger
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

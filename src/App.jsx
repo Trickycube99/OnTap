@@ -38,6 +38,7 @@ import {
 } from './utils/businessManager';
 import { playNewOrderChime, playTapSound } from './utils/audio';
 import { subscribeSyncEvents, SYNC_EVENTS } from './utils/sync';
+import { syncAllBusinessesToCloud } from './utils/systematicDatabase';
 import confetti from 'canvas-confetti';
 
 /**
@@ -328,6 +329,11 @@ export default function App() {
     }
   }, [staff, activeBusinessId]);
 
+  // Systematic Multi-Tenant Database Sync: Keep all business accounts synchronized to Firestore
+  useEffect(() => {
+    syncAllBusinessesToCloud().catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
       saveData(getScopedKey(STORAGE_KEYS.OFFERS, activeBusinessId), offers);
@@ -447,6 +453,7 @@ export default function App() {
       } else if (msg.type === SYNC_EVENTS.STAFF_UPDATED) {
         if (Array.isArray(msg.payload)) setStaff(normalizeStaffCredentials(msg.payload));
       } else if (msg.type === SYNC_EVENTS.BUSINESSES_UPDATED || msg.type === SYNC_EVENTS.CREDENTIALS_UPDATED) {
+        syncAllBusinessesToCloud().catch(() => {});
         const freshBiz = getActiveBusiness();
         if (freshBiz) {
           setTheme((prev) => ({
@@ -1086,6 +1093,13 @@ export default function App() {
                 activeAdminTab={adminTab}
                 setActiveAdminTab={setAdminTab}
                 onOpenTableQr={() => setIsTableQrOpen(true)}
+                onDeleteAccountComplete={() => {
+                  handleLogoutRole('admin');
+                  const fallbackBiz = getActiveBusiness();
+                  setActiveBusiness(fallbackBiz.id);
+                  setActiveBusinessId(fallbackBiz.id);
+                  window.location.reload();
+                }}
               />
             )
           )}

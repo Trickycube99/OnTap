@@ -44,6 +44,7 @@ import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/s
 import { STORAGE_KEYS, saveData } from '../utils/storage';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
+import { purgeBusinessAccountComplete } from '../utils/systematicDatabase';
 
 // Coupons & Offers Helpers (placed outside component for purity)
 const isOfferExpired = (offer) => {
@@ -72,7 +73,8 @@ export default function AdminView({
   setOffers,
   activeAdminTab: externalActiveAdminTab,
   setActiveAdminTab: externalSetActiveAdminTab,
-  onOpenTableQr
+  onOpenTableQr,
+  onDeleteAccountComplete
 }) {
   const [internalActiveAdminTab, setInternalActiveAdminTab] = useState('sales');
   const activeAdminTab = externalActiveAdminTab !== undefined ? externalActiveAdminTab : internalActiveAdminTab;
@@ -88,6 +90,59 @@ export default function AdminView({
   const [showCounterPin, setShowCounterPin] = useState(false);
   const [copiedOwnerKey, setCopiedOwnerKey] = useState(null);
   const [activeBiz, setActiveBiz] = useState(() => getActiveBusiness() || getBusinesses()[0]);
+
+  // Owner Self-Account Deletion & Data Purge State
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleteConfirmPin, setDeleteConfirmPin] = useState('');
+  const [deleteAccountError, setDeleteAccountError] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  const handleOwnerSelfDeleteAccount = async () => {
+    playTapSound();
+    if (deleteConfirmText.trim().toUpperCase() !== 'DELETE') {
+      setDeleteAccountError('Please type "DELETE" exactly to confirm account deletion.');
+      playAlertChime();
+      return;
+    }
+    const cleanPin = String(deleteConfirmPin || '').trim();
+    if (cleanPin !== String(activeBiz?.owner?.pin || '').trim()) {
+      setDeleteAccountError('Incorrect Owner Master PIN. Please enter your valid 6-digit PIN.');
+      playAlertChime();
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    setDeleteAccountError('');
+
+    try {
+      const res = await purgeBusinessAccountComplete({
+        businessId: activeBiz.id,
+        actorRole: 'owner',
+        reason: 'Owner Self-Requested Permanent Account Erasure'
+      });
+
+      setIsDeletingAccount(false);
+
+      if (res.success) {
+        playSuccessChime();
+        setShowDeleteAccountModal(false);
+        alert(res.message);
+        if (onDeleteAccountComplete) {
+          onDeleteAccountComplete(res);
+        } else {
+          window.location.reload();
+        }
+      } else {
+        setDeleteAccountError(res.error || 'Failed to delete business account.');
+        playAlertChime();
+      }
+    } catch (err) {
+      setIsDeletingAccount(false);
+      setDeleteAccountError(err.message || 'An error occurred during account deletion.');
+      playAlertChime();
+    }
+  };
 
   // Real-time synchronization for business & credential updates
   useEffect(() => {
@@ -4802,6 +4857,51 @@ export default function AdminView({
               </div>
             </div>
           </div>
+
+          {/* Danger Zone: Account Deletion Card */}
+          <div className="ios-card" style={{ border: '1px solid rgba(239, 68, 68, 0.25)', background: 'rgba(239, 68, 68, 0.02)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <AlertTriangle size={18} color="#EF4444" />
+                  <span style={{ fontSize: 15, fontWeight: 800, color: '#DC2626' }}>
+                    Danger Zone: Delete Business Account
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 540, lineHeight: 1.5 }}>
+                  Permanently erase {activeBiz?.name}. Clears user email and credentials from Firebase Authentication and completely destroys all orders, menus, staff payroll, and operational database records. Non-PII tax audit logs are sealed for legal retention (GST Act Sec 36).
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  playTapSound();
+                  setShowDeleteAccountModal(true);
+                  setDeleteConfirmText('');
+                  setDeleteConfirmPin('');
+                  setDeleteAccountError('');
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 18px',
+                  borderRadius: 12,
+                  background: '#EF4444',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.35)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Trash2 size={16} />
+                <span>Delete Business Account</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -5774,6 +5874,296 @@ export default function AdminView({
             >
               Close Credentials Vault
             </button>
+
+            {/* Danger Zone: Account Deletion */}
+            <div
+              style={{
+                marginTop: 16,
+                padding: '14px',
+                borderRadius: 14,
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.25)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <AlertTriangle size={15} color="#EF4444" />
+                <span style={{ fontSize: 12, fontWeight: 800, color: '#F87171', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Danger Zone: Account Deletion
+                </span>
+              </div>
+              <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 10px', lineHeight: 1.4 }}>
+                Permanently delete this business account. Wipes user email &amp; credentials from Firebase Authentication and completely erases orders, menus, staff, and database history. Non-PII tax records are sealed for statutory legal retention (GST Act Sec 36).
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  playTapSound();
+                  setShowOwnerCredentialsModal(false);
+                  setShowDeleteAccountModal(true);
+                  setDeleteConfirmText('');
+                  setDeleteConfirmPin('');
+                  setDeleteAccountError('');
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: 10,
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#F87171',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Trash2 size={14} />
+                <span>Delete Business Account &amp; Erase All Data</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* OWNER BUSINESS ACCOUNT DELETION MODAL */}
+      {showDeleteAccountModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.82)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: 16
+          }}
+          onClick={() => {
+            if (!isDeletingAccount) setShowDeleteAccountModal(false);
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 500,
+              background: '#0F172A',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              borderRadius: 22,
+              padding: 26,
+              boxShadow: '0 25px 60px -15px rgba(239, 68, 68, 0.25)',
+              color: '#F8FAFC'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 12,
+                    background: 'rgba(239, 68, 68, 0.2)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <AlertOctagon size={22} color="#EF4444" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: '#F8FAFC' }}>
+                    Permanently Delete Business Account
+                  </h3>
+                  <span style={{ fontSize: 12, color: '#94A3B8' }}>
+                    {activeBiz?.name} • {activeBiz?.owner?.email}
+                  </span>
+                </div>
+              </div>
+              {!isDeletingAccount && (
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteAccountModal(false)}
+                  style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+                >
+                  <X size={20} />
+                </button>
+              )}
+            </div>
+
+            {/* Critical Warning Callout */}
+            <div
+              style={{
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: 12,
+                padding: '12px 14px',
+                marginBottom: 16,
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: '#FECACA'
+              }}
+            >
+              <strong style={{ color: '#F87171', display: 'block', marginBottom: 4 }}>
+                ⚠️ Irreversible Data Erasure Notice:
+              </strong>
+              • User email (<strong>{activeBiz?.owner?.email}</strong>) and password/credentials will be permanently wiped from Firebase Users &amp; Authentication.<br />
+              • All live orders, active menus, staff credentials, checklists, and local database partitions will be destroyed.<br />
+              • Statutory Compliance: Under Indian GST Act (Sec 36) &amp; DPDP Act 2023, a sealed, non-PII financial &amp; tax audit record will be preserved for the mandatory 7-year audit retention.
+            </div>
+
+            {deleteAccountError && (
+              <div
+                style={{
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  border: '1px solid #EF4444',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  marginBottom: 16,
+                  fontSize: 12,
+                  color: '#FCA5A5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <AlertTriangle size={15} color="#EF4444" />
+                <span>{deleteAccountError}</span>
+              </div>
+            )}
+
+            {/* Verification Inputs */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0', display: 'block', marginBottom: 6 }}>
+                  Type <span style={{ color: '#EF4444', fontFamily: 'monospace' }}>DELETE</span> to confirm intent:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="Type DELETE"
+                  disabled={isDeletingAccount}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(30, 41, 59, 0.8)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#F8FAFC',
+                    fontSize: 14,
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.05em',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0', display: 'block', marginBottom: 6 }}>
+                  Enter your 6-digit Owner Master PIN:
+                </label>
+                <input
+                  type="password"
+                  maxLength={6}
+                  value={deleteConfirmPin}
+                  onChange={(e) => setDeleteConfirmPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••••"
+                  disabled={isDeletingAccount}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(30, 41, 59, 0.8)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#F8FAFC',
+                    fontSize: 16,
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.25em',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setShowDeleteAccountModal(false)}
+                disabled={isDeletingAccount}
+                style={{
+                  flex: 1,
+                  padding: '11px',
+                  borderRadius: 10,
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  color: '#94A3B8',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: isDeletingAccount ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOwnerSelfDeleteAccount}
+                disabled={
+                  isDeletingAccount ||
+                  deleteConfirmText.trim().toUpperCase() !== 'DELETE' ||
+                  deleteConfirmPin.trim().length !== 6
+                }
+                style={{
+                  flex: 1.6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  padding: '11px',
+                  borderRadius: 10,
+                  background:
+                    deleteConfirmText.trim().toUpperCase() === 'DELETE' &&
+                    deleteConfirmPin.trim().length === 6 &&
+                    !isDeletingAccount
+                      ? '#EF4444'
+                      : 'rgba(239, 68, 68, 0.3)',
+                  border: 'none',
+                  color: '#FFFFFF',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor:
+                    deleteConfirmText.trim().toUpperCase() === 'DELETE' &&
+                    deleteConfirmPin.trim().length === 6 &&
+                    !isDeletingAccount
+                      ? 'pointer'
+                      : 'not-allowed',
+                  boxShadow:
+                    deleteConfirmText.trim().toUpperCase() === 'DELETE' &&
+                    deleteConfirmPin.trim().length === 6 &&
+                    !isDeletingAccount
+                      ? '0 4px 14px rgba(239, 68, 68, 0.4)'
+                      : 'none'
+                }}
+              >
+                {isDeletingAccount ? (
+                  <span>Erasing All Data...</span>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    <span>Permanently Erase Account</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
