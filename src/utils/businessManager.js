@@ -491,6 +491,14 @@ export function authenticateBusinessOwner(email, pin) {
   );
 
   if (business) {
+    if (business.status === 'suspended' && business.emailVerified !== false) {
+      return {
+        success: false,
+        isSuspended: true,
+        business,
+        error: `Access Denied: Business account "${business.name}" has been suspended by the platform administrator. Please contact developer support.`
+      };
+    }
     if (business.emailVerified === false || business.status === 'suspended') {
       return {
         success: false,

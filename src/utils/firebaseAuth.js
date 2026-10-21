@@ -208,7 +208,17 @@ export async function logInUserWithVerification({ email, password }) {
         };
       }
 
-      // Verified! Transition business from suspended to active if needed
+      // Check admin suspension: if business was explicitly suspended by the admin, block access!
+      if (matchingBiz && matchingBiz.status === 'suspended' && matchingBiz.emailVerified !== false) {
+        await signOut(auth); // Terminate Firebase session
+        return {
+          success: false,
+          isSuspended: true,
+          error: `Access Denied: Business account "${matchingBiz.name}" has been suspended by the platform administrator. Please contact developer support.`
+        };
+      }
+
+      // Verified! Transition business from pending email verification to active if needed
       if (!matchingBiz) {
         const createRes = createBusiness({
           name: 'My Restaurant Back-Office',
@@ -223,7 +233,7 @@ export async function logInUserWithVerification({ email, password }) {
         if (matchingBiz) {
           syncBusinessToCloud(matchingBiz).catch(() => {});
         }
-      } else if (matchingBiz.status === 'suspended' || matchingBiz.emailVerified === false) {
+      } else if (matchingBiz.emailVerified === false) {
         updateBusiness(matchingBiz.id, { status: 'active', emailVerified: true });
         matchingBiz = { ...matchingBiz, status: 'active', emailVerified: true };
         syncBusinessToCloud(matchingBiz).catch(() => {});
@@ -295,6 +305,14 @@ export async function logInUserWithVerification({ email, password }) {
   }
 
   // PIN is correct! Validate business account verification and active status
+  if (matchingBiz.status === 'suspended' && matchingBiz.emailVerified !== false) {
+    return {
+      success: false,
+      isSuspended: true,
+      error: `Access Denied: Business account "${matchingBiz.name}" has been suspended by the platform administrator. Please contact developer support.`
+    };
+  }
+
   if (matchingBiz.status === 'suspended' || matchingBiz.emailVerified === false) {
     return {
       success: false,

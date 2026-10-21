@@ -30,6 +30,7 @@ import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import { getTranslation } from '../utils/i18n';
 import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
+import { getActiveBusiness } from '../utils/businessManager';
 
 export default function CustomerView({
   activeBusinessId = 'biz_advait',
@@ -51,6 +52,11 @@ export default function CustomerView({
   setActiveTab
 }) {
   const t = (key) => getTranslation(language, key);
+
+  const isCurrentBizSuspended = useMemo(() => {
+    const biz = getActiveBusiness();
+    return biz ? biz.status === 'suspended' : false;
+  }, [activeBusinessId]);
 
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [vegOnly, setVegOnly] = useState(false);
@@ -381,6 +387,14 @@ export default function CustomerView({
   const handleCheckoutSubmit = (e) => {
     e.preventDefault();
     if (cart.length === 0) return;
+
+    if (isCurrentBizSuspended) {
+      alert(language === 'hi'
+        ? 'ऑर्डर स्वीकार नहीं किए जा रहे हैं: यह प्रतिष्ठान वर्तमान में निलंबित है। कृपया काउंटर स्टाफ से संपर्क करें।'
+        : 'Ordering is temporarily paused for this establishment. Please place orders directly with counter staff.'
+      );
+      return;
+    }
 
     if (paymentMode === 'upi') {
       setShowUpiModal(true);
@@ -1558,10 +1572,15 @@ export default function CustomerView({
             <button
               className="btn-primary-pill full-width"
               onClick={handleCheckoutSubmit}
-              disabled={cart.length === 0}
+              disabled={cart.length === 0 || isCurrentBizSuspended}
+              style={isCurrentBizSuspended ? { opacity: 0.6, cursor: 'not-allowed', background: '#9CA3AF' } : undefined}
             >
               <CheckCircle2 size={18} />
-              <span>{t('confirmOrder')} (₹{cartTotal.toFixed(0)})</span>
+              <span>
+                {isCurrentBizSuspended
+                  ? (language === 'hi' ? 'ऑर्डरिंग स्थगित है' : 'Ordering Paused')
+                  : `${t('confirmOrder')} (₹${cartTotal.toFixed(0)})`}
+              </span>
             </button>
           </div>
         )}
@@ -1811,6 +1830,29 @@ export default function CustomerView({
             </span>
             <ChevronRight size={12} color="#94A3B8" />
           </button>
+        </div>
+      )}
+
+      {/* Suspended Notice for diners */}
+      {isCurrentBizSuspended && (
+        <div style={{
+          margin: '0 18px 12px',
+          background: 'rgba(239, 68, 68, 0.08)',
+          border: '1px solid rgba(239, 68, 68, 0.25)',
+          borderRadius: 14,
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          color: '#DC2626'
+        }}>
+          <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+          <div style={{ fontSize: 12, lineHeight: 1.4, fontWeight: 500 }}>
+            <strong>{language === 'hi' ? 'ऑर्डरिंग अस्थायी रूप से स्थगित:' : 'Online Ordering Paused:'}</strong>{' '}
+            {language === 'hi'
+              ? 'इस प्रतिष्ठान का डिजिटल मेनू वर्तमान में केवल देखने के लिए उपलब्ध है। ऑर्डर देने हेतु कृपया काउंटर पर संपर्क करें।'
+              : 'Digital ordering is temporarily paused for this establishment. Please place orders directly with our counter staff.'}
+          </div>
         </div>
       )}
 

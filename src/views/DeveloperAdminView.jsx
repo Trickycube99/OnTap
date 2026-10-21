@@ -27,7 +27,9 @@ import {
   RefreshCw,
   Send,
   QrCode,
-  ShieldCheck
+  ShieldCheck,
+  PauseCircle,
+  PlayCircle
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import TableQrModal from '../components/TableQrModal';
@@ -325,15 +327,27 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     }
   };
 
-  const handleToggleStatus = (biz) => {
+  const handleToggleStatus = async (biz) => {
     playTapSound();
     const newStatus = biz.status === 'active' ? 'suspended' : 'active';
-    updateBusiness(biz.id, { status: newStatus });
+    const updates = { status: newStatus };
+    if (newStatus === 'active' && biz.emailVerified === false) {
+      updates.emailVerified = true;
+    }
+    updateBusiness(biz.id, updates);
     const fresh = getBusinesses().find((b) => b.id === biz.id);
-    if (fresh) syncBusinessToCloud(fresh).catch(() => {});
+    if (fresh) {
+      await syncBusinessToCloud(fresh).catch(() => {});
+    }
+    broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, { businessId: biz.id, status: newStatus }, biz.id);
     refreshBusinesses();
     setLogs((prev) => [
-      { id: Date.now(), time: 'Just now', type: 'biz', text: `Updated "${biz.name}" status to ${newStatus}` },
+      {
+        id: Date.now(),
+        time: 'Just now',
+        type: 'biz',
+        text: `Updated "${biz.name}" status to ${newStatus}${updates.emailVerified ? ' (and marked email verified)' : ''}`
+      },
       ...prev
     ]);
   };
@@ -1234,7 +1248,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       </div>
 
                       {/* Plan & Status Badges */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
                         <span style={{
                           fontSize: 11,
                           fontWeight: 700,
@@ -1247,24 +1261,60 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           Plan: {biz.plan}
                         </span>
 
-                        <span style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: 6,
-                          background: (isActive && biz.emailVerified !== false) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          color: (isActive && biz.emailVerified !== false) ? '#34D399' : '#F87171',
-                          border: '1px solid rgba(255, 255, 255, 0.08)'
-                        }}>
-                          {(isActive && biz.emailVerified !== false) ? '● Active' : '○ Suspended (Pending Verification)'}
-                        </span>
+                        {/* Status Badge */}
+                        {isActive ? (
+                          <span style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(16, 185, 129, 0.15)',
+                            color: '#34D399',
+                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}>
+                            ● Active
+                          </span>
+                        ) : biz.emailVerified === false ? (
+                          <span style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            color: '#FBBF24',
+                            border: '1px solid rgba(245, 158, 11, 0.25)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}>
+                            ○ Suspended (Pending Verification)
+                          </span>
+                        ) : (
+                          <span style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            color: '#F87171',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}>
+                            ⛔ Suspended by Admin
+                          </span>
+                        )}
 
                         <span style={{
                           fontSize: 11,
                           fontWeight: 700,
                           padding: '2px 8px',
                           borderRadius: 6,
-                          background: biz.emailVerified !== false ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                          background: biz.emailVerified !== false ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
                           color: biz.emailVerified !== false ? '#34D399' : '#FBBF24',
                           border: '1px solid rgba(255, 255, 255, 0.08)'
                         }}>
@@ -1277,153 +1327,197 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       </div>
                     </div>
 
-                    {/* Actions Row */}
+                    {/* Actions Container - 2-row clean layout, zero overflow */}
                     <div style={{
                       display: 'flex',
-                      alignItems: 'center',
+                      flexDirection: 'column',
                       gap: 8,
                       borderTop: '1px solid rgba(255, 255, 255, 0.06)',
                       paddingTop: 12
                     }}>
-                      {/* Launch workspace button */}
-                      <button
-                        onClick={() => handleLaunchWorkspace(biz, 'admin')}
-                        style={{
-                          flex: 1,
-                          padding: '8px 10px',
-                          borderRadius: 8,
-                          background: '#0284C7',
-                          border: 'none',
-                          color: '#FFFFFF',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6
-                        }}
-                        title="Impersonate & open this business's Admin Back-Office"
-                      >
-                        <ExternalLink size={13} />
-                        <span>Launch Admin</span>
-                      </button>
+                      {/* Row 1: Workspace & Customer Menu Links */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        flexWrap: 'wrap'
+                      }}>
+                        {/* Launch workspace button */}
+                        <button
+                          onClick={() => handleLaunchWorkspace(biz, 'admin')}
+                          style={{
+                            flex: '1 1 120px',
+                            minWidth: 110,
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            background: '#0284C7',
+                            border: 'none',
+                            color: '#FFFFFF',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6
+                          }}
+                          title="Impersonate & open this business's Admin Back-Office"
+                        >
+                          <ExternalLink size={13} />
+                          <span>Launch Admin</span>
+                        </button>
 
-                      <button
-                        onClick={() => handleLaunchWorkspace(biz, 'counter')}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: 8,
-                          background: 'rgba(30, 41, 59, 0.8)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          color: '#CBD5E1',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer'
-                        }}
-                        title="Launch Counter POS for this business"
-                      >
-                        <span>POS</span>
-                      </button>
+                        <button
+                          onClick={() => handleLaunchWorkspace(biz, 'counter')}
+                          style={{
+                            flex: '0 0 auto',
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            background: 'rgba(30, 41, 59, 0.8)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            color: '#CBD5E1',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                          title="Launch Counter POS for this business"
+                        >
+                          <span>POS</span>
+                        </button>
 
-                      <button
-                        onClick={() => {
-                          playTapSound();
-                          const table = (biz.tables && biz.tables[0]) ? biz.tables[0].replace(/\D/g, '').padStart(2, '0') : '01';
-                          const cleanBiz = biz.id || 'biz_advait';
-                          window.open(`/?biz=${encodeURIComponent(cleanBiz)}&table=${table}&qr=true#customer`, '_blank');
-                        }}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: 8,
-                          background: 'rgba(16, 185, 129, 0.15)',
-                          border: '1px solid rgba(16, 185, 129, 0.3)',
-                          color: '#34D399',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4
-                        }}
-                        title="Open this business's live QR Table Menu"
-                      >
-                        <QrCode size={13} />
-                        <span>QR Menu</span>
-                      </button>
+                        <button
+                          onClick={() => {
+                            playTapSound();
+                            const table = (biz.tables && biz.tables[0]) ? biz.tables[0].replace(/\D/g, '').padStart(2, '0') : '01';
+                            const cleanBiz = biz.id || 'biz_advait';
+                            window.open(`/?biz=${encodeURIComponent(cleanBiz)}&table=${table}&qr=true#customer`, '_blank');
+                          }}
+                          style={{
+                            flex: '0 0 auto',
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            background: 'rgba(16, 185, 129, 0.15)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            color: '#34D399',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                          title="Open this business's live QR Table Menu"
+                        >
+                          <QrCode size={13} />
+                          <span>QR Menu</span>
+                        </button>
 
-                      <button
-                        onClick={() => {
-                          playTapSound();
-                          setTableQrBiz(biz);
-                        }}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: 8,
-                          background: 'rgba(56, 189, 248, 0.15)',
-                          border: '1px solid rgba(56, 189, 248, 0.3)',
-                          color: '#38BDF8',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4
-                        }}
-                        title="View & Download printable QR tent standees for this business"
-                      >
-                        <QrCode size={13} />
-                        <span>Table QRs</span>
-                      </button>
+                        <button
+                          onClick={() => {
+                            playTapSound();
+                            setTableQrBiz(biz);
+                          }}
+                          style={{
+                            flex: '0 0 auto',
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            background: 'rgba(56, 189, 248, 0.15)',
+                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                            color: '#38BDF8',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                          title="View & Download printable QR tent standees for this business"
+                        >
+                          <QrCode size={13} />
+                          <span>Table QRs</span>
+                        </button>
+                      </div>
 
-                      {/* View & Override Credentials */}
-                      <button
-                        onClick={() => handleOpenCredentialsModal(biz)}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: 8,
-                          background: 'rgba(30, 41, 59, 0.8)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          color: '#F59E0B',
-                          cursor: 'pointer'
-                        }}
-                        title="View & Override Credentials (Technical Recovery)"
-                      >
-                        <KeyRound size={14} />
-                      </button>
+                      {/* Row 2: Administration, Governance & Lifecycle Controls */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        flexWrap: 'wrap'
+                      }}>
+                        {/* View & Override Credentials */}
+                        <button
+                          onClick={() => handleOpenCredentialsModal(biz)}
+                          style={{
+                            flex: '1 1 110px',
+                            minWidth: 100,
+                            padding: '7px 10px',
+                            borderRadius: 8,
+                            background: 'rgba(30, 41, 59, 0.8)',
+                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                            color: '#FBBF24',
+                            cursor: 'pointer',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 5
+                          }}
+                          title="View & Override Credentials (Technical Recovery)"
+                        >
+                          <KeyRound size={13} />
+                          <span>Credentials</span>
+                        </button>
 
-                      {/* Toggle status */}
-                      <button
-                        onClick={() => handleToggleStatus(biz)}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: 8,
-                          background: 'rgba(30, 41, 59, 0.8)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          color: isActive ? '#F87171' : '#34D399',
-                          cursor: 'pointer',
-                          fontSize: 11
-                        }}
-                        title={isActive ? 'Suspend business account' : 'Activate business account'}
-                      >
-                        {isActive ? 'Suspend' : 'Activate'}
-                      </button>
+                        {/* Toggle status (Suspend / Activate) */}
+                        <button
+                          onClick={() => handleToggleStatus(biz)}
+                          style={{
+                            flex: '1 1 100px',
+                            minWidth: 90,
+                            padding: '7px 10px',
+                            borderRadius: 8,
+                            background: isActive ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                            border: isActive ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
+                            color: isActive ? '#F87171' : '#34D399',
+                            cursor: 'pointer',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 5,
+                            transition: 'all 0.15s ease'
+                          }}
+                          title={isActive ? 'Suspend business account (halts operations)' : 'Activate business account'}
+                        >
+                          {isActive ? <PauseCircle size={13} /> : <PlayCircle size={13} />}
+                          <span>{isActive ? 'Suspend' : 'Activate'}</span>
+                        </button>
 
-                      {/* Delete */}
-                      <button
-                        onClick={() => handleDeleteBusiness(biz)}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: 8,
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          border: '1px solid rgba(239, 68, 68, 0.2)',
-                          color: '#EF4444',
-                          cursor: 'pointer'
-                        }}
-                        title="Delete business account"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                        {/* Delete */}
+                        <button
+                          onClick={() => handleDeleteBusiness(biz)}
+                          style={{
+                            flex: '0 0 auto',
+                            padding: '7px 10px',
+                            borderRadius: 8,
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            color: '#EF4444',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 4
+                          }}
+                          title="Delete business account"
+                        >
+                          <Trash2 size={13} />
+                          <span style={{ fontSize: 11, fontWeight: 600 }}>Delete</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

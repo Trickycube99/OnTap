@@ -624,6 +624,11 @@ export default function App() {
 
   // Handle Order Placement from Customer
   const handlePlaceOrder = (newOrder) => {
+    const currentBiz = getActiveBusiness();
+    if (currentBiz && currentBiz.status === 'suspended') {
+      alert(`Ordering is currently paused: "${currentBiz.name}" is temporarily suspended. Please speak to staff at the counter.`);
+      return;
+    }
     const orderWithBiz = { ...newOrder, businessId: activeBusinessId };
     setOrders((prev) => [orderWithBiz, ...prev]);
     // Celebratory confetti
