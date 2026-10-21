@@ -471,7 +471,6 @@ export default function App() {
       } else if (msg.type === SYNC_EVENTS.STAFF_UPDATED) {
         if (Array.isArray(msg.payload)) setStaff(normalizeStaffCredentials(msg.payload));
       } else if (msg.type === SYNC_EVENTS.BUSINESSES_UPDATED || msg.type === SYNC_EVENTS.CREDENTIALS_UPDATED) {
-        syncAllBusinessesToCloud().catch(() => {});
         const freshBiz = getActiveBusiness();
         if (freshBiz) {
           setTheme((prev) => ({

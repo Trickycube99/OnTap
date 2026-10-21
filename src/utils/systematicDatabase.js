@@ -7,7 +7,7 @@
 // 4. Statutory Non-PII Compliance Retention (7-year tax & accounting ledger under GST Act & DPDP Act 2023)
 
 import { doc, setDoc, deleteDoc, collection, query, where, getDocs, writeBatch, onSnapshot } from 'firebase/firestore';
-import { initFirebase, deleteCloudOrdersForBusiness } from './firebaseSync.js';
+import { initFirebase, deleteCloudOrdersForBusiness, isQuotaExhausted, handleFirestoreError } from './firebaseSync.js';
 import { deleteOwnerAccountFromFirebase, getFirebaseAuth } from './firebaseAuth.js';
 import { signOut, deleteUser } from 'firebase/auth';
 import { getBusinesses, saveBusinesses, getActiveBusiness, setActiveBusiness } from './businessManager.js';
@@ -58,6 +58,7 @@ export function validateBusinessAccount(biz) {
  * so accounts are instantly accessible across all devices, windows, and developer consoles.
  */
 export async function syncBusinessToCloud(business) {
+  if (isQuotaExhausted()) return false;
   const database = initFirebase();
   if (!database || !business || !business.id) return false;
 
@@ -96,10 +97,9 @@ export async function syncBusinessToCloud(business) {
     };
 
     await setDoc(bizDocRef, sanitizedBiz, { merge: true });
-    console.log(`🔥 [Systematic Database] Synchronized business account "${business.name}" (${business.id}) to Firestore`);
     return true;
   } catch (err) {
-    console.warn(`🔥 [Systematic Database] Cloud sync notice for ${business?.id}:`, err.message);
+    handleFirestoreError(err, 'sync business');
     return false;
   }
 }
@@ -179,6 +179,7 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
  * Fetch all business accounts from Firestore cloud collection and sync locally
  */
 export async function fetchBusinessesFromCloud() {
+  if (isQuotaExhausted()) return null;
   const database = initFirebase();
   if (!database) return null;
 
@@ -200,7 +201,7 @@ export async function fetchBusinessesFromCloud() {
     }
     return cloudBusinesses;
   } catch (err) {
-    console.warn('🔥 [Systematic Database] Failed to fetch businesses from Firestore:', err.message);
+    handleFirestoreError(err, 'fetch businesses');
     return null;
   }
 }
@@ -209,6 +210,7 @@ export async function fetchBusinessesFromCloud() {
  * Real-time listener for business collection in Firestore
  */
 export function subscribeBusinessesFromCloud(onUpdate) {
+  if (isQuotaExhausted()) return () => {};
   const database = initFirebase();
   if (!database) return () => {};
 
@@ -230,12 +232,12 @@ export function subscribeBusinessesFromCloud(onUpdate) {
         onUpdate(getBusinesses());
       }
     }, (err) => {
-      console.warn('🔥 [Systematic Database] Real-time businesses sync listener notice:', err.message);
+      handleFirestoreError(err, 'businesses listener');
     });
 
     return unsubscribe;
   } catch (err) {
-    console.warn('🔥 [Systematic Database] Real-time businesses subscribe error:', err.message);
+    handleFirestoreError(err, 'businesses subscribe');
     return () => {};
   }
 }
@@ -244,6 +246,7 @@ export function subscribeBusinessesFromCloud(onUpdate) {
  * Look up a business account by owner email directly from Firestore
  */
 export async function findBusinessByEmailInCloud(email) {
+  if (isQuotaExhausted()) return null;
   const cleanEmail = (email || '').trim().toLowerCase();
   if (!cleanEmail) return null;
 
@@ -264,7 +267,7 @@ export async function findBusinessByEmailInCloud(email) {
     }
     return null;
   } catch (err) {
-    console.warn('🔥 [Systematic Database] Cloud lookup for email notice:', err.message);
+    handleFirestoreError(err, 'find business by email');
     return null;
   }
 }

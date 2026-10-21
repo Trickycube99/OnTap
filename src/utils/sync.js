@@ -104,186 +104,155 @@ export function broadcastSyncEvent(type, payload = {}, targetBusinessId = null) 
   }
 }
 
+// Global shared subscriber pool & singleton cloud subscription manager
+const activeSubscribers = new Set();
+let cloudActiveBizId = null;
+let cloudCleanups = [];
+
+function dispatchToSubscribers(msg) {
+  if (!msg || !msg.type) return;
+  const isPlatformEvent =
+    msg.type === SYNC_EVENTS.BUSINESS_DELETED ||
+    msg.type === SYNC_EVENTS.BUSINESSES_UPDATED ||
+    msg.type === SYNC_EVENTS.CREDENTIALS_UPDATED ||
+    msg.type === SYNC_EVENTS.EMAIL_VERIFIED;
+
+  activeSubscribers.forEach((sub) => {
+    try {
+      if (sub.filterBusinessId && msg.businessId && sub.filterBusinessId !== msg.businessId && !isPlatformEvent) {
+        return;
+      }
+      sub.callback(msg);
+    } catch (err) {
+      console.warn('Sync subscriber error:', err);
+    }
+  });
+}
+
+// Global BroadcastChannel & storage message listeners (registered once)
+if (typeof window !== 'undefined') {
+  if (broadcastChannel) {
+    broadcastChannel.addEventListener('message', (event) => {
+      if (event && event.data) {
+        dispatchToSubscribers(event.data);
+      }
+    });
+  }
+
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'flowscape_sync_event_ping' && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue);
+        dispatchToSubscribers(parsed);
+      } catch {}
+    }
+  });
+}
+
+function ensureCloudSync(targetBizId) {
+  if (!isCloudSyncEnabled()) return;
+  if (cloudActiveBizId === targetBizId && cloudCleanups.length > 0) return;
+
+  // Cleanup old listeners if switching businesses
+  cloudCleanups.forEach((unsub) => {
+    try { unsub(); } catch {}
+  });
+  cloudCleanups = [];
+  cloudActiveBizId = targetBizId;
+
+  // 1. Orders
+  const unOrders = subscribeToCloudOrders(
+    targetBizId,
+    (newOrder, isInitial) => {
+      dispatchToSubscribers({
+        type: SYNC_EVENTS.NEW_ORDER,
+        businessId: targetBizId,
+        payload: newOrder,
+        isInitial
+      });
+    },
+    (updatedOrder) => {
+      dispatchToSubscribers({
+        type: SYNC_EVENTS.ORDER_STATUS_UPDATED,
+        businessId: targetBizId,
+        payload: updatedOrder
+      });
+    }
+  );
+  if (unOrders) cloudCleanups.push(unOrders);
+
+  // 2. Server calls
+  const unCalls = subscribeToCloudServerCalls(targetBizId, (callData) => {
+    dispatchToSubscribers({
+      type: SYNC_EVENTS.CALL_SERVER,
+      businessId: targetBizId,
+      payload: callData
+    });
+  });
+  if (unCalls) cloudCleanups.push(unCalls);
+
+  // 3. Offers
+  const unOffers = subscribeToCloudOffers(targetBizId, (cloudOffers) => {
+    dispatchToSubscribers({
+      type: SYNC_EVENTS.OFFERS_UPDATED,
+      businessId: targetBizId,
+      payload: cloudOffers
+    });
+  });
+  if (unOffers) cloudCleanups.push(unOffers);
+
+  // 4. Menu
+  const unMenu = subscribeToCloudMenu(targetBizId, (cloudMenu) => {
+    dispatchToSubscribers({
+      type: SYNC_EVENTS.MENU_UPDATED,
+      businessId: targetBizId,
+      payload: cloudMenu
+    });
+  });
+  if (unMenu) cloudCleanups.push(unMenu);
+
+  // 5. Staff
+  const unStaff = subscribeToCloudStaff(targetBizId, (cloudStaff) => {
+    dispatchToSubscribers({
+      type: SYNC_EVENTS.STAFF_UPDATED,
+      businessId: targetBizId,
+      payload: cloudStaff
+    });
+  });
+  if (unStaff) cloudCleanups.push(unStaff);
+
+  // 6. Checklists
+  const unChecklists = subscribeToCloudChecklists(targetBizId, (cloudChecklist) => {
+    dispatchToSubscribers({
+      type: SYNC_EVENTS.CHECKLIST_SUBMITTED,
+      businessId: targetBizId,
+      payload: cloudChecklist
+    });
+  });
+  if (unChecklists) cloudCleanups.push(unChecklists);
+}
+
 /**
  * Subscribe to real-time events across windows and cross-device cloud for a specific business
+ * Uses a single shared Cloud Firestore connection to eliminate duplicate listeners and prevent quota exhaustion.
  */
 export function subscribeSyncEvents(callback, filterBusinessId = null) {
   if (typeof window === 'undefined') return () => {};
 
-  const isPlatformEvent = (type) =>
-    type === SYNC_EVENTS.BUSINESS_DELETED ||
-    type === SYNC_EVENTS.BUSINESSES_UPDATED ||
-    type === SYNC_EVENTS.CREDENTIALS_UPDATED;
+  const sub = { callback, filterBusinessId };
+  activeSubscribers.add(sub);
 
-  const handleBroadcast = (event) => {
-    if (event && event.data && callback) {
-      const msg = event.data;
-      const targetBizId = filterBusinessId || getActiveBusiness()?.id;
+  const targetBizId = filterBusinessId || getActiveBusiness()?.id || 'biz_advait';
+  ensureCloudSync(targetBizId);
 
-      // STRICT MULTI-TENANT ISOLATION:
-      // Drop any event originating from a different business account (unless platform-wide event)!
-      if (msg.businessId && targetBizId && msg.businessId !== targetBizId && !isPlatformEvent(msg.type)) {
-        return;
-      }
-      callback(msg);
-    }
-  };
-
-  const handleStorage = (e) => {
-    const targetBizId = filterBusinessId || getActiveBusiness()?.id;
-
-    if (e.key === 'flowscape_sync_event_ping' && e.newValue) {
-      try {
-        const parsed = JSON.parse(e.newValue);
-        if (parsed.businessId && targetBizId && parsed.businessId !== targetBizId && !isPlatformEvent(parsed.type)) {
-          return;
-        }
-        if (callback) callback(parsed);
-      } catch (err) {
-        console.error('Error parsing storage sync message:', err);
-      }
-    } else if (targetBizId && e.key === getScopedKey(STORAGE_KEYS.STAFF, targetBizId) && e.newValue) {
-      try {
-        const parsedStaff = JSON.parse(e.newValue);
-        if (Array.isArray(parsedStaff) && callback) {
-          callback({
-            type: SYNC_EVENTS.STAFF_UPDATED,
-            businessId: targetBizId,
-            payload: parsedStaff
-          });
-        }
-      } catch (err) {
-        console.error('Error parsing direct staff storage sync:', err);
-      }
-    } else if (targetBizId && e.key === getScopedKey(STORAGE_KEYS.CHECKLISTS, targetBizId) && e.newValue) {
-      try {
-        const parsedChecklists = JSON.parse(e.newValue);
-        if (Array.isArray(parsedChecklists) && parsedChecklists.length > 0 && callback) {
-          callback({
-            type: SYNC_EVENTS.CHECKLIST_SUBMITTED,
-            businessId: targetBizId,
-            payload: parsedChecklists[0]
-          });
-        }
-      } catch (err) {
-        console.error('Error parsing direct checklist storage sync:', err);
-      }
-    }
-  };
-
-  if (broadcastChannel) {
-    broadcastChannel.addEventListener('message', handleBroadcast);
-  }
-  window.addEventListener('storage', handleStorage);
-
-  // Subscribe to Cloud Sync if configured (strictly for the active business)
-  let unsubscribeCloudOrders = null;
-  let unsubscribeCloudServerCalls = null;
-  let unsubscribeCloudOffers = null;
-  let unsubscribeCloudMenu = null;
-  let unsubscribeCloudStaff = null;
-  let unsubscribeCloudChecklists = null;
-
-  const activeBizId = filterBusinessId || getActiveBusiness()?.id || 'biz_advait';
-
-  if (isCloudSyncEnabled()) {
-    unsubscribeCloudOrders = subscribeToCloudOrders(
-      activeBizId,
-      (newOrder, isInitial) => {
-        if (callback && newOrder && newOrder.id) {
-          callback({
-            type: SYNC_EVENTS.NEW_ORDER,
-            businessId: activeBizId,
-            payload: newOrder,
-            isInitial
-          });
-        }
-      },
-      (updatedOrder) => {
-        if (callback && updatedOrder && updatedOrder.id) {
-          callback({
-            type: SYNC_EVENTS.ORDER_STATUS_UPDATED,
-            businessId: activeBizId,
-            payload: updatedOrder
-          });
-        }
-      }
-    );
-
-    unsubscribeCloudServerCalls = subscribeToCloudServerCalls(activeBizId, (callData) => {
-      if (callback && callData) {
-        callback({
-          type: SYNC_EVENTS.CALL_SERVER,
-          businessId: activeBizId,
-          payload: callData
-        });
-      }
-    });
-
-    unsubscribeCloudOffers = subscribeToCloudOffers(activeBizId, (cloudOffers) => {
-      if (callback && Array.isArray(cloudOffers)) {
-        callback({
-          type: SYNC_EVENTS.OFFERS_UPDATED,
-          businessId: activeBizId,
-          payload: cloudOffers
-        });
-      }
-    });
-
-    unsubscribeCloudMenu = subscribeToCloudMenu(activeBizId, (cloudMenu) => {
-      if (callback && Array.isArray(cloudMenu)) {
-        callback({
-          type: SYNC_EVENTS.MENU_UPDATED,
-          businessId: activeBizId,
-          payload: cloudMenu
-        });
-      }
-    });
-
-    unsubscribeCloudStaff = subscribeToCloudStaff(activeBizId, (cloudStaff) => {
-      if (callback && Array.isArray(cloudStaff)) {
-        callback({
-          type: SYNC_EVENTS.STAFF_UPDATED,
-          businessId: activeBizId,
-          payload: cloudStaff
-        });
-      }
-    });
-
-    unsubscribeCloudChecklists = subscribeToCloudChecklists(activeBizId, (cloudChecklist) => {
-      if (callback && cloudChecklist && cloudChecklist.id) {
-        callback({
-          type: SYNC_EVENTS.CHECKLIST_SUBMITTED,
-          businessId: activeBizId,
-          payload: cloudChecklist
-        });
-      }
-    });
-  }
-
-  // Return unsubscribe cleanup function
   return () => {
-    if (broadcastChannel) {
-      broadcastChannel.removeEventListener('message', handleBroadcast);
-    }
-    window.removeEventListener('storage', handleStorage);
-    if (unsubscribeCloudOrders) {
-      unsubscribeCloudOrders();
-    }
-    if (unsubscribeCloudServerCalls) {
-      unsubscribeCloudServerCalls();
-    }
-    if (unsubscribeCloudOffers) {
-      unsubscribeCloudOffers();
-    }
-    if (unsubscribeCloudMenu) {
-      unsubscribeCloudMenu();
-    }
-    if (unsubscribeCloudStaff) {
-      unsubscribeCloudStaff();
-    }
-    if (unsubscribeCloudChecklists) {
-      unsubscribeCloudChecklists();
+    activeSubscribers.delete(sub);
+    if (activeSubscribers.size === 0) {
+      cloudCleanups.forEach((unsub) => {
+        try { unsub(); } catch {}
+      });
+      cloudCleanups = [];
+      cloudActiveBizId = null;
     }
   };
 }

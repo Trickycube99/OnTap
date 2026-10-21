@@ -64,7 +64,7 @@ let isInitialized = false;
 
 // Real-time synchronization connection state manager
 let syncState = {
-  status: 'initializing', // 'connected' | 'error' | 'local_only'
+  status: 'initializing', // 'connected' | 'error' | 'local_only' | 'quota_exceeded'
   error: null,
   errorCode: null,
   projectId: null,
@@ -72,6 +72,67 @@ let syncState = {
 };
 
 const stateListeners = new Set();
+let quotaExhaustedUntil = 0;
+const lastSyncedHashes = new Map();
+
+/**
+ * Check if Firestore quota circuit breaker is tripped
+ */
+export function isQuotaExhausted() {
+  return Date.now() < quotaExhaustedUntil;
+}
+
+/**
+ * Hash-based duplicate write prevention (idempotency)
+ * Returns false if data is identical to last synced payload, preventing redundant cloud writes
+ */
+export function hasDataChanged(key, data) {
+  if (!data) return false;
+  const hash = JSON.stringify(data);
+  if (lastSyncedHashes.get(key) === hash) {
+    return false; // Skip redundant cloud write
+  }
+  lastSyncedHashes.set(key, hash);
+  return true;
+}
+
+/**
+ * Record a hash delivered by Firestore snapshot to prevent local echo writes
+ */
+export function recordCloudSnapshotHash(key, data) {
+  if (!data) return;
+  lastSyncedHashes.set(key, JSON.stringify(data));
+}
+
+/**
+ * Centralized Firestore Error Handler with Quota Circuit Breaker
+ */
+export function handleFirestoreError(err, context = 'operation') {
+  const code = err?.code || '';
+  const message = err?.message || '';
+
+  if (code === 'resource-exhausted' || message.includes('Quota exceeded') || message.includes('resource-exhausted')) {
+    quotaExhaustedUntil = Date.now() + 10 * 60 * 1000; // 10-minute circuit breaker
+    updateSyncState({
+      status: 'quota_exceeded',
+      error: 'Firebase Firestore daily free-tier quota reached. Seamlessly running in local/device sync mode.',
+      errorCode: 'QUOTA_EXCEEDED'
+    });
+    console.warn(`🔥 [Cloud Sync] Firestore quota exceeded during ${context}. Switched to local sync.`);
+    return;
+  }
+
+  let errorMsg = message || 'Firestore operation error';
+  if (code === 'permission-denied') {
+    errorMsg = 'Firestore Security Rules are locked. Please set rules to allow read, write in Firebase Console.';
+  }
+
+  updateSyncState({
+    status: 'error',
+    error: errorMsg,
+    errorCode: code || 'ERROR'
+  });
+}
 
 export function getCloudSyncState() {
   const config = getFirebaseConfig();
@@ -145,6 +206,7 @@ export function isCloudSyncEnabled() {
  * Upload or sync a new order to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
 export async function syncOrderToCloud(order, businessId = null) {
+  if (isQuotaExhausted()) return false;
   const database = initFirebase();
   if (!database || !order || !order.id) return false;
 
@@ -164,16 +226,7 @@ export async function syncOrderToCloud(order, businessId = null) {
     updateSyncState({ status: 'connected', error: null, errorCode: null });
     return true;
   } catch (err) {
-    console.error('🔥 [Cloud Sync] Error uploading order to Firestore:', err);
-    let errorMsg = err.message;
-    if (err.code === 'permission-denied') {
-      errorMsg = 'Firestore Security Rules are locked. Please set rules to allow read, write in Firebase Console.';
-    }
-    updateSyncState({
-      status: 'error',
-      error: errorMsg,
-      errorCode: err.code || 'WRITE_ERROR'
-    });
+    handleFirestoreError(err, 'order sync');
     return false;
   }
 }
@@ -182,6 +235,7 @@ export async function syncOrderToCloud(order, businessId = null) {
  * Update order status in Firebase Firestore (Cross-Device, Multi-Tenant)
  */
 export async function syncStatusToCloud(orderId, updateData, businessId = null) {
+  if (isQuotaExhausted()) return false;
   const database = initFirebase();
   if (!database || !orderId) return false;
 
@@ -200,16 +254,7 @@ export async function syncStatusToCloud(orderId, updateData, businessId = null) 
     updateSyncState({ status: 'connected', error: null, errorCode: null });
     return true;
   } catch (err) {
-    console.error('🔥 [Cloud Sync] Error updating status in Firestore:', err);
-    let errorMsg = err.message;
-    if (err.code === 'permission-denied') {
-      errorMsg = 'Firestore Security Rules are locked. Please set rules to allow read, write in Firebase Console.';
-    }
-    updateSyncState({
-      status: 'error',
-      error: errorMsg,
-      errorCode: err.code || 'UPDATE_ERROR'
-    });
+    handleFirestoreError(err, 'status update');
     return false;
   }
 }
@@ -335,10 +380,15 @@ export function subscribeToCloudOrders(businessId, onOrdersUpdated, onStatusUpda
  * Sync coupons & offers to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
 export async function syncOffersToCloud(offers, businessId = null) {
+  if (isQuotaExhausted()) return false;
   const database = initFirebase();
   if (!database || !Array.isArray(offers)) return false;
 
   const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const hashKey = `${targetBizId}_offers`;
+  if (!hasDataChanged(hashKey, offers)) {
+    return true; // Data has not changed, zero-cost redundant write skip
+  }
 
   try {
     const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_offers`);
@@ -349,7 +399,7 @@ export async function syncOffersToCloud(offers, businessId = null) {
     }, { merge: true });
     return true;
   } catch (err) {
-    console.error('🔥 [Cloud Sync] Error uploading offers to Firestore:', err);
+    handleFirestoreError(err, 'offers upload');
     return false;
   }
 }
@@ -358,6 +408,7 @@ export async function syncOffersToCloud(offers, businessId = null) {
  * Subscribe to coupons & offers updates for a specific business
  */
 export function subscribeToCloudOffers(businessId, onOffersUpdated) {
+  if (isQuotaExhausted()) return () => {};
   const database = initFirebase();
   if (!database) return () => {};
 
@@ -370,10 +421,13 @@ export function subscribeToCloudOffers(businessId, onOffersUpdated) {
       if (snapshot.exists()) {
         const data = snapshot.data();
         if (data && Array.isArray(data.offers) && (!data.businessId || data.businessId === targetBizId)) {
+          recordCloudSnapshotHash(`${targetBizId}_offers`, data.offers);
           if (onOffersUpdated) onOffersUpdated(data.offers, isInitial);
         }
       }
       isInitial = false;
+    }, (err) => {
+      handleFirestoreError(err, 'offers listener');
     });
     return unsubscribe;
   } catch {
@@ -385,10 +439,15 @@ export function subscribeToCloudOffers(businessId, onOffersUpdated) {
  * Sync dishes & entire menu to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
 export async function syncMenuToCloud(menu, businessId = null) {
+  if (isQuotaExhausted()) return false;
   const database = initFirebase();
   if (!database || !Array.isArray(menu)) return false;
 
   const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const hashKey = `${targetBizId}_menu`;
+  if (!hasDataChanged(hashKey, menu)) {
+    return true; // Data has not changed, zero-cost redundant write skip
+  }
 
   try {
     const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_menu`);
@@ -397,10 +456,9 @@ export async function syncMenuToCloud(menu, businessId = null) {
       businessId: targetBizId,
       _cloudSyncedAt: Date.now()
     }, { merge: true });
-    console.log(`🔥 [Cloud Sync] Menu successfully synced to Firestore for business ${targetBizId} (${menu.length} items)`);
     return true;
   } catch (err) {
-    console.error('🔥 [Cloud Sync] Error uploading menu to Firestore:', err);
+    handleFirestoreError(err, 'menu upload');
     return false;
   }
 }
@@ -409,6 +467,7 @@ export async function syncMenuToCloud(menu, businessId = null) {
  * Subscribe to dishes & menu updates for a specific business
  */
 export function subscribeToCloudMenu(businessId, onMenuUpdated) {
+  if (isQuotaExhausted()) return () => {};
   const database = initFirebase();
   if (!database) return () => {};
 
@@ -421,13 +480,13 @@ export function subscribeToCloudMenu(businessId, onMenuUpdated) {
       if (snapshot.exists()) {
         const data = snapshot.data();
         if (data && Array.isArray(data.menu) && (!data.businessId || data.businessId === targetBizId)) {
-          console.log(`🔥 [Cloud Sync] Received menu update from Firestore for ${targetBizId} (${data.menu.length} items, initial: ${isInitial})`);
+          recordCloudSnapshotHash(`${targetBizId}_menu`, data.menu);
           if (onMenuUpdated) onMenuUpdated(data.menu, isInitial);
         }
       }
       isInitial = false;
     }, (err) => {
-      console.warn('🔥 [Cloud Sync] Error listening to menu changes:', err);
+      handleFirestoreError(err, 'menu listener');
     });
     return unsubscribe;
   } catch {
@@ -439,10 +498,15 @@ export function subscribeToCloudMenu(businessId, onMenuUpdated) {
  * Sync staff and POS terminal permissions to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
 export async function syncStaffToCloud(staff, businessId = null) {
+  if (isQuotaExhausted()) return false;
   const database = initFirebase();
   if (!database || !Array.isArray(staff)) return false;
 
   const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const hashKey = `${targetBizId}_staff`;
+  if (!hasDataChanged(hashKey, staff)) {
+    return true; // Data has not changed, zero-cost redundant write skip
+  }
 
   try {
     const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_staff`);
@@ -451,10 +515,9 @@ export async function syncStaffToCloud(staff, businessId = null) {
       businessId: targetBizId,
       _cloudSyncedAt: Date.now()
     }, { merge: true });
-    console.log(`🔥 [Cloud Sync] Staff & Permissions successfully synced to Firestore for business ${targetBizId} (${staff.length} staff)`);
     return true;
   } catch (err) {
-    console.error('🔥 [Cloud Sync] Error uploading staff to Firestore:', err);
+    handleFirestoreError(err, 'staff upload');
     return false;
   }
 }
@@ -463,6 +526,7 @@ export async function syncStaffToCloud(staff, businessId = null) {
  * Subscribe to staff & permissions updates for a specific business
  */
 export function subscribeToCloudStaff(businessId, onStaffUpdated) {
+  if (isQuotaExhausted()) return () => {};
   const database = initFirebase();
   if (!database) return () => {};
 
@@ -475,13 +539,13 @@ export function subscribeToCloudStaff(businessId, onStaffUpdated) {
       if (snapshot.exists()) {
         const data = snapshot.data();
         if (data && Array.isArray(data.staff) && (!data.businessId || data.businessId === targetBizId)) {
-          console.log(`🔥 [Cloud Sync] Received staff update from Firestore for ${targetBizId} (${data.staff.length} staff, initial: ${isInitial})`);
+          recordCloudSnapshotHash(`${targetBizId}_staff`, data.staff);
           if (onStaffUpdated) onStaffUpdated(data.staff, isInitial);
         }
       }
       isInitial = false;
     }, (err) => {
-      console.warn('🔥 [Cloud Sync] Error listening to staff changes:', err);
+      handleFirestoreError(err, 'staff listener');
     });
     return unsubscribe;
   } catch {
@@ -493,6 +557,7 @@ export function subscribeToCloudStaff(businessId, onStaffUpdated) {
  * Sync EOD closing checklist reports to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
 export async function syncChecklistToCloud(report, businessId = null) {
+  if (isQuotaExhausted()) return false;
   const database = initFirebase();
   if (!database || !report || !report.id) return false;
 
@@ -507,10 +572,9 @@ export async function syncChecklistToCloud(report, businessId = null) {
       originalReportId: report.id,
       _cloudSyncedAt: Date.now()
     }, { merge: true });
-    console.log(`🔥 [Cloud Sync] EOD Checklist successfully synced to Firestore (${report.id}) for business ${targetBizId}`);
     return true;
   } catch (err) {
-    console.error('🔥 [Cloud Sync] Error uploading EOD checklist to Firestore:', err);
+    handleFirestoreError(err, 'checklist upload');
     return false;
   }
 }
@@ -519,6 +583,7 @@ export async function syncChecklistToCloud(report, businessId = null) {
  * Subscribe to EOD closing checklist reports across devices for a specific business
  */
 export function subscribeToCloudChecklists(businessId, onChecklistUpdated) {
+  if (isQuotaExhausted()) return () => {};
   const database = initFirebase();
   if (!database) return () => {};
 
@@ -546,7 +611,7 @@ export function subscribeToCloudChecklists(businessId, onChecklistUpdated) {
       });
       isInitial = false;
     }, (err) => {
-      console.warn('🔥 [Cloud Sync] Error listening to checklists changes:', err);
+      handleFirestoreError(err, 'checklist listener');
     });
     return unsubscribe;
   } catch {

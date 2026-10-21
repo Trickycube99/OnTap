@@ -1,15 +1,39 @@
 // Web Audio API Sound Generator for iOS-Native Chimes
 let audioCtx = null;
+let userHasInteracted = false;
+
+// Register user interaction listener to strictly comply with Web Audio Autoplay Policy
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    userHasInteracted = true;
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+  };
+
+  ['click', 'touchstart', 'keydown'].forEach((eventName) => {
+    window.addEventListener(eventName, unlockAudio, { capture: true, once: true });
+  });
+}
 
 function getAudioContext() {
+  if (typeof window === 'undefined') return null;
+  // If user has not interacted with the page yet, do not trigger AudioContext autoplay error
+  if (!userHasInteracted) return null;
+
   if (!audioCtx) {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (AudioContext) {
-      audioCtx = new AudioContext();
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) {
+        audioCtx = new AudioContextClass();
+      }
+    } catch {
+      return null;
     }
   }
+
   if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume();
+    audioCtx.resume().catch(() => {});
   }
   return audioCtx;
 }
