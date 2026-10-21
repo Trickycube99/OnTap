@@ -29,7 +29,7 @@ export default function TableQrModal({
   businessId = 'biz_advait'
 }) {
   const [selectedTable, setSelectedTable] = useState(activeTable || 'Table 04');
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://restraunt-web-app.vercel.app';
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [isCopied, setIsCopied] = useState(false);
 

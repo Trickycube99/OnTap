@@ -55,14 +55,15 @@ export function getFirebaseAuth() {
   }
 }
 
+export const PRODUCTION_WEBAPP_URL = 'https://restraunt-web-app.vercel.app';
+
 /**
  * Construct custom web-app URL for Firebase Auth actions (email verification & password reset)
  * Ensures user is directed to the attractive, custom in-app view rather than Firebase default pages.
  */
 export function getAppActionUrl(mode) {
-  if (typeof window === 'undefined') return 'http://localhost:5173';
-  const origin = window.location.origin;
-  const path = window.location.pathname.replace(/\/+$/, '');
+  const origin = (typeof window !== 'undefined' && window.location.origin) ? window.location.origin : PRODUCTION_WEBAPP_URL;
+  const path = (typeof window !== 'undefined' && window.location.pathname) ? window.location.pathname.replace(/\/+$/, '') : '';
   return `${origin}${path}/?mode=${mode}`;
 }
 
