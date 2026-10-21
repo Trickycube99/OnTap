@@ -24,7 +24,7 @@ export const SYSTEMATIC_BUSINESS_SCHEMA = {
   version: 'ontap_v5',
   fields: [
     'id', 'name', 'tagline', 'category', 'city', 'plan', 'status',
-    'emailVerified', 'owner', 'counter', 'upiId', 'tables', 'accentColor',
+    'emailVerified', 'owner', 'counter', 'staff', 'upiId', 'tables', 'accentColor',
     'totalOrders', 'gmv', 'createdAt', 'updatedAt'
   ]
 };
@@ -84,6 +84,7 @@ export async function syncBusinessToCloud(business) {
         terminalName: business.counter?.terminalName || 'POS Terminal 01',
         loginId: business.counter?.loginId || `${business.id}.pos`
       },
+      staff: Array.isArray(business.staff) ? business.staff : [],
       upiId: business.upiId || '',
       tables: Array.isArray(business.tables) ? business.tables : [],
       accentColor: business.accentColor || '#007AFF',
@@ -115,11 +116,13 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
   for (const cloudBiz of cloudBusinesses) {
     if (!cloudBiz || !cloudBiz.id) continue;
     const localIndex = merged.findIndex((b) => b.id === cloudBiz.id);
+    const cloudStaff = Array.isArray(cloudBiz.staff) ? cloudBiz.staff : [];
 
     if (localIndex === -1) {
       // New business from cloud - add to local multi-tenant list
       merged.unshift({
         ...cloudBiz,
+        staff: cloudStaff,
         owner: {
           name: cloudBiz.owner?.name || 'Owner',
           email: (cloudBiz.owner?.email || '').trim().toLowerCase(),
@@ -130,13 +133,18 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
           terminalName: cloudBiz.counter?.terminalName || `${cloudBiz.name} POS`
         }
       });
+      if (cloudStaff.length > 0) {
+        saveData(getScopedKey(STORAGE_KEYS.STAFF, cloudBiz.id), cloudStaff);
+      }
       hasChanges = true;
     } else {
       // Existing business - merge cloud updates
       const local = merged[localIndex];
+      const mergedStaff = cloudStaff.length > 0 ? cloudStaff : (Array.isArray(local.staff) ? local.staff : []);
       const updated = {
         ...local,
         ...cloudBiz,
+        staff: mergedStaff,
         status: cloudBiz.status || local.status,
         emailVerified: cloudBiz.emailVerified !== undefined ? cloudBiz.emailVerified : local.emailVerified,
         owner: {
@@ -150,6 +158,10 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
           pin: (cloudBiz.counter?.pin && String(cloudBiz.counter.pin).trim()) || local.counter?.pin || '442100'
         }
       };
+
+      if (cloudStaff.length > 0) {
+        saveData(getScopedKey(STORAGE_KEYS.STAFF, cloudBiz.id), cloudStaff);
+      }
 
       if (JSON.stringify(updated) !== JSON.stringify(local)) {
         merged[localIndex] = updated;

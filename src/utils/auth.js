@@ -96,8 +96,8 @@ export const ROLE_CONFIGS = {
         return { valid: false, error: 'Please enter your Staff Login ID (e.g. @username.pos).' };
       }
 
-      if (!pin || !/^\d{6}$/.test(pin)) {
-        return { valid: false, error: 'Staff POS PIN must be exactly 6 numeric digits.' };
+      if (!pin || !/^\d{4,6}$/.test(pin)) {
+        return { valid: false, error: 'Staff POS PIN must be 4 to 6 numeric digits.' };
       }
 
       // Cross-organization multi-tenant authentication by Login ID & PIN

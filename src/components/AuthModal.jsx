@@ -97,10 +97,10 @@ export default function AuthModal({
         return;
       }
 
-      if (!trimmedPin || !/^\d{6}$/.test(trimmedPin)) {
+      if (!trimmedPin || !/^\d{4,6}$/.test(trimmedPin)) {
         playAlertChime();
         setIsSubmitting(false);
-        setErrorMessage('Staff POS PIN must be exactly 6 numeric digits.');
+        setErrorMessage('Staff POS PIN must be 4 to 6 numeric digits.');
         return;
       }
 

@@ -587,8 +587,8 @@ export function authenticateStaffMemberByLoginId(loginId, pin) {
     return { success: false, error: 'Please enter your Staff Login ID (e.g. @username.pos).' };
   }
 
-  if (!/^\d{6}$/.test(cleanPin)) {
-    return { success: false, error: 'Staff POS PIN must be exactly 6 numeric digits.' };
+  if (!/^\d{4,6}$/.test(cleanPin)) {
+    return { success: false, error: 'Staff POS PIN must be 4 to 6 numeric digits.' };
   }
 
   const businesses = getBusinesses();
@@ -596,29 +596,77 @@ export function authenticateStaffMemberByLoginId(loginId, pin) {
   // 1. Iterate across all registered businesses and check their active staff records
   for (const b of businesses) {
     let staffList = [];
-    if (typeof localStorage !== 'undefined') {
-      try {
-        const key = b.id === 'biz_advait' ? 'flowscape_staff_inr_v2' : `flowscape_staff_inr_v2_${b.id}`;
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          staffList = JSON.parse(raw);
-        }
-      } catch {}
+
+    // Source A: Attached directly to business record
+    if (Array.isArray(b.staff) && b.staff.length > 0) {
+      staffList = b.staff;
     }
 
+    // Source B: Multi-tenant scoped keys in localStorage (checking authoritative ontap_v5 and fallbacks)
+    if ((!Array.isArray(staffList) || staffList.length === 0) && typeof localStorage !== 'undefined') {
+      const candidateKeys = [
+        `ontap_v5_staff_${(b.id || '').toLowerCase()}`,
+        b.id === 'biz_advait' ? 'ontap_v5_staff_biz_advait' : null,
+        `staff_${b.id}`,
+        `${b.id}_staff`,
+        b.id === 'biz_advait' ? 'staff' : null,
+        b.id === 'biz_advait' ? 'flowscape_staff_inr_v2' : `flowscape_staff_inr_v2_${b.id}`
+      ].filter(Boolean);
+
+      for (const k of candidateKeys) {
+        try {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              staffList = parsed;
+              break;
+            }
+          }
+        } catch {}
+      }
+    }
+
+    // Source C: Initial mock staff fallback
     if (!Array.isArray(staffList) || staffList.length === 0) {
       staffList = initialStaffByBusiness?.[b.id] || (b.id === 'biz_advait' ? initialStaff : []);
     }
 
     // Check staff in this business
     for (const emp of staffList) {
-      const empLogin = (emp.loginId || (emp.name ? emp.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.pos' : '')).replace(/^@/, '').trim().toLowerCase();
-      
-      if (empLogin === cleanLoginId) {
+      const empLoginRaw = String(emp.loginId || '').replace(/^@/, '').trim().toLowerCase();
+      const empNameSlug = (emp.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const empPosSlug = empNameSlug ? `${empNameSlug}.pos` : '';
+      const empLoginFull = empLoginRaw || empPosSlug;
+
+      const cleanBase = cleanLoginId.replace(/\.pos$/, '');
+      const empBase = empLoginRaw.replace(/\.pos$/, '');
+
+      const isLoginMatch =
+        cleanLoginId === empLoginFull ||
+        cleanLoginId === empLoginRaw ||
+        cleanLoginId === empPosSlug ||
+        (cleanBase && cleanBase === empBase) ||
+        (cleanBase && cleanBase === empNameSlug);
+
+      if (isLoginMatch) {
+        if (b.status === 'suspended' && b.emailVerified !== false) {
+          return {
+            success: false,
+            error: `Access Denied: Business "${b.name}" has been suspended by the platform administrator. Please contact developer support.`
+          };
+        }
         if (b.status === 'suspended' || b.emailVerified === false) {
           return {
             success: false,
-            error: `Access Denied: Business "${b.name}" is currently suspended. Please contact the business owner.`
+            error: `Access Denied: Business "${b.name}" is currently suspended pending email verification.`
+          };
+        }
+
+        if (emp.status === 'resigned' || emp.status === 'inactive') {
+          return {
+            success: false,
+            error: `Staff account "@${emp.loginId || cleanLoginId}" is marked as inactive or resigned. Please contact your store manager.`
           };
         }
 
@@ -626,7 +674,14 @@ export function authenticateStaffMemberByLoginId(loginId, pin) {
         const ownerPin = String(b.owner?.pin || '').trim();
         const counterPin = String(b.counter?.pin || '').trim();
 
-        if (storedPin === cleanPin || ownerPin === cleanPin || counterPin === cleanPin) {
+        const isPinMatch =
+          storedPin === cleanPin ||
+          (cleanPin.length === 6 && storedPin === cleanPin.slice(0, 4)) ||
+          (storedPin.length === 6 && cleanPin === storedPin.slice(0, 4)) ||
+          ownerPin === cleanPin ||
+          counterPin === cleanPin;
+
+        if (isPinMatch) {
           setActiveBusiness(b.id);
           return {
             success: true,
@@ -640,6 +695,7 @@ export function authenticateStaffMemberByLoginId(loginId, pin) {
               staffRole: emp.role || 'POS Associate',
               loginId: emp.loginId || cleanLoginId,
               terminal: b.counter?.terminalName || 'POS Terminal 01',
+              permissions: emp.permissions || { canEditPrice: false, canCreateDiscounts: false },
               token: `pos_${b.id}_${Date.now()}`,
               authenticatedAt: new Date().toISOString(),
               authenticatedBy: 'counter'
@@ -648,7 +704,7 @@ export function authenticateStaffMemberByLoginId(loginId, pin) {
         } else {
           return {
             success: false,
-            error: `Incorrect PIN for staff member "@${emp.loginId || cleanLoginId}" at "${b.name}".`
+            error: `Incorrect PIN for staff member "@${emp.loginId || cleanLoginId}". Check with your store owner for the correct PIN.`
           };
         }
       }

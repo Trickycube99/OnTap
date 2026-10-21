@@ -41,10 +41,10 @@ import BankReconciliationView from './BankReconciliationView';
 import InventoryView from './InventoryView';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
 import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
-import { STORAGE_KEYS, saveData } from '../utils/storage';
+import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
-import { purgeBusinessAccountComplete } from '../utils/systematicDatabase';
+import { purgeBusinessAccountComplete, syncBusinessToCloud } from '../utils/systematicDatabase';
 
 // Coupons & Offers Helpers (placed outside component for purity)
 const isOfferExpired = (offer) => {
@@ -711,11 +711,32 @@ export default function AdminView({
   // Helper to persist staff to active business record & scoped localStorage, and broadcast live
   const persistAndBroadcastStaff = (updatedStaff) => {
     const activeBiz = getActiveBusiness();
-    const scopedStaffKey = activeBiz?.id && activeBiz.id !== 'biz_advait'
-      ? `${STORAGE_KEYS.STAFF}_${activeBiz.id}`
-      : STORAGE_KEYS.STAFF;
-    saveData(scopedStaffKey, updatedStaff);
-    broadcastSyncEvent(SYNC_EVENTS.STAFF_UPDATED, updatedStaff);
+    const bizId = activeBiz?.id || activeBusinessId || 'biz_advait';
+
+    // 1. Authoritative scoped storage key (e.g. ontap_v5_staff_...)
+    const officialScopedKey = getScopedKey(STORAGE_KEYS.STAFF, bizId);
+    saveData(officialScopedKey, updatedStaff);
+
+    // 2. Cross-compatibility keys
+    saveData(`${STORAGE_KEYS.STAFF}_${bizId}`, updatedStaff);
+    if (bizId === 'biz_advait') {
+      saveData(STORAGE_KEYS.STAFF, updatedStaff);
+      saveData('flowscape_staff_inr_v2', updatedStaff);
+    } else {
+      saveData(`flowscape_staff_inr_v2_${bizId}`, updatedStaff);
+    }
+
+    // 3. Attach staff to active business in businessManager multi-tenant database
+    updateBusiness(bizId, { staff: updatedStaff });
+
+    // 4. Synchronize business to Firebase Firestore so staff persists across devices & reloads
+    const freshBiz = getBusinesses().find((b) => b.id === bizId);
+    if (freshBiz) {
+      syncBusinessToCloud(freshBiz).catch(() => {});
+    }
+
+    // 5. Broadcast instant cross-tab / cross-device sync event
+    broadcastSyncEvent(SYNC_EVENTS.STAFF_UPDATED, updatedStaff, bizId);
   };
 
   // User Management & Permissions

@@ -160,7 +160,10 @@ export default function App() {
   });
   const [expenses, setExpenses] = useState(() => loadData(getScopedKey(STORAGE_KEYS.EXPENSES, initialBizId), isDefaultBiz ? initialExpenses : []));
   const [staff, setStaff] = useState(() => {
-    const raw = loadData(getScopedKey(STORAGE_KEYS.STAFF, initialBizId), isDefaultBiz ? initialStaff : (initialStaffByBusiness?.[initialBizId] || []));
+    const staffFallback = (Array.isArray(initialBiz?.staff) && initialBiz.staff.length > 0)
+      ? initialBiz.staff
+      : (isDefaultBiz ? initialStaff : (initialStaffByBusiness?.[initialBizId] || []));
+    const raw = loadData(getScopedKey(STORAGE_KEYS.STAFF, initialBizId), staffFallback);
     return normalizeStaffCredentials(raw);
   });
   const [offers, setOffers] = useState(() => loadData(getScopedKey(STORAGE_KEYS.OFFERS, initialBizId), isDefaultBiz ? initialOffers : []));
@@ -687,7 +690,10 @@ export default function App() {
     const loadedMenu = loadData(getScopedKey(STORAGE_KEYS.MENU, bizId), fallbackMenu);
     const loadedOrders = loadData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), isDefault ? initialOrders : []);
     const loadedExpenses = loadData(getScopedKey(STORAGE_KEYS.EXPENSES, bizId), isDefault ? initialExpenses : []);
-    const loadedStaff = normalizeStaffCredentials(loadData(getScopedKey(STORAGE_KEYS.STAFF, bizId), isDefault ? initialStaff : (initialStaffByBusiness?.[bizId] || [])));
+    const staffFallback = (Array.isArray(biz?.staff) && biz.staff.length > 0)
+      ? biz.staff
+      : (isDefault ? initialStaff : (initialStaffByBusiness?.[bizId] || []));
+    const loadedStaff = normalizeStaffCredentials(loadData(getScopedKey(STORAGE_KEYS.STAFF, bizId), staffFallback));
     const loadedOffers = loadData(getScopedKey(STORAGE_KEYS.OFFERS, bizId), isDefault ? initialOffers : []);
     const loadedChecklists = loadData(getScopedKey(STORAGE_KEYS.CHECKLISTS, bizId), []);
 
@@ -878,6 +884,9 @@ export default function App() {
       try {
         if (typeof sessionStorage !== 'undefined') {
           sessionStorage.setItem('counter_active_staff_id', newSession.staffId);
+          if (newSession.businessId) {
+            sessionStorage.setItem(`counter_active_staff_id_${newSession.businessId}`, newSession.staffId);
+          }
         }
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem('counter_active_staff_id');
