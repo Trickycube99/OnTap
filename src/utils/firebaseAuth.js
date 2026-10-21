@@ -56,6 +56,17 @@ export function getFirebaseAuth() {
 }
 
 /**
+ * Construct custom web-app URL for Firebase Auth actions (email verification & password reset)
+ * Ensures user is directed to the attractive, custom in-app view rather than Firebase default pages.
+ */
+export function getAppActionUrl(mode) {
+  if (typeof window === 'undefined') return 'http://localhost:5173';
+  const origin = window.location.origin;
+  const path = window.location.pathname.replace(/\/+$/, '');
+  return `${origin}${path}/?mode=${mode}`;
+}
+
+/**
  * 1. DEVELOPER PROVISIONING: CREATE OWNER ACCOUNT WITH AUTOMATIC EMAIL VERIFICATION
  * Accounts can ONLY be created using the Developer Dashboard.
  * Uses a sandboxed secondary Firebase app so the active developer session is completely untouched.
@@ -89,9 +100,9 @@ export async function provisionOwnerAccountWithVerification({ email, password, o
       const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, cleanPassword);
       const user = userCredential.user;
 
-      // Automatically send email verification link
+      // Automatically send email verification link pointing to the web app's custom action handler
       const actionCodeSettings = {
-        url: window.location.origin,
+        url: getAppActionUrl('verifyEmail'),
         handleCodeInApp: true
       };
       await sendEmailVerification(user, actionCodeSettings);
@@ -195,8 +206,7 @@ export async function logInUserWithVerification({ email, password }) {
       } catch {}
 
       // STRICT VERIFICATION CHECK: BLOCK ACCESS IF EMAIL NOT VERIFIED
-      // Account remains in suspended / unverified state until verified by Firebase
-      // (Unless explicitly verified in multi-tenant business records by developer)
+      // Account creation is incomplete until email is verified by Firebase
       const isLocallyVerified = matchingBiz && matchingBiz.emailVerified !== false && matchingBiz.status === 'active';
       if (!user.emailVerified && !isLocallyVerified) {
         await signOut(auth); // Terminate unverified session immediately
@@ -204,7 +214,7 @@ export async function logInUserWithVerification({ email, password }) {
           success: false,
           isUnverified: true,
           email: cleanEmail,
-          error: `Access Denied: Business account "${matchingBiz?.name || 'Owner'}" remains in a suspended state because ${cleanEmail} has not been verified yet. Please click the verification link sent by Firebase to activate the account.`
+          error: `Access Denied: Business account "${matchingBiz?.name || 'Owner'}" has not been created yet because email verification is pending for ${cleanEmail}. Please click the verification link sent to your email to complete creation of your account.`
         };
       }
 
@@ -233,10 +243,26 @@ export async function logInUserWithVerification({ email, password }) {
         if (matchingBiz) {
           syncBusinessToCloud(matchingBiz).catch(() => {});
         }
-      } else if (matchingBiz.emailVerified === false) {
-        updateBusiness(matchingBiz.id, { status: 'active', emailVerified: true });
-        matchingBiz = { ...matchingBiz, status: 'active', emailVerified: true };
-        syncBusinessToCloud(matchingBiz).catch(() => {});
+      } else {
+        const updates = {};
+        if (matchingBiz.emailVerified === false || matchingBiz.status === 'pending_verification') {
+          updates.status = 'active';
+          updates.emailVerified = true;
+          updates.accountCreatedAt = matchingBiz.accountCreatedAt || new Date().toISOString();
+        }
+        // Ensure owner PIN is systematically updated and stored in database if modified
+        if (matchingBiz.owner?.pin !== cleanPassword) {
+          updates.owner = {
+            ...matchingBiz.owner,
+            pin: cleanPassword,
+            hasPinConfigured: true
+          };
+        }
+        if (Object.keys(updates).length > 0) {
+          updateBusiness(matchingBiz.id, updates);
+          matchingBiz = { ...matchingBiz, ...updates };
+          syncBusinessToCloud(matchingBiz).catch(() => {});
+        }
       }
 
       setActiveBusiness(matchingBiz.id);
@@ -313,12 +339,12 @@ export async function logInUserWithVerification({ email, password }) {
     };
   }
 
-  if (matchingBiz.status === 'suspended' || matchingBiz.emailVerified === false) {
+  if (matchingBiz.status === 'suspended' || matchingBiz.status === 'pending_verification' || matchingBiz.emailVerified === false) {
     return {
       success: false,
       isUnverified: true,
       email: cleanEmail,
-      error: `Access Denied: Business account "${matchingBiz.name}" remains in a suspended state pending email verification. Please verify the email sent to ${cleanEmail} before accessing the Back-Office.`
+      error: `Access Denied: Business account "${matchingBiz.name}" has not been created yet because email verification is pending for ${cleanEmail}. Please click the verification link sent to your email to complete creation of your account.`
     };
   }
 
@@ -370,7 +396,7 @@ export async function sendPasswordReset({ email }) {
   if (auth) {
     try {
       const actionCodeSettings = {
-        url: window.location.origin,
+        url: getAppActionUrl('resetPassword'),
         handleCodeInApp: true
       };
       await sendPasswordResetEmail(auth, cleanEmail, actionCodeSettings);
@@ -435,7 +461,7 @@ export async function resendVerificationLink({ email, password }) {
       }
 
       const actionCodeSettings = {
-        url: window.location.origin,
+        url: getAppActionUrl('verifyEmail'),
         handleCodeInApp: true
       };
       await sendEmailVerification(user, actionCodeSettings);
@@ -496,13 +522,20 @@ export async function handleVerifyEmailAction(oobCode) {
       }
 
       let updated = false;
+      let activatedBiz = null;
       const updatedBiz = businesses.map((b) => {
         if (
           (verifiedEmail && (b.owner?.email || '').toLowerCase() === verifiedEmail.toLowerCase()) ||
-          (!verifiedEmail && (b.emailVerified === false || b.status === 'suspended'))
+          (!verifiedEmail && (b.emailVerified === false || b.status === 'pending_verification' || b.status === 'suspended'))
         ) {
           updated = true;
-          const fresh = { ...b, status: 'active', emailVerified: true };
+          const fresh = {
+            ...b,
+            status: 'active',
+            emailVerified: true,
+            accountCreatedAt: b.accountCreatedAt || new Date().toISOString()
+          };
+          activatedBiz = fresh;
           syncBusinessToCloud(fresh).catch(() => {});
           return fresh;
         }
@@ -512,6 +545,36 @@ export async function handleVerifyEmailAction(oobCode) {
         saveBusinesses(updatedBiz);
       }
 
+      if (activatedBiz) {
+        // Broadcast instant notification to Developer Superadmin Dashboard
+        broadcastSyncEvent(SYNC_EVENTS.EMAIL_VERIFIED, {
+          businessId: activatedBiz.id,
+          businessName: activatedBiz.name,
+          email: activatedBiz.owner?.email || verifiedEmail,
+          timestamp: new Date().toISOString()
+        }, null);
+
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('ontap_last_verified_email', JSON.stringify({
+              businessId: activatedBiz.id,
+              businessName: activatedBiz.name,
+              email: activatedBiz.owner?.email || verifiedEmail,
+              timestamp: Date.now()
+            }));
+          }
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('ontap_email_verified', {
+              detail: {
+                businessId: activatedBiz.id,
+                businessName: activatedBiz.name,
+                email: activatedBiz.owner?.email || verifiedEmail
+              }
+            }));
+          }
+        } catch {}
+      }
+
       return {
         success: true,
         email: verifiedEmail,
@@ -519,15 +582,25 @@ export async function handleVerifyEmailAction(oobCode) {
       };
     } catch (error) {
       if (error.code === 'auth/invalid-action-code') {
-        // Even if action code was already used / redeemed, ensure matching business is marked active
+        // Even if action code was already used / redeemed, ensure matching business is marked active and broadcast
         if (verifiedEmail) {
           try {
             await findBusinessByEmailInCloud(verifiedEmail);
             const freshBusinesses = getBusinesses();
             const target = freshBusinesses.find((b) => (b.owner?.email || '').toLowerCase() === verifiedEmail.toLowerCase());
             if (target && (target.status !== 'active' || !target.emailVerified)) {
-              updateBusiness(target.id, { status: 'active', emailVerified: true });
+              updateBusiness(target.id, {
+                status: 'active',
+                emailVerified: true,
+                accountCreatedAt: target.accountCreatedAt || new Date().toISOString()
+              });
               syncBusinessToCloud({ ...target, status: 'active', emailVerified: true }).catch(() => {});
+              broadcastSyncEvent(SYNC_EVENTS.EMAIL_VERIFIED, {
+                businessId: target.id,
+                businessName: target.name,
+                email: target.owner?.email || verifiedEmail,
+                timestamp: new Date().toISOString()
+              }, null);
             }
           } catch {}
         }
@@ -543,12 +616,28 @@ export async function handleVerifyEmailAction(oobCode) {
 
   // Local fallback mode: mark business as active and verified
   const businesses = getBusinesses();
+  let activatedBiz = null;
   const updatedBiz = businesses.map((b) => {
-    const fresh = { ...b, status: 'active', emailVerified: true };
+    const fresh = {
+      ...b,
+      status: 'active',
+      emailVerified: true,
+      accountCreatedAt: b.accountCreatedAt || new Date().toISOString()
+    };
+    activatedBiz = fresh;
     syncBusinessToCloud(fresh).catch(() => {});
     return fresh;
   });
   saveBusinesses(updatedBiz);
+
+  if (activatedBiz) {
+    broadcastSyncEvent(SYNC_EVENTS.EMAIL_VERIFIED, {
+      businessId: activatedBiz.id,
+      businessName: activatedBiz.name,
+      email: activatedBiz.owner?.email,
+      timestamp: new Date().toISOString()
+    }, null);
+  }
 
   return {
     success: true,
@@ -625,9 +714,13 @@ export async function handleConfirmPasswordReset(oobCode, newPassword, targetEma
   if (targetIndex !== -1 && businesses[targetIndex]) {
     businesses[targetIndex].owner = {
       ...businesses[targetIndex].owner,
-      pin: cleanPin
+      pin: cleanPin,
+      hasPinConfigured: true
     };
     saveBusinesses(businesses);
+
+    // SYSTEMATIC DATABASE PERSISTENCE:
+    syncBusinessToCloud(businesses[targetIndex]).catch(() => {});
 
     // Update active business context if relevant
     const activeBiz = getActiveBusiness();
@@ -645,12 +738,44 @@ export async function handleConfirmPasswordReset(oobCode, newPassword, targetEma
     } catch {}
 
     // Broadcast update across all windows and developer dashboard
-    broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, {
+    broadcastSyncEvent(SYNC_EVENTS.CREDENTIALS_UPDATED, {
       businessId: businesses[targetIndex].id,
       reason: 'password_reset',
       email: businesses[targetIndex].owner.email,
       newPin: cleanPin
-    });
+    }, null);
+
+    broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, {
+      businessId: businesses[targetIndex].id,
+      reason: 'password_reset'
+    }, null);
+  } else if (cleanEmail && cleanEmail !== 'your account') {
+    // If not in local cache, update Cloud Firestore systematically
+    try {
+      const cloudBiz = await findBusinessByEmailInCloud(cleanEmail);
+      if (cloudBiz) {
+        const updatedBiz = {
+          ...cloudBiz,
+          owner: {
+            ...cloudBiz.owner,
+            pin: cleanPin,
+            hasPinConfigured: true
+          }
+        };
+        await syncBusinessToCloud(updatedBiz);
+        const freshList = getBusinesses();
+        const merged = freshList.some((b) => b.id === updatedBiz.id)
+          ? freshList.map((b) => (b.id === updatedBiz.id ? updatedBiz : b))
+          : [updatedBiz, ...freshList];
+        saveBusinesses(merged);
+        broadcastSyncEvent(SYNC_EVENTS.CREDENTIALS_UPDATED, {
+          businessId: updatedBiz.id,
+          reason: 'password_reset',
+          email: updatedBiz.owner.email,
+          newPin: cleanPin
+        }, null);
+      }
+    } catch {}
   }
 
   return {

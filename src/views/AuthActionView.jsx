@@ -346,9 +346,14 @@ export default function AuthActionView({
 
             <form onSubmit={handleResetSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ textAlign: 'left' }}>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#CBD5E1', marginBottom: 4 }}>
-                  New 6-Digit Master PIN *
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#CBD5E1' }}>
+                    New 6-Digit Master PIN *
+                  </label>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: newPassword.length === 6 ? '#10B981' : '#94A3B8' }}>
+                    {newPassword.length}/6 digits
+                  </span>
+                </div>
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showPassword ? 'text' : 'password'}
@@ -357,15 +362,20 @@ export default function AuthActionView({
                     maxLength={6}
                     pattern="[0-9]*"
                     inputMode="numeric"
-                    placeholder="Enter new 6-digit PIN"
+                    placeholder="Enter 6-digit numeric PIN"
                     value={newPassword}
+                    onKeyDown={(e) => {
+                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
                     onChange={(e) => setNewPassword(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     style={{
                       width: '100%',
                       padding: '11px 40px 11px 14px',
                       borderRadius: 12,
                       background: 'rgba(15, 23, 42, 0.8)',
-                      border: '1.5px solid rgba(255, 255, 255, 0.15)',
+                      border: `1.5px solid ${newPassword.length === 6 ? 'rgba(16, 185, 129, 0.5)' : 'rgba(255, 255, 255, 0.15)'}`,
                       color: '#F59E0B',
                       fontSize: 16,
                       fontWeight: 700,
@@ -394,24 +404,42 @@ export default function AuthActionView({
               </div>
 
               <div style={{ textAlign: 'left' }}>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#CBD5E1', marginBottom: 4 }}>
-                  Confirm 6-Digit Master PIN *
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#CBD5E1' }}>
+                    Confirm 6-Digit Master PIN *
+                  </label>
+                  {confirmPassword.length > 0 && (
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: (newPassword === confirmPassword && confirmPassword.length === 6) ? '#10B981' : '#F87171'
+                    }}>
+                      {(newPassword === confirmPassword && confirmPassword.length === 6)
+                        ? '✓ PINs Match'
+                        : (confirmPassword.length === 6 ? '✕ PINs Do Not Match' : `${confirmPassword.length}/6 digits`)}
+                    </span>
+                  )}
+                </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   maxLength={6}
                   pattern="[0-9]*"
                   inputMode="numeric"
-                  placeholder="Re-enter 6-digit PIN"
+                  placeholder="Re-enter 6-digit numeric PIN"
                   value={confirmPassword}
+                  onKeyDown={(e) => {
+                    if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
                   onChange={(e) => setConfirmPassword(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   style={{
                     width: '100%',
                     padding: '11px 14px',
                     borderRadius: 12,
                     background: 'rgba(15, 23, 42, 0.8)',
-                    border: '1.5px solid rgba(255, 255, 255, 0.15)',
+                    border: `1.5px solid ${(newPassword && confirmPassword && newPassword === confirmPassword && confirmPassword.length === 6) ? 'rgba(16, 185, 129, 0.5)' : 'rgba(255, 255, 255, 0.15)'}`,
                     color: '#F59E0B',
                     fontSize: 16,
                     fontWeight: 700,
@@ -420,6 +448,10 @@ export default function AuthActionView({
                     boxSizing: 'border-box'
                   }}
                 />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 11, color: '#94A3B8' }}>
+                  <ShieldCheck size={13} color="#10B981" />
+                  <span>Only 6 numeric digits (0–9). Automatically updated in database upon saving.</span>
+                </div>
               </div>
 
               <button

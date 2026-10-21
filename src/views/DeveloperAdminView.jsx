@@ -29,7 +29,9 @@ import {
   QrCode,
   ShieldCheck,
   PauseCircle,
-  PlayCircle
+  PlayCircle,
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import TableQrModal from '../components/TableQrModal';
@@ -77,6 +79,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
   const [tableQrBiz, setTableQrBiz] = useState(null); // business object for Table QR standees modal
   const [showComplianceModal, setShowComplianceModal] = useState(false);
   const [copiedKey, setCopiedKey] = useState(null);
+  const [verifiedNotification, setVerifiedNotification] = useState(null);
 
   // Manual Credentials Override State (for technical anomaly recovery)
   const [isEditingCredentials, setIsEditingCredentials] = useState(false);
@@ -133,13 +136,81 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     window.addEventListener('storage', handleSync);
     window.addEventListener('flowscape_businesses_updated', handleSync);
 
+    const handleEmailVerifiedNotice = (e) => {
+      try {
+        playSuccessChime();
+        const detail = e?.detail || {};
+        const notice = {
+          id: Date.now(),
+          businessId: detail.businessId,
+          businessName: detail.businessName || 'Business Outlet',
+          email: detail.email || 'Owner',
+          time: 'Just now'
+        };
+        setVerifiedNotification(notice);
+        setLogs((prev) => [
+          {
+            id: Date.now(),
+            time: 'Just now',
+            type: 'biz',
+            text: `🎉 Email verified for "${notice.businessName}" (${notice.email}). Account is now officially created and active!`
+          },
+          ...prev
+        ]);
+        handleSync();
+      } catch {}
+    };
+
+    window.addEventListener('ontap_email_verified', handleEmailVerifiedNotice);
+
+    // Check if verification happened right before opening dashboard
+    try {
+      const rawNotice = localStorage.getItem('ontap_last_verified_email');
+      if (rawNotice) {
+        const parsed = JSON.parse(rawNotice);
+        if (parsed && Date.now() - (parsed.timestamp || 0) < 60000) {
+          setVerifiedNotification({
+            id: Date.now(),
+            businessId: parsed.businessId,
+            businessName: parsed.businessName || 'Business Outlet',
+            email: parsed.email || 'Owner',
+            time: 'Just now'
+          });
+          localStorage.removeItem('ontap_last_verified_email');
+        }
+      }
+    } catch {}
+
     const unsubscribeCloud = subscribeBusinessesFromCloud(() => {
       handleSync();
     });
     fetchBusinessesFromCloud().catch(() => {});
 
     const unsubscribe = subscribeSyncEvents((event) => {
-      if (
+      if (event?.type === SYNC_EVENTS.EMAIL_VERIFIED) {
+        try {
+          playSuccessChime();
+          const payload = event.payload || {};
+          const notice = {
+            id: Date.now(),
+            businessId: payload.businessId,
+            businessName: payload.businessName || 'Business Outlet',
+            email: payload.email || 'Owner',
+            time: 'Just now'
+          };
+          setVerifiedNotification(notice);
+          setLogs((prev) => [
+            {
+              id: Date.now(),
+              time: 'Just now',
+              type: 'biz',
+              text: `🎉 Email verified for "${notice.businessName}" (${notice.email}). Account is now officially created and active!`
+            },
+            ...prev
+          ]);
+          handleSync();
+        } catch {}
+      } else if (
         event?.type === SYNC_EVENTS.BUSINESSES_UPDATED ||
         event?.type === SYNC_EVENTS.CREDENTIALS_UPDATED ||
         event?.type === SYNC_EVENTS.CONFIG_UPDATED
@@ -151,6 +222,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     return () => {
       window.removeEventListener('storage', handleSync);
       window.removeEventListener('flowscape_businesses_updated', handleSync);
+      window.removeEventListener('ontap_email_verified', handleEmailVerifiedNotice);
       if (unsubscribeCloud) unsubscribeCloud();
       if (unsubscribe) unsubscribe();
     };
@@ -240,10 +312,10 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     tables.push('Takeaway / Counter');
 
     const isDemoMode = Boolean(provRes.isLocalFallback);
-    const initialStatus = isDemoMode ? 'active' : 'suspended';
+    const initialStatus = isDemoMode ? 'active' : 'pending_verification';
     const initialVerified = isDemoMode ? true : false;
 
-    // 2. Provision business in local multi-tenant database
+    // 2. Provision business in local multi-tenant database (pending until owner verifies email)
     const res = createBusiness({
       ...newBiz,
       ownerPin: trimmedOwnerPin,
@@ -354,6 +426,11 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
 
   const handleLaunchWorkspace = (biz, targetRole = 'admin') => {
     playTapSound();
+    if (biz.status === 'pending_verification' || biz.emailVerified === false) {
+      playAlertChime();
+      alert(`Account Creation Incomplete:\n\nEmail verification is pending for "${biz.name}" (${biz.owner?.email}).\n\nThis account has not been activated yet. The owner must verify their email address using the link dispatched to their inbox before workspace access is granted.`);
+      return;
+    }
     setActiveBusiness(biz.id);
     if (onSwitchToApp) {
       onSwitchToApp(biz, targetRole);
@@ -946,6 +1023,97 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
 
       {/* Main Developer Container */}
       <div style={{ maxWidth: 1240, margin: '0 auto', padding: '24px 20px' }}>
+        {/* Real-time Email Verification Notification Banner */}
+        {verifiedNotification && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: '16px 20px',
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.16) 0%, rgba(6, 182, 212, 0.12) 100%)',
+              border: '1.5px solid rgba(16, 185, 129, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+              boxShadow: '0 10px 30px rgba(16, 185, 129, 0.15)',
+              animation: 'fadeIn 0.3s ease-out'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 12,
+                  background: 'rgba(16, 185, 129, 0.25)',
+                  border: '1px solid rgba(16, 185, 129, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <CheckCircle2 size={24} color="#10B981" />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: '#34D399', letterSpacing: '-0.01em' }}>
+                    🎉 Email Verification Completed!
+                  </span>
+                  <span style={{ fontSize: 11, background: 'rgba(16, 185, 129, 0.2)', color: '#6EE7B7', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
+                    Account Officially Created
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: 13, color: '#E2E8F0', lineHeight: 1.4 }}>
+                  Owner of <strong>"{verifiedNotification.businessName}"</strong> (<code>{verifiedNotification.email}</code>) has verified their email. The business account is now fully active.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {verifiedNotification.businessId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetBiz = businesses.find((b) => b.id === verifiedNotification.businessId);
+                    if (targetBiz) handleOpenCredentialsModal(targetBiz);
+                  }}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 10,
+                    background: '#10B981',
+                    border: 'none',
+                    color: '#FFFFFF',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  <KeyRound size={13} />
+                  <span>View Credentials</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setVerifiedNotification(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94A3B8',
+                  cursor: 'pointer',
+                  padding: 6
+                }}
+                title="Dismiss"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Platform Stat KPIs */}
         <div style={{
           display: 'grid',
@@ -963,8 +1131,15 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
               <span style={{ fontSize: 12, color: '#94A3B8', fontWeight: 600 }}>Active Businesses</span>
               <Building2 size={16} color="#06B6D4" />
             </div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: '#F8FAFC' }}>
-              {businesses.length}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 26, fontWeight: 800, color: '#F8FAFC' }}>
+                {businesses.filter((b) => b.status === 'active' && b.emailVerified !== false).length}
+              </span>
+              {businesses.filter((b) => b.status === 'pending_verification' || b.emailVerified === false).length > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#FBBF24', background: 'rgba(245, 158, 11, 0.15)', padding: '2px 6px', borderRadius: 6 }}>
+                  +{businesses.filter((b) => b.status === 'pending_verification' || b.emailVerified === false).length} Pending Verification
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 11, color: '#10B981', marginTop: 4 }}>
               100% Operational • 0 Outages
@@ -1277,7 +1452,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           }}>
                             ● Active
                           </span>
-                        ) : biz.emailVerified === false ? (
+                        ) : (biz.emailVerified === false || biz.status === 'pending_verification') ? (
                           <span style={{
                             fontSize: 11,
                             fontWeight: 700,
@@ -1290,7 +1465,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                             alignItems: 'center',
                             gap: 4
                           }}>
-                            ○ Suspended (Pending Verification)
+                            ⏳ Pending Verification (Account Creation Incomplete)
                           </span>
                         ) : (
                           <span style={{
@@ -1342,30 +1517,56 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         gap: 6,
                         flexWrap: 'wrap'
                       }}>
-                        {/* Launch workspace button */}
-                        <button
-                          onClick={() => handleLaunchWorkspace(biz, 'admin')}
-                          style={{
-                            flex: '1 1 120px',
-                            minWidth: 110,
-                            padding: '8px 10px',
-                            borderRadius: 8,
-                            background: '#0284C7',
-                            border: 'none',
-                            color: '#FFFFFF',
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6
-                          }}
-                          title="Impersonate & open this business's Admin Back-Office"
-                        >
-                          <ExternalLink size={13} />
-                          <span>Launch Admin</span>
-                        </button>
+                        {/* Launch workspace button or Awaiting Verification */}
+                        {(biz.emailVerified === false || biz.status === 'pending_verification') ? (
+                          <button
+                            onClick={() => handleLaunchWorkspace(biz, 'admin')}
+                            style={{
+                              flex: '1 1 140px',
+                              minWidth: 130,
+                              padding: '8px 10px',
+                              borderRadius: 8,
+                              background: 'rgba(245, 158, 11, 0.15)',
+                              border: '1px solid rgba(245, 158, 11, 0.3)',
+                              color: '#FBBF24',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 6
+                            }}
+                            title="Account creation incomplete — Email verification pending"
+                          >
+                            <Clock size={13} />
+                            <span>Awaiting Verification</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleLaunchWorkspace(biz, 'admin')}
+                            style={{
+                              flex: '1 1 120px',
+                              minWidth: 110,
+                              padding: '8px 10px',
+                              borderRadius: 8,
+                              background: '#0284C7',
+                              border: 'none',
+                              color: '#FFFFFF',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 6
+                            }}
+                            title="Impersonate & open this business's Admin Back-Office"
+                          >
+                            <ExternalLink size={13} />
+                            <span>Launch Admin</span>
+                          </button>
+                        )}
 
                         <button
                           onClick={() => handleLaunchWorkspace(biz, 'counter')}
@@ -2506,14 +2707,14 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     <span style={{
                       fontSize: 11,
                       fontWeight: 700,
-                      color: (showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? '#34D399' : '#F87171'
+                      color: (showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? '#34D399' : '#FBBF24'
                     }}>
-                      {(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? '● Active' : '○ Suspended'}
+                      {(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) ? '● Active' : '⏳ Pending Verification (Incomplete)'}
                     </span>
                   </div>
                   {!(showCredentialsModal.status === 'active' && showCredentialsModal.emailVerified !== false) && (
-                    <span style={{ fontSize: 11, color: '#FCA5A5', lineHeight: 1.4 }}>
-                      This account will remain in a <strong>suspended</strong> state until the owner clicks the verification link sent by Firebase.
+                    <span style={{ fontSize: 11, color: '#FCD34D', lineHeight: 1.4 }}>
+                      Account creation incomplete: This business account will remain in a <strong>pending verification</strong> state and cannot log in until the owner clicks the verification link dispatched by Firebase.
                     </span>
                   )}
                 </div>
