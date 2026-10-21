@@ -37,8 +37,7 @@ import {
   isDeveloperAuthenticated
 } from './utils/businessManager';
 import { playNewOrderChime, playTapSound } from './utils/audio';
-import { subscribeSyncEvents, SYNC_EVENTS } from './utils/sync';
-import { syncAllBusinessesToCloud } from './utils/systematicDatabase';
+import { syncAllBusinessesToCloud, subscribeBusinessesFromCloud, fetchBusinessesFromCloud } from './utils/systematicDatabase';
 import confetti from 'canvas-confetti';
 
 /**
@@ -329,9 +328,24 @@ export default function App() {
     }
   }, [staff, activeBusinessId]);
 
-  // Systematic Multi-Tenant Database Sync: Keep all business accounts synchronized to Firestore
+  // Systematic Multi-Tenant Database Sync: Keep all business accounts synchronized to Firestore in real-time
   useEffect(() => {
-    syncAllBusinessesToCloud().catch(() => {});
+    // 1. Fetch all cloud businesses on launch
+    fetchBusinessesFromCloud().then((cloudBiz) => {
+      // If cloud was empty, seed with initial businesses
+      if (Array.isArray(cloudBiz) && cloudBiz.length === 0) {
+        syncAllBusinessesToCloud().catch(() => {});
+      }
+    }).catch(() => {});
+
+    // 2. Subscribe to real-time updates from Firestore businesses collection
+    const unsubscribeCloud = subscribeBusinessesFromCloud(() => {
+      // Real-time updates automatically merged into local businesses and dispatched
+    });
+
+    return () => {
+      if (unsubscribeCloud) unsubscribeCloud();
+    };
   }, []);
 
   useEffect(() => {

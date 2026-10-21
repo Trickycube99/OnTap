@@ -34,24 +34,22 @@ import TableQrModal from '../components/TableQrModal';
 import {
   purgeBusinessAccountComplete,
   getLegalComplianceRecords,
-  syncAllBusinessesToCloud,
-  syncBusinessToCloud
+  syncBusinessToCloud,
+  subscribeBusinessesFromCloud,
+  fetchBusinessesFromCloud
 } from '../utils/systematicDatabase';
 import {
   provisionOwnerAccountWithVerification,
   resendVerificationLink,
   sendPasswordReset,
-  deleteOwnerAccountFromFirebase,
   updateOwnerCredentialsManually
 } from '../utils/firebaseAuth';
-import { deleteCloudOrdersForBusiness } from '../utils/firebaseSync';
 import { broadcastSyncEvent, subscribeSyncEvents, SYNC_EVENTS } from '../utils/sync';
 import {
   getBusinesses,
   getActiveBusiness,
   createBusiness,
   updateBusiness,
-  deleteBusiness,
   setActiveBusiness,
   authenticateDeveloper,
   isDeveloperAuthenticated,
@@ -133,6 +131,11 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     window.addEventListener('storage', handleSync);
     window.addEventListener('flowscape_businesses_updated', handleSync);
 
+    const unsubscribeCloud = subscribeBusinessesFromCloud(() => {
+      handleSync();
+    });
+    fetchBusinessesFromCloud().catch(() => {});
+
     const unsubscribe = subscribeSyncEvents((event) => {
       if (
         event?.type === SYNC_EVENTS.BUSINESSES_UPDATED ||
@@ -146,6 +149,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     return () => {
       window.removeEventListener('storage', handleSync);
       window.removeEventListener('flowscape_businesses_updated', handleSync);
+      if (unsubscribeCloud) unsubscribeCloud();
       if (unsubscribe) unsubscribe();
     };
   }, []);
@@ -233,21 +237,25 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     const tables = Array.from({ length: Number(newBiz.tableCount) || 6 }, (_, i) => `Table ${String(i + 1).padStart(2, '0')}`);
     tables.push('Takeaway / Counter');
 
-    // 2. Provision business in local multi-tenant database (active & emailVerified by default in developer console)
+    const isDemoMode = Boolean(provRes.isLocalFallback);
+    const initialStatus = isDemoMode ? 'active' : 'suspended';
+    const initialVerified = isDemoMode ? true : false;
+
+    // 2. Provision business in local multi-tenant database
     const res = createBusiness({
       ...newBiz,
       ownerPin: trimmedOwnerPin,
       counterPin: trimmedCounterPin,
       tables,
-      status: 'active',
-      emailVerified: true
+      status: initialStatus,
+      emailVerified: initialVerified
     });
 
     setIsCreating(false);
 
     if (res.success) {
       playSuccessChime();
-      syncBusinessToCloud(res.business).catch(() => {});
+      await syncBusinessToCloud(res.business);
       refreshBusinesses();
       setCreatedSuccessBiz({
         ...res.business,

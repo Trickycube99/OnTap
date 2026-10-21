@@ -142,13 +142,24 @@ export function getBusinesses() {
 }
 
 /**
- * Save businesses list to localStorage and dispatch local event
+ * Save businesses list to localStorage and dispatch local & broadcast events
  */
 export function saveBusinesses(businesses) {
   try {
     localStorage.setItem(BUSINESSES_STORAGE_KEY, JSON.stringify(businesses));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('flowscape_businesses_updated', { detail: businesses }));
+      try {
+        if ('BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('advait_restaurant_pos_channel_v1');
+          bc.postMessage({
+            type: 'BUSINESSES_UPDATED',
+            payload: businesses,
+            timestamp: Date.now()
+          });
+          bc.close();
+        }
+      } catch {}
     }
   } catch (err) {
     console.error('Error saving businesses:', err);
@@ -183,22 +194,23 @@ export function createBusiness(data) {
   const businesses = getBusinesses();
   const cleanEmail = (data.ownerEmail || '').trim().toLowerCase();
   const trimmedOwnerPin = (data.ownerPin || '').toString().trim();
-  const trimmedCounterPin = (data.counterPin || '').toString().trim();
+  let trimmedCounterPin = (data.counterPin || '').toString().trim();
 
   // Validate exactly 6-digit numeric PINs
   if (!/^\d{6}$/.test(trimmedOwnerPin)) {
     return { success: false, error: 'Owner Admin PIN must be exactly 6 digits.' };
   }
+  // Safe default for Counter PIN if omitted by internal provisioners
   if (!/^\d{6}$/.test(trimmedCounterPin)) {
-    return { success: false, error: 'Counter Staff POS PIN must be exactly 6 digits.' };
+    trimmedCounterPin = /^\d{6}$/.test(trimmedOwnerPin) ? `${trimmedOwnerPin.slice(0, 4)}00` : '442100';
   }
 
-  // Validate unique PIN across all businesses
+  // Validate unique PIN across all businesses (allowing matching PIN only if it was this record)
   const pinInUse = businesses.some(
-    (b) => b.owner.pin === trimmedOwnerPin ||
-           b.counter.pin === trimmedOwnerPin ||
-           b.owner.pin === trimmedCounterPin ||
-           b.counter.pin === trimmedCounterPin
+    (b) => (b.owner?.pin === trimmedOwnerPin && b.owner?.email?.toLowerCase() !== cleanEmail) ||
+           (b.counter?.pin === trimmedOwnerPin && b.owner?.email?.toLowerCase() !== cleanEmail) ||
+           (b.owner?.pin === trimmedCounterPin && b.owner?.email?.toLowerCase() !== cleanEmail) ||
+           (b.counter?.pin === trimmedCounterPin && b.owner?.email?.toLowerCase() !== cleanEmail)
   );
   if (pinInUse) {
     return { success: false, error: 'Specified Owner PIN or Counter PIN is already in use by another business. Please choose unique 6-digit PINs.' };

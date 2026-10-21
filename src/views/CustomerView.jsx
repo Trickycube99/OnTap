@@ -21,7 +21,9 @@ import {
   Edit2,
   Utensils,
   Tag,
-  Copy
+  Copy,
+  XCircle,
+  RotateCcw
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
@@ -91,6 +93,20 @@ export default function CustomerView({
     return '';
   });
   const [nameError, setNameError] = useState('');
+
+  // Scoped key to track the exact order placed by this diner in this session
+  const dinerOrderKey = `ontap_${activeBusinessId}_last_order_id`;
+  const [lastPlacedOrderId, setLastPlacedOrderId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return (
+        sessionStorage.getItem(dinerOrderKey) ||
+        sessionStorage.getItem('ontap_customer_last_order_id') ||
+        localStorage.getItem(dinerOrderKey) ||
+        ''
+      );
+    }
+    return '';
+  });
 
   const [orderNote, setOrderNote] = useState('');
   const [paymentMode, setPaymentMode] = useState('counter'); // 'counter' | 'upi'
@@ -164,12 +180,19 @@ export default function CustomerView({
   // Suggestable item for upsell (FR-C8)
   const suggestableItem = menu.find((item) => item.id === 3) || menu[0];
 
-  // Find latest active customer order for this table
-  const activeCustomerOrder = orders.find(
-    (o) => o.table === activeTable && o.status !== 'rejected'
-  ) || (orders.length > 0 && orders[0].table === activeTable ? orders[0] : null);
+  // Find latest active customer order for this diner:
+  // 1. Strictly prioritize the exact order placed by this diner in this session/device
+  // 2. Otherwise fall back to the most recent order on this table
+  const activeCustomerOrder = useMemo(() => {
+    if (lastPlacedOrderId) {
+      const placed = orders.find((o) => o.id === lastPlacedOrderId);
+      if (placed) return placed;
+    }
+    const tableOrders = orders.filter((o) => o.table === activeTable);
+    return tableOrders.length > 0 ? tableOrders[0] : null;
+  }, [orders, activeTable, lastPlacedOrderId]);
 
-  // Sound and visual feedback when live status updates in real time (Accept -> Cooking, Ready -> Ready, Done -> Served)
+  // Sound and visual feedback when live status updates in real time (Accept -> Cooking, Ready -> Ready, Done -> Served, Rejected -> Alert)
   const prevStatusRef = useRef(activeCustomerOrder?.status);
   useEffect(() => {
     if (activeCustomerOrder && prevStatusRef.current && prevStatusRef.current !== activeCustomerOrder.status) {
@@ -177,10 +200,33 @@ export default function CustomerView({
         playAlertChime();
       } else if (activeCustomerOrder.status === 'ready' || activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done') {
         playSuccessChime();
+      } else if (activeCustomerOrder.status === 'rejected') {
+        playAlertChime();
       }
     }
     prevStatusRef.current = activeCustomerOrder?.status;
   }, [activeCustomerOrder]);
+
+  const handleReorderItems = () => {
+    playTapSound();
+    if (activeCustomerOrder?.items && activeCustomerOrder.items.length > 0) {
+      setCart([...activeCustomerOrder.items]);
+      if (setActiveTab) setActiveTab('cart');
+    } else {
+      if (setActiveTab) setActiveTab('menu');
+    }
+  };
+
+  const handleDismissOrder = () => {
+    playTapSound();
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(dinerOrderKey);
+      sessionStorage.removeItem('ontap_customer_last_order_id');
+      localStorage.removeItem(dinerOrderKey);
+    }
+    setLastPlacedOrderId('');
+    if (setActiveTab) setActiveTab('menu');
+  };
 
   const handleDecreaseItemQty = (itemId) => {
     playTapSound();
@@ -376,6 +422,14 @@ export default function CustomerView({
 
     // 1. Local state update
     onPlaceOrder(newOrder);
+
+    // Save this customer's exact order ID to session and local storage
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(dinerOrderKey, newOrderId);
+      sessionStorage.setItem('ontap_customer_last_order_id', newOrderId);
+      localStorage.setItem(dinerOrderKey, newOrderId);
+    }
+    setLastPlacedOrderId(newOrderId);
 
     // 2. Broadcast cross-tab instant sync to Counter POS & Admin!
     broadcastSyncEvent(SYNC_EVENTS.NEW_ORDER, newOrder, activeBusinessId);
@@ -654,7 +708,15 @@ export default function CustomerView({
         )}
 
         {activeCustomerOrder ? (
-          <div className="ios-card active-gradient" style={{ padding: '16px', marginBottom: 16 }}>
+          <div
+            className={`ios-card ${activeCustomerOrder.status === 'rejected' ? '' : 'active-gradient'}`}
+            style={{
+              padding: '16px',
+              marginBottom: 16,
+              border: activeCustomerOrder.status === 'rejected' ? '1.5px solid #FCA5A5' : undefined,
+              background: activeCustomerOrder.status === 'rejected' ? '#FFF5F5' : undefined
+            }}
+          >
             {/* Header row */}
             <div className="card-top-row" style={{ marginBottom: 10 }}>
               <div>
@@ -671,15 +733,7 @@ export default function CustomerView({
 
               <div style={{ textAlign: 'right' }}>
                 <span
-                  className={`status-pill ${
-                    (activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done')
-                      ? 'done'
-                      : activeCustomerOrder.status === 'rejected'
-                      ? 'pending'
-                      : activeCustomerOrder.status === 'ready'
-                      ? 'progress'
-                      : 'progress'
-                  }`}
+                  className="status-pill"
                   style={{
                     fontSize: 12,
                     padding: '4px 12px',
@@ -724,225 +778,287 @@ export default function CustomerView({
                     ? (language === 'hi' ? 'तैयार (Ready)' : 'Ready')
                     : (activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done')
                     ? (language === 'hi' ? 'परोसा गया (Served)' : 'Served')
-                    : t('statusRejected')}
+                    : (language === 'hi' ? 'ऑर्डर अस्वीकृत (Rejected)' : 'Order Rejected')}
                 </span>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 4 }}>
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: activeCustomerOrder.status === 'rejected' ? '#DC2626' : 'var(--primary-blue)',
+                    marginTop: 4
+                  }}
+                >
                   ₹{activeCustomerOrder.total.toFixed(0)}
                 </div>
               </div>
             </div>
 
-            {/* 4-Step Status Progress Tracker: Received -> Cooking -> Ready -> Served */}
-            <div style={{ margin: '18px 0 14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', marginBottom: 8 }}>
-                {/* Connecting track line */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 12,
-                    left: 20,
-                    right: 20,
-                    height: 3,
-                    background: '#E5E7EB',
-                    zIndex: 1
-                  }}
-                >
+            {/* If Order is Rejected: Display prominent Rejection Details Card */}
+            {activeCustomerOrder.status === 'rejected' ? (
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%)',
+                  border: '1.5px solid #F87171',
+                  borderRadius: 16,
+                  padding: '16px 18px',
+                  margin: '16px 0 16px',
+                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.08)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                   <div
                     style={{
-                      height: '100%',
-                      background:
-                        activeCustomerOrder.status === 'rejected'
-                          ? '#DC2626'
-                          : (activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done')
-                          ? '#10B981'
-                          : '#007AFF',
-                      width:
-                        activeCustomerOrder.status === 'received'
-                          ? '12%'
-                          : (activeCustomerOrder.status === 'cooking' || activeCustomerOrder.status === 'in-progress')
-                          ? '42%'
-                          : activeCustomerOrder.status === 'ready'
-                          ? '75%'
-                          : '100%',
-                      transition: 'width 0.4s ease'
+                      width: 42,
+                      height: 42,
+                      borderRadius: '50%',
+                      background: '#FFFFFF',
+                      border: '2px solid #EF4444',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#DC2626',
+                      flexShrink: 0,
+                      boxShadow: '0 2px 6px rgba(220, 38, 38, 0.15)'
                     }}
-                  />
-                </div>
-
-                {[
-                  { step: 'received', label: language === 'hi' ? 'प्राप्त' : 'Received' },
-                  { step: 'cooking', label: language === 'hi' ? 'पक रहा है' : 'Cooking' },
-                  { step: 'ready', label: language === 'hi' ? 'तैयार' : 'Ready' },
-                  { step: 'served', label: language === 'hi' ? 'परोसा गया' : 'Served' }
-                ].map((s, idx) => {
-                  const statusOrder = ['received', 'cooking', 'ready', 'served'];
-                  const normalizedStatus =
-                    activeCustomerOrder.status === 'in-progress'
-                      ? 'cooking'
-                      : activeCustomerOrder.status === 'done'
-                      ? 'served'
-                      : activeCustomerOrder.status;
-                  const currentIndex = statusOrder.indexOf(normalizedStatus);
-                  const isPassed = currentIndex >= idx;
-                  const isCurrent = currentIndex === idx;
-
-                  return (
+                  >
+                    <XCircle size={24} color="#DC2626" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#991B1B', marginBottom: 6 }}>
+                      {language === 'hi' ? 'ऑर्डर अस्वीकृत (Order Rejected)' : 'Order Not Accepted by Kitchen'}
+                    </div>
                     <div
-                      key={s.step}
                       style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        zIndex: 2,
-                        width: 70
+                        background: '#FFFFFF',
+                        border: '1.5px solid #FCA5A5',
+                        borderRadius: 10,
+                        padding: '10px 12px',
+                        marginBottom: 10
                       }}
                     >
                       <div
                         style={{
-                          width: 26,
-                          height: 26,
-                          borderRadius: '50%',
-                          background: isPassed ? '#007AFF' : '#FFFFFF',
-                          border: isPassed ? '2px solid #007AFF' : '2px solid #D1D5DB',
-                          color: isPassed ? '#FFFFFF' : '#9CA3AF',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
                           fontSize: 11,
                           fontWeight: 700,
-                          marginBottom: 4,
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                          transform: isCurrent ? 'scale(1.18)' : 'none',
-                          transition: 'transform 0.2s ease'
+                          color: '#991B1B',
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.5,
+                          marginBottom: 3
                         }}
                       >
-                        {isPassed ? '✓' : idx + 1}
+                        {language === 'hi' ? 'अस्वीकृति का कारण:' : 'Reason for rejection:'}
                       </div>
-                      <span style={{ fontSize: 11, fontWeight: isPassed ? 700 : 500, color: isPassed ? 'var(--text-primary)' : '#9CA3AF' }}>
-                        {s.label}
-                      </span>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#B91C1C' }}>
+                        {activeCustomerOrder.rejectReason ||
+                          (activeCustomerOrder.statusLabel
+                            ? activeCustomerOrder.statusLabel.replace(/^Rejected:\s*/i, '')
+                            : (language === 'hi' ? 'रसोई इस समय ऑर्डर स्वीकार नहीं कर सकी' : 'Kitchen unable to fulfill ticket'))}
+                      </div>
                     </div>
-                  );
-                })}
+                    <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.45 }}>
+                      {language === 'hi'
+                        ? 'कृपया दिए गए कारण की समीक्षा करें। आप अपने व्यंजन बदलकर दोबारा ऑर्डर कर सकते हैं या टेबल पर सर्वर को बुला सकते हैं।'
+                        : 'Please review the reason above. You can easily adjust items in your cart to order again, or ring for server assistance.'}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* 4-Step Status Progress Tracker: Received -> Cooking -> Ready -> Served */}
+                <div style={{ margin: '18px 0 14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', marginBottom: 8 }}>
+                    {/* Connecting track line */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 12,
+                        left: 20,
+                        right: 20,
+                        height: 3,
+                        background: '#E5E7EB',
+                        zIndex: 1
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: '100%',
+                          background:
+                            (activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done')
+                              ? '#10B981'
+                              : '#007AFF',
+                          width:
+                            activeCustomerOrder.status === 'received'
+                              ? '12%'
+                              : (activeCustomerOrder.status === 'cooking' || activeCustomerOrder.status === 'in-progress')
+                              ? '42%'
+                              : activeCustomerOrder.status === 'ready'
+                              ? '75%'
+                              : '100%',
+                          transition: 'width 0.4s ease'
+                        }}
+                      />
+                    </div>
 
-            {/* Dynamic Real-Time Live Status Banner for Each Stage */}
-            {activeCustomerOrder.status === 'received' && (
-              <div
-                style={{
-                  background: '#EFF6FF',
-                  border: '1.5px solid #60A5FA',
-                  borderRadius: 12,
-                  padding: '10px 14px',
-                  color: '#1E40AF',
-                  fontSize: 12.5,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 12
-                }}
-              >
-                <Clock size={17} color="#2563EB" />
-                <span>
-                  {language === 'hi'
-                    ? 'ऑर्डर रसोई में प्राप्त हुआ! काउंटर स्वीकार करते ही पकना शुरू होगा।'
-                    : 'Order Received by Kitchen! Counter acceptance will transition this to Cooking.'}
-                </span>
-              </div>
-            )}
+                    {[
+                      { step: 'received', label: language === 'hi' ? 'प्राप्त' : 'Received' },
+                      { step: 'cooking', label: language === 'hi' ? 'पक रहा है' : 'Cooking' },
+                      { step: 'ready', label: language === 'hi' ? 'तैयार' : 'Ready' },
+                      { step: 'served', label: language === 'hi' ? 'परोसा गया' : 'Served' }
+                    ].map((s, idx) => {
+                      const statusOrder = ['received', 'cooking', 'ready', 'served'];
+                      const normalizedStatus =
+                        activeCustomerOrder.status === 'in-progress'
+                          ? 'cooking'
+                          : activeCustomerOrder.status === 'done'
+                          ? 'served'
+                          : activeCustomerOrder.status;
+                      const currentIndex = statusOrder.indexOf(normalizedStatus);
+                      const isPassed = currentIndex >= idx;
+                      const isCurrent = currentIndex === idx;
 
-            {(activeCustomerOrder.status === 'cooking' || activeCustomerOrder.status === 'in-progress') && (
-              <div
-                style={{
-                  background: '#FFFBEB',
-                  border: '1.5px solid #F59E0B',
-                  borderRadius: 12,
-                  padding: '10px 14px',
-                  color: '#92400E',
-                  fontSize: 12.5,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 12
-                }}
-              >
-                <Flame size={17} color="#D97706" />
-                <span>
-                  {language === 'hi'
-                    ? 'रसोई में व्यंजन पक रहे हैं! शेफ ब्रिगेड ताजगी से तैयार कर रही है।'
-                    : 'Dishes are Cooking! Executive chef brigade is actively preparing your order fresh.'}
-                </span>
-              </div>
-            )}
+                      return (
+                        <div
+                          key={s.step}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            zIndex: 2,
+                            width: 70
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 26,
+                              height: 26,
+                              borderRadius: '50%',
+                              background: isPassed ? '#007AFF' : '#FFFFFF',
+                              border: isPassed ? '2px solid #007AFF' : '2px solid #D1D5DB',
+                              color: isPassed ? '#FFFFFF' : '#9CA3AF',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              marginBottom: 4,
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                              transform: isCurrent ? 'scale(1.18)' : 'none',
+                              transition: 'transform 0.2s ease'
+                            }}
+                          >
+                            {isPassed ? '✓' : idx + 1}
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: isPassed ? 700 : 500, color: isPassed ? 'var(--text-primary)' : '#9CA3AF' }}>
+                            {s.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
-            {activeCustomerOrder.status === 'ready' && (
-              <div
-                style={{
-                  background: '#FEF08A',
-                  border: '1.5px solid #EAB308',
-                  borderRadius: 12,
-                  padding: '10px 14px',
-                  color: '#854D0E',
-                  fontSize: 12.5,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 12
-                }}
-              >
-                <Sparkles size={17} color="#CA8A04" />
-                <span>
-                  {language === 'hi'
-                    ? 'व्यंजन तैयार हैं! सर्विस टीम आपकी टेबल पर ला रही है।'
-                    : 'Order is Ready! Plated hot and on the way to your table right now.'}
-                </span>
-              </div>
-            )}
+                {/* Dynamic Real-Time Live Status Banner for Each Stage */}
+                {activeCustomerOrder.status === 'received' && (
+                  <div
+                    style={{
+                      background: '#EFF6FF',
+                      border: '1.5px solid #60A5FA',
+                      borderRadius: 12,
+                      padding: '10px 14px',
+                      color: '#1E40AF',
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 12
+                    }}
+                  >
+                    <Clock size={17} color="#2563EB" />
+                    <span>
+                      {language === 'hi'
+                        ? 'ऑर्डर रसोई में प्राप्त हुआ! काउंटर स्वीकार करते ही पकना शुरू होगा।'
+                        : 'Order Received by Kitchen! Counter acceptance will transition this to Cooking.'}
+                    </span>
+                  </div>
+                )}
 
-            {(activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done') && (
-              <div
-                style={{
-                  background: '#ECFDF5',
-                  border: '1.5px solid #10B981',
-                  borderRadius: 12,
-                  padding: '10px 14px',
-                  color: '#065F46',
-                  fontSize: 12.5,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 12
-                }}
-              >
-                <CheckCircle2 size={18} color="#10B981" />
-                <span>
-                  {language === 'hi'
-                    ? 'व्यंजन आपकी टेबल पर परोस दिए गए हैं! स्वादिष्ट भोजन का आनंद लें।'
-                    : 'All dishes Served to your table! Enjoy your artisanal meal.'}
-                </span>
-              </div>
-            )}
+                {(activeCustomerOrder.status === 'cooking' || activeCustomerOrder.status === 'in-progress') && (
+                  <div
+                    style={{
+                      background: '#FFFBEB',
+                      border: '1.5px solid #F59E0B',
+                      borderRadius: 12,
+                      padding: '10px 14px',
+                      color: '#92400E',
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 12
+                    }}
+                  >
+                    <Flame size={17} color="#D97706" />
+                    <span>
+                      {language === 'hi'
+                        ? 'रसोई में व्यंजन पक रहे हैं! शेफ ब्रिगेड ताजगी से तैयार कर रही है।'
+                        : 'Dishes are Cooking! Executive chef brigade is actively preparing your order fresh.'}
+                    </span>
+                  </div>
+                )}
 
-            {/* If order is rejected */}
-            {activeCustomerOrder.status === 'rejected' && (
-              <div
-                style={{
-                  background: '#FEE2E2',
-                  border: '1px solid #FCA5A5',
-                  padding: '10px 12px',
-                  borderRadius: 12,
-                  color: '#DC2626',
-                  fontSize: 12,
-                  marginBottom: 12
-                }}
-              >
-                ⚠️ {activeCustomerOrder.statusLabel || 'Order could not be accepted.'} Please contact the counterperson.
-              </div>
+                {activeCustomerOrder.status === 'ready' && (
+                  <div
+                    style={{
+                      background: '#FEF08A',
+                      border: '1.5px solid #EAB308',
+                      borderRadius: 12,
+                      padding: '10px 14px',
+                      color: '#854D0E',
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 12
+                    }}
+                  >
+                    <Sparkles size={17} color="#CA8A04" />
+                    <span>
+                      {language === 'hi'
+                        ? 'व्यंजन तैयार हैं! सर्विस टीम आपकी टेबल पर ला रही है।'
+                        : 'Order is Ready! Plated hot and on the way to your table right now.'}
+                    </span>
+                  </div>
+                )}
+
+                {(activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done') && (
+                  <div
+                    style={{
+                      background: '#ECFDF5',
+                      border: '1.5px solid #10B981',
+                      borderRadius: 12,
+                      padding: '10px 14px',
+                      color: '#065F46',
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 12
+                    }}
+                  >
+                    <CheckCircle2 size={18} color="#10B981" />
+                    <span>
+                      {language === 'hi'
+                        ? 'व्यंजन आपकी टेबल पर परोस दिए गए हैं! स्वादिष्ट भोजन का आनंद लें।'
+                        : 'All dishes Served to your table! Enjoy your artisanal meal.'}
+                    </span>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Ordered Items List */}
@@ -976,28 +1092,69 @@ export default function CustomerView({
             </div>
 
             {/* Action buttons */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <button
-                className="btn-secondary-pill"
-                style={{ padding: '8px 12px', fontSize: 12 }}
-                onClick={handleCallServer}
-              >
-                <Bell size={13} color="#D97706" />
-                <span>{t('callServer')}</span>
-              </button>
+            {activeCustomerOrder.status === 'rejected' ? (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                  <button
+                    className="btn-secondary-pill"
+                    style={{ padding: '9px 12px', fontSize: 12 }}
+                    onClick={handleCallServer}
+                  >
+                    <Bell size={13} color="#D97706" />
+                    <span>{t('callServer')}</span>
+                  </button>
 
-              <button
-                className="btn-primary-pill"
-                style={{ padding: '8px 12px', fontSize: 12 }}
-                onClick={() => {
-                  playTapSound();
-                  if (setActiveTab) setActiveTab('menu');
-                }}
-              >
-                <Plus size={14} />
-                <span>{t('orderMoreItems')}</span>
-              </button>
-            </div>
+                  <button
+                    className="btn-primary-pill"
+                    style={{ padding: '9px 12px', fontSize: 12 }}
+                    onClick={handleReorderItems}
+                  >
+                    <RotateCcw size={13} />
+                    <span>{language === 'hi' ? 'व्यंजन बदलें व दोबारा ऑर्डर' : 'Modify & Re-order'}</span>
+                  </button>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <button
+                    type="button"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      fontSize: 11.5,
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      padding: '4px 8px'
+                    }}
+                    onClick={handleDismissOrder}
+                  >
+                    {language === 'hi' ? 'नया ऑर्डर शुरू करें (Start New Order)' : 'Dismiss ticket & start new order'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <button
+                  className="btn-secondary-pill"
+                  style={{ padding: '8px 12px', fontSize: 12 }}
+                  onClick={handleCallServer}
+                >
+                  <Bell size={13} color="#D97706" />
+                  <span>{t('callServer')}</span>
+                </button>
+
+                <button
+                  className="btn-primary-pill"
+                  style={{ padding: '8px 12px', fontSize: 12 }}
+                  onClick={() => {
+                    playTapSound();
+                    if (setActiveTab) setActiveTab('menu');
+                  }}
+                >
+                  <Plus size={14} />
+                  <span>{t('orderMoreItems')}</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>

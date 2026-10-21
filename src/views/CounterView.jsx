@@ -83,9 +83,10 @@ export default function CounterView({
   staff = [],
   setStaff
 }) {
-  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'received', 'in-progress', 'ready', 'done'
+  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'received', 'in-progress', 'ready', 'done', 'rejected'
   const [rejectOrderId, setRejectOrderId] = useState(null);
   const [rejectReason, setRejectReason] = useState('Item ingredient out of stock');
+  const [customRejectReason, setCustomRejectReason] = useState('');
 
   // Hardware & Alert Modals State (Phase 2)
   const [selectedPrintOrder, setSelectedPrintOrder] = useState(null);
@@ -327,11 +328,16 @@ export default function CounterView({
     const target = orders.find((o) => o.id === rejectOrderId);
     if (!target) return;
 
+    const chosenReason = rejectReason === 'Other / Custom Reason'
+      ? (customRejectReason.trim() || 'Order could not be accepted')
+      : (rejectReason || 'Order could not be accepted');
+
     const rejectedOrder = {
       ...target,
       businessId: activeBusinessId,
       status: 'rejected',
-      statusLabel: `Rejected: ${rejectReason}`,
+      rejectReason: chosenReason,
+      statusLabel: `Rejected: ${chosenReason}`,
       progressPercent: 0
     };
 
@@ -341,6 +347,7 @@ export default function CounterView({
 
     broadcastSyncEvent(SYNC_EVENTS.ORDER_STATUS_UPDATED, rejectedOrder, activeBusinessId);
     setRejectOrderId(null);
+    setCustomRejectReason('');
   };
 
   // Toggle Item Availability (FR-P4)
@@ -831,7 +838,7 @@ export default function CounterView({
         <div>
           {/* Status Quick Filter Bar */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', paddingBottom: 4 }}>
-            {['all', 'received', 'cooking', 'ready', 'served'].map((st) => (
+            {['all', 'received', 'cooking', 'ready', 'served', 'rejected'].map((st) => (
               <button
                 key={st}
                 className="capsule-tab"
@@ -918,6 +925,10 @@ export default function CounterView({
                   gradClass = 'completed-gradient';
                   pillType = 'done';
                   fillType = 'done';
+                } else if (order.status === 'rejected') {
+                  gradClass = '';
+                  pillType = 'rejected';
+                  fillType = 'rejected';
                 }
 
                 // PRD Section 16 Fallback reminder: Check if order sits unaccepted for > 2 mins
@@ -1084,6 +1095,37 @@ export default function CounterView({
                           }}
                         >
                           Reject
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Rejected Order indicator & Reopen button */}
+                    {order.status === 'rejected' && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          padding: '8px 12px',
+                          background: '#FEF2F2',
+                          border: '1px solid #FCA5A5',
+                          borderRadius: 10,
+                          fontSize: 11.5,
+                          color: '#DC2626',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 8
+                        }}
+                      >
+                        <span style={{ fontWeight: 600 }}>
+                          ⛔ {order.statusLabel || `Rejected: ${order.rejectReason || 'Unavailable'}`}
+                        </span>
+                        <button
+                          className="btn-secondary-pill"
+                          style={{ padding: '3px 10px', fontSize: 11, height: 26, background: '#FFFFFF', flexShrink: 0 }}
+                          onClick={() => handleUpdateStatus(order.id, 'received', 'Received by Kitchen', 20)}
+                          title="Re-open order if rejected by mistake"
+                        >
+                          Reopen
                         </button>
                       </div>
                     )}
@@ -1962,13 +2004,26 @@ export default function CounterView({
               className="ios-select"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              style={{ marginBottom: 16 }}
+              style={{ marginBottom: rejectReason === 'Other / Custom Reason' ? 10 : 16 }}
             >
               <option value="Item ingredient out of stock">Item ingredient out of stock</option>
               <option value="Kitchen rush / temporarily paused">Kitchen rush / temporarily paused</option>
               <option value="Closing hours reached">Closing hours reached</option>
               <option value="Custom note cannot be accommodated">Custom note cannot be accommodated</option>
+              <option value="Other / Custom Reason">Other / Custom Reason...</option>
             </select>
+
+            {rejectReason === 'Other / Custom Reason' && (
+              <input
+                type="text"
+                className="ios-input"
+                placeholder="Enter specific reason for customer..."
+                value={customRejectReason}
+                onChange={(e) => setCustomRejectReason(e.target.value)}
+                style={{ marginBottom: 16 }}
+                autoFocus
+              />
+            )}
 
             <button
               className="btn-primary-pill full-width"

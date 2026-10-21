@@ -6,7 +6,7 @@
 //    Firestore cloud collections, and local storage partitions.
 // 4. Statutory Non-PII Compliance Retention (7-year tax & accounting ledger under GST Act & DPDP Act 2023)
 
-import { doc, setDoc, deleteDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, query, where, getDocs, writeBatch, onSnapshot } from 'firebase/firestore';
 import { initFirebase, deleteCloudOrdersForBusiness } from './firebaseSync.js';
 import { deleteOwnerAccountFromFirebase, getFirebaseAuth } from './firebaseAuth.js';
 import { signOut, deleteUser } from 'firebase/auth';
@@ -54,7 +54,8 @@ export function validateBusinessAccount(biz) {
 
 /**
  * Synchronize a business account record to Firebase Firestore systematically
- * (Stores in 'businesses' collection with sensitive passwords sanitized)
+ * Persists full credentials (including 6-digit Owner Master PIN & Counter Staff PIN)
+ * so accounts are instantly accessible across all devices, windows, and developer consoles.
  */
 export async function syncBusinessToCloud(business) {
   const database = initFirebase();
@@ -74,11 +75,12 @@ export async function syncBusinessToCloud(business) {
       owner: {
         name: business.owner?.name || 'Owner',
         email: (business.owner?.email || '').trim().toLowerCase(),
-        // Note: PIN is NOT stored in plain cloud documents for security
+        pin: business.owner?.pin ? String(business.owner.pin).trim() : '',
         hasPinConfigured: Boolean(business.owner?.pin),
         createdAt: business.owner?.createdAt || business.createdAt || new Date().toISOString()
       },
       counter: {
+        pin: business.counter?.pin ? String(business.counter.pin).trim() : '',
         terminalName: business.counter?.terminalName || 'POS Terminal 01',
         loginId: business.counter?.loginId || `${business.id}.pos`
       },
@@ -98,6 +100,160 @@ export async function syncBusinessToCloud(business) {
   } catch (err) {
     console.warn(`🔥 [Systematic Database] Cloud sync notice for ${business?.id}:`, err.message);
     return false;
+  }
+}
+
+/**
+ * Safely merge cloud business documents into local storage
+ */
+export function mergeCloudBusinessesToLocal(cloudBusinesses) {
+  if (!Array.isArray(cloudBusinesses) || cloudBusinesses.length === 0) return;
+  const localBusinesses = getBusinesses();
+  let hasChanges = false;
+  const merged = [...localBusinesses];
+
+  for (const cloudBiz of cloudBusinesses) {
+    if (!cloudBiz || !cloudBiz.id) continue;
+    const localIndex = merged.findIndex((b) => b.id === cloudBiz.id);
+
+    if (localIndex === -1) {
+      // New business from cloud - add to local multi-tenant list
+      merged.unshift({
+        ...cloudBiz,
+        owner: {
+          name: cloudBiz.owner?.name || 'Owner',
+          email: (cloudBiz.owner?.email || '').trim().toLowerCase(),
+          pin: cloudBiz.owner?.pin ? String(cloudBiz.owner.pin).trim() : '882100'
+        },
+        counter: {
+          pin: cloudBiz.counter?.pin ? String(cloudBiz.counter.pin).trim() : '442100',
+          terminalName: cloudBiz.counter?.terminalName || `${cloudBiz.name} POS`
+        }
+      });
+      hasChanges = true;
+    } else {
+      // Existing business - merge cloud updates
+      const local = merged[localIndex];
+      const updated = {
+        ...local,
+        ...cloudBiz,
+        status: cloudBiz.status || local.status,
+        emailVerified: cloudBiz.emailVerified !== undefined ? cloudBiz.emailVerified : local.emailVerified,
+        owner: {
+          ...local.owner,
+          ...(cloudBiz.owner || {}),
+          pin: (cloudBiz.owner?.pin && String(cloudBiz.owner.pin).trim()) || local.owner?.pin || '882100'
+        },
+        counter: {
+          ...local.counter,
+          ...(cloudBiz.counter || {}),
+          pin: (cloudBiz.counter?.pin && String(cloudBiz.counter.pin).trim()) || local.counter?.pin || '442100'
+        }
+      };
+
+      if (JSON.stringify(updated) !== JSON.stringify(local)) {
+        merged[localIndex] = updated;
+        hasChanges = true;
+      }
+    }
+  }
+
+  if (hasChanges) {
+    saveBusinesses(merged);
+  }
+}
+
+/**
+ * Fetch all business accounts from Firestore cloud collection and sync locally
+ */
+export async function fetchBusinessesFromCloud() {
+  const database = initFirebase();
+  if (!database) return null;
+
+  try {
+    const bizCol = collection(database, 'businesses');
+    const snapshot = await getDocs(bizCol);
+    if (snapshot.empty) return [];
+
+    const cloudBusinesses = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data && data.id) {
+        cloudBusinesses.push(data);
+      }
+    });
+
+    if (cloudBusinesses.length > 0) {
+      mergeCloudBusinessesToLocal(cloudBusinesses);
+    }
+    return cloudBusinesses;
+  } catch (err) {
+    console.warn('🔥 [Systematic Database] Failed to fetch businesses from Firestore:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Real-time listener for business collection in Firestore
+ */
+export function subscribeBusinessesFromCloud(onUpdate) {
+  const database = initFirebase();
+  if (!database) return () => {};
+
+  try {
+    const bizCol = collection(database, 'businesses');
+    const unsubscribe = onSnapshot(bizCol, (snapshot) => {
+      const cloudBusinesses = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data && data.id) {
+          cloudBusinesses.push(data);
+        }
+      });
+
+      if (cloudBusinesses.length > 0) {
+        mergeCloudBusinessesToLocal(cloudBusinesses);
+      }
+      if (typeof onUpdate === 'function') {
+        onUpdate(getBusinesses());
+      }
+    }, (err) => {
+      console.warn('🔥 [Systematic Database] Real-time businesses sync listener notice:', err.message);
+    });
+
+    return unsubscribe;
+  } catch (err) {
+    console.warn('🔥 [Systematic Database] Real-time businesses subscribe error:', err.message);
+    return () => {};
+  }
+}
+
+/**
+ * Look up a business account by owner email directly from Firestore
+ */
+export async function findBusinessByEmailInCloud(email) {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail) return null;
+
+  const database = initFirebase();
+  if (!database) return null;
+
+  try {
+    const bizCol = collection(database, 'businesses');
+    const q = query(bizCol, where('owner.email', '==', cleanEmail));
+    const snapshot = await getDocs(q);
+
+    if (!snapshot.empty) {
+      const docData = snapshot.docs[0].data();
+      if (docData && docData.id) {
+        mergeCloudBusinessesToLocal([docData]);
+        return docData;
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn('🔥 [Systematic Database] Cloud lookup for email notice:', err.message);
+    return null;
   }
 }
 

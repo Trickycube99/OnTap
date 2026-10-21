@@ -30,6 +30,7 @@ import { getFirebaseConfig } from './firebaseSync.js';
 import { getBusinesses, saveBusinesses, createBusiness, updateBusiness, setActiveBusiness } from './businessManager.js';
 import { getStoredSessions, saveStoredSessions } from './auth.js';
 import { broadcastSyncEvent, SYNC_EVENTS } from './sync.js';
+import { findBusinessByEmailInCloud, syncBusinessToCloud } from './systematicDatabase.js';
 
 let authInstance = null;
 
@@ -147,10 +148,25 @@ export async function logInUserWithVerification({ email, password }) {
   }
 
   const auth = getFirebaseAuth();
-  const businesses = getBusinesses();
+  let businesses = getBusinesses();
   let matchingBiz = businesses.find(
     (b) => (b.owner?.email || '').trim().toLowerCase() === cleanEmail
   );
+
+  // If not in local cache, query Firestore cloud database immediately
+  if (!matchingBiz) {
+    try {
+      const cloudBiz = await findBusinessByEmailInCloud(cleanEmail);
+      if (cloudBiz) {
+        businesses = getBusinesses();
+        matchingBiz = businesses.find(
+          (b) => (b.owner?.email || '').trim().toLowerCase() === cleanEmail
+        ) || cloudBiz;
+      }
+    } catch (e) {
+      console.warn('Notice querying cloud business record during login:', e);
+    }
+  }
 
   if (auth) {
     try {
@@ -199,13 +215,18 @@ export async function logInUserWithVerification({ email, password }) {
           ownerName: user.displayName || 'Business Owner',
           ownerEmail: cleanEmail,
           ownerPin: cleanPassword,
+          counterPin: `${cleanPassword.slice(0, 4)}00`,
           status: 'active',
           emailVerified: true
         });
         matchingBiz = createRes.business;
+        if (matchingBiz) {
+          syncBusinessToCloud(matchingBiz).catch(() => {});
+        }
       } else if (matchingBiz.status === 'suspended' || matchingBiz.emailVerified === false) {
         updateBusiness(matchingBiz.id, { status: 'active', emailVerified: true });
         matchingBiz = { ...matchingBiz, status: 'active', emailVerified: true };
+        syncBusinessToCloud(matchingBiz).catch(() => {});
       }
 
       setActiveBusiness(matchingBiz.id);
@@ -240,7 +261,19 @@ export async function logInUserWithVerification({ email, password }) {
 
   // --- Authoritative Multi-Tenant Business Database Validation ---
   // If cloud auth failed (e.g. account not provisioned on remote Firebase, password changed in developer dashboard,
-  // or offline demo mode), validate against matching tenant credentials registered in getBusinesses().
+  // or offline demo mode), validate against matching tenant credentials registered in getBusinesses() or Firestore.
+  if (!matchingBiz) {
+    try {
+      const cloudBiz = await findBusinessByEmailInCloud(cleanEmail);
+      if (cloudBiz) {
+        businesses = getBusinesses();
+        matchingBiz = businesses.find(
+          (b) => (b.owner?.email || '').trim().toLowerCase() === cleanEmail
+        ) || cloudBiz;
+      }
+    } catch {}
+  }
+
   if (!matchingBiz) {
     return {
       success: false,
@@ -436,15 +469,24 @@ export async function handleVerifyEmailAction(oobCode) {
       await applyActionCode(auth, oobCode);
 
       // Transition matching business from suspended to active
-      const businesses = getBusinesses();
+      let businesses = getBusinesses();
+      if (verifiedEmail && !businesses.some((b) => (b.owner?.email || '').toLowerCase() === verifiedEmail.toLowerCase())) {
+        try {
+          await findBusinessByEmailInCloud(verifiedEmail);
+          businesses = getBusinesses();
+        } catch {}
+      }
+
       let updated = false;
       const updatedBiz = businesses.map((b) => {
         if (
-          (verifiedEmail && b.owner.email.toLowerCase() === verifiedEmail.toLowerCase()) ||
+          (verifiedEmail && (b.owner?.email || '').toLowerCase() === verifiedEmail.toLowerCase()) ||
           (!verifiedEmail && (b.emailVerified === false || b.status === 'suspended'))
         ) {
           updated = true;
-          return { ...b, status: 'active', emailVerified: true };
+          const fresh = { ...b, status: 'active', emailVerified: true };
+          syncBusinessToCloud(fresh).catch(() => {});
+          return fresh;
         }
         return b;
       });
@@ -459,6 +501,18 @@ export async function handleVerifyEmailAction(oobCode) {
       };
     } catch (error) {
       if (error.code === 'auth/invalid-action-code') {
+        // Even if action code was already used / redeemed, ensure matching business is marked active
+        if (verifiedEmail) {
+          try {
+            await findBusinessByEmailInCloud(verifiedEmail);
+            const freshBusinesses = getBusinesses();
+            const target = freshBusinesses.find((b) => (b.owner?.email || '').toLowerCase() === verifiedEmail.toLowerCase());
+            if (target && (target.status !== 'active' || !target.emailVerified)) {
+              updateBusiness(target.id, { status: 'active', emailVerified: true });
+              syncBusinessToCloud({ ...target, status: 'active', emailVerified: true }).catch(() => {});
+            }
+          } catch {}
+        }
         return {
           success: true,
           alreadyUsed: true,
@@ -471,7 +525,11 @@ export async function handleVerifyEmailAction(oobCode) {
 
   // Local fallback mode: mark business as active and verified
   const businesses = getBusinesses();
-  const updatedBiz = businesses.map((b) => ({ ...b, status: 'active', emailVerified: true }));
+  const updatedBiz = businesses.map((b) => {
+    const fresh = { ...b, status: 'active', emailVerified: true };
+    syncBusinessToCloud(fresh).catch(() => {});
+    return fresh;
+  });
   saveBusinesses(updatedBiz);
 
   return {
