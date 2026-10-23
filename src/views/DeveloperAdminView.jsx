@@ -396,6 +396,66 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     }
   };
 
+  const handleVerifyEmailNow = async (biz) => {
+    playTapSound();
+    setIsActionLoading(true);
+    setActionStatus(null);
+
+    const updates = {
+      status: 'active',
+      emailVerified: true,
+      accountCreatedAt: biz.accountCreatedAt || new Date().toISOString()
+    };
+
+    updateBusiness(biz.id, updates);
+    const freshBiz = getBusinesses().find((b) => b.id === biz.id) || { ...biz, ...updates };
+    await syncBusinessToCloud(freshBiz).catch(() => {});
+
+    broadcastSyncEvent(SYNC_EVENTS.EMAIL_VERIFIED, {
+      businessId: biz.id,
+      businessName: biz.name,
+      email: biz.owner?.email,
+      timestamp: new Date().toISOString()
+    }, null);
+
+    broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, {
+      businessId: biz.id,
+      reason: 'admin_email_verified'
+    }, null);
+
+    try {
+      window.dispatchEvent(new CustomEvent('ontap_email_verified', {
+        detail: {
+          businessId: biz.id,
+          businessName: biz.name,
+          email: biz.owner?.email
+        }
+      }));
+    } catch {}
+
+    refreshBusinesses();
+    if (showCredentialsModal && showCredentialsModal.id === biz.id) {
+      setShowCredentialsModal(freshBiz);
+    }
+
+    setIsActionLoading(false);
+    playSuccessChime();
+    setActionStatus({
+      type: 'success',
+      text: `Account "${biz.name}" (${biz.owner?.email}) email verified and activated successfully!`
+    });
+
+    setLogs((prev) => [
+      {
+        id: Date.now(),
+        time: 'Just now',
+        type: 'biz',
+        text: `✓ Admin manual verification: Marked "${biz.name}" (${biz.owner?.email}) email verified & activated account.`
+      },
+      ...prev
+    ]);
+  };
+
   const handleToggleStatus = async (biz) => {
     playTapSound();
     const newStatus = biz.status === 'active' ? 'suspended' : 'active';
@@ -407,6 +467,23 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     const fresh = getBusinesses().find((b) => b.id === biz.id);
     if (fresh) {
       await syncBusinessToCloud(fresh).catch(() => {});
+    }
+    if (updates.emailVerified) {
+      broadcastSyncEvent(SYNC_EVENTS.EMAIL_VERIFIED, {
+        businessId: biz.id,
+        businessName: biz.name,
+        email: biz.owner?.email,
+        timestamp: new Date().toISOString()
+      }, null);
+      try {
+        window.dispatchEvent(new CustomEvent('ontap_email_verified', {
+          detail: {
+            businessId: biz.id,
+            businessName: biz.name,
+            email: biz.owner?.email
+          }
+        }));
+      } catch {}
     }
     broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, { businessId: biz.id, status: newStatus }, biz.id);
     refreshBusinesses();
@@ -1668,6 +1745,33 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           <span>Credentials</span>
                         </button>
 
+                        {/* Quick 1-click Verify Email button for pending accounts */}
+                        {(biz.emailVerified === false || biz.status === 'pending_verification') && (
+                          <button
+                            onClick={() => handleVerifyEmailNow(biz)}
+                            style={{
+                              flex: '1 1 100px',
+                              minWidth: 90,
+                              padding: '7px 10px',
+                              borderRadius: 8,
+                              background: 'rgba(16, 185, 129, 0.18)',
+                              border: '1px solid rgba(16, 185, 129, 0.4)',
+                              color: '#34D399',
+                              cursor: 'pointer',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 5
+                            }}
+                            title="Instantly mark email as verified and activate this business"
+                          >
+                            <ShieldCheck size={13} />
+                            <span>Verify Email</span>
+                          </button>
+                        )}
+
                         {/* Toggle status (Suspend / Activate) */}
                         <button
                           onClick={() => handleToggleStatus(biz)}
@@ -2738,42 +2842,69 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       {showCredentialsModal.emailVerified !== false ? 'Email Verified' : 'Pending Verification'}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    disabled={isActionLoading}
-                    onClick={async () => {
-                      setIsActionLoading(true);
-                      setActionStatus(null);
-                      playTapSound();
-                      const r = await resendVerificationLink({
-                        email: showCredentialsModal.owner.email,
-                        password: showCredentialsModal.owner.pin
-                      });
-                      setIsActionLoading(false);
-                      if (r.success) {
-                        playSuccessChime();
-                        setActionStatus({ type: 'success', text: r.message });
-                      } else {
-                        playAlertChime();
-                        setActionStatus({ type: 'error', text: r.error });
-                      }
-                    }}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      borderRadius: 6,
-                      padding: '4px 10px',
-                      fontSize: 11,
-                      color: '#F8FAFC',
-                      cursor: isActionLoading ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4
-                    }}
-                  >
-                    <RefreshCw size={11} className={isActionLoading ? 'spinning' : ''} />
-                    <span>Resend Email</span>
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {!(showCredentialsModal.emailVerified !== false && showCredentialsModal.status === 'active') && (
+                      <button
+                        type="button"
+                        disabled={isActionLoading}
+                        onClick={() => handleVerifyEmailNow(showCredentialsModal)}
+                        style={{
+                          background: 'rgba(16, 185, 129, 0.2)',
+                          border: '1px solid rgba(16, 185, 129, 0.4)',
+                          borderRadius: 6,
+                          padding: '4px 10px',
+                          fontSize: 11,
+                          color: '#34D399',
+                          fontWeight: 700,
+                          cursor: isActionLoading ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                        title="Instantly mark email as verified and activate account"
+                      >
+                        <CheckCircle2 size={12} />
+                        <span>Verify Email Now</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={isActionLoading}
+                      onClick={async () => {
+                        setIsActionLoading(true);
+                        setActionStatus(null);
+                        playTapSound();
+                        const r = await resendVerificationLink({
+                          email: showCredentialsModal.owner.email,
+                          password: showCredentialsModal.owner.pin
+                        });
+                        setIsActionLoading(false);
+                        if (r.success) {
+                          playSuccessChime();
+                          setActionStatus({ type: 'success', text: r.message });
+                        } else {
+                          playAlertChime();
+                          setActionStatus({ type: 'error', text: r.error });
+                        }
+                      }}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontSize: 11,
+                        color: '#F8FAFC',
+                        cursor: isActionLoading ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      <RefreshCw size={11} className={isActionLoading ? 'spinning' : ''} />
+                      <span>Resend Email</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Password Reset Action */}

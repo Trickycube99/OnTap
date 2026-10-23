@@ -222,8 +222,27 @@ export async function logInUserWithVerification({ email, password }) {
         await reload(user);
       } catch {}
 
-      // STRICT VERIFICATION CHECK: BLOCK ACCESS IF EMAIL NOT VERIFIED
-      if (!user.emailVerified) {
+      // Check cloud record if local matchingBiz is missing, unverified, or pending
+      if (matchingBiz && (!matchingBiz.emailVerified || matchingBiz.status === 'pending_verification')) {
+        try {
+          const freshCloud = await findBusinessByEmailInCloud(cleanEmail);
+          if (freshCloud) {
+            matchingBiz = freshCloud;
+          }
+        } catch {}
+      }
+
+      // STRICT VERIFICATION CHECK:
+      // An account is verified if:
+      // 1. user.emailVerified is true in Firebase Auth (verified via email verification link)
+      // OR
+      // 2. The tenant was explicitly verified and activated by the platform administrator / developer in Developer Dashboard!
+      const isAccountVerified = Boolean(
+        user.emailVerified ||
+        (matchingBiz && matchingBiz.emailVerified === true && matchingBiz.status === 'active')
+      );
+
+      if (!isAccountVerified) {
         await signOut(auth);
         return {
           success: false,
@@ -888,28 +907,47 @@ export async function updateOwnerCredentialsManually({
       secondaryApp = initializeApp(config, secondaryAppName);
       const secondaryAuth = getAuth(secondaryApp);
 
-      // Attempt to authenticate existing user in sandbox using candidate PINs
+      // Attempt to authenticate existing user in sandbox using candidate PINs/passwords
       let userCredential = null;
       const allBusinesses = getBusinesses();
-      const currentBiz = allBusinesses.find(
+      let currentBiz = allBusinesses.find(
         (b) => b.id === businessId || (b.owner?.email || '').toLowerCase() === cleanOldEmail
       );
+      if (!currentBiz && cleanNewEmail) {
+        currentBiz = allBusinesses.find(
+          (b) => (b.owner?.email || '').toLowerCase() === cleanNewEmail
+        );
+      }
+
       const candidatePins = Array.from(new Set([
         cleanOldPin,
         cleanNewPin,
         currentBiz?.owner?.pin,
+        currentBiz?.counter?.pin,
         cleanOldPin && cleanOldPin.length === 4 ? `${cleanOldPin}00` : null,
         cleanNewPin && cleanNewPin.length === 4 ? `${cleanNewPin}00` : null,
-        currentBiz?.counter?.pin,
+        cleanOldPin && cleanOldPin.endsWith('00') && cleanOldPin.length === 6 ? cleanOldPin.slice(0, 4) : null,
+        cleanNewPin && cleanNewPin.endsWith('00') && cleanNewPin.length === 6 ? cleanNewPin.slice(0, 4) : null,
         '882100',
-        '123456'
+        '123456',
+        '000000',
+        '111111'
       ].filter(Boolean)));
 
-      for (const candidate of candidatePins) {
-        try {
-          userCredential = await signInWithEmailAndPassword(secondaryAuth, cleanOldEmail, candidate);
-          if (userCredential && userCredential.user) break;
-        } catch {}
+      const targetEmails = Array.from(new Set([
+        cleanOldEmail,
+        cleanNewEmail,
+        currentBiz?.owner?.email ? currentBiz.owner.email.trim().toLowerCase() : null
+      ].filter(Boolean)));
+
+      for (const emailToTry of targetEmails) {
+        for (const candidate of candidatePins) {
+          try {
+            userCredential = await signInWithEmailAndPassword(secondaryAuth, emailToTry, candidate);
+            if (userCredential && userCredential.user) break;
+          } catch {}
+        }
+        if (userCredential && userCredential.user) break;
       }
 
       if (userCredential && userCredential.user) {
@@ -919,30 +957,32 @@ export async function updateOwnerCredentialsManually({
         try {
           await updatePassword(user, cleanNewPin);
           firebaseUpdated = true;
+          firebaseNotice = `Password successfully updated in Firebase Auth for ${cleanNewEmail}.`;
         } catch (pwErr) {
           console.warn('Firebase updatePassword warning:', pwErr);
+          throw new Error(`Firebase Auth password update failed: ${formatAuthError(pwErr)}`);
         }
 
-        // 2. If email changed, attempt update or recreation
-        if (cleanNewEmail !== cleanOldEmail) {
+        // 2. If email changed, update email in Firebase Auth
+        if (cleanNewEmail !== (user.email || '').toLowerCase()) {
           try {
             await updateEmail(user, cleanNewEmail);
             firebaseUpdated = true;
+            firebaseNotice = `Email and password successfully updated in Firebase Auth for ${cleanNewEmail}.`;
           } catch (emErr) {
             console.warn('Firebase direct updateEmail warning, recreating user:', emErr);
             try {
               await deleteUser(user);
               await createUserWithEmailAndPassword(secondaryAuth, cleanNewEmail, cleanNewPin);
               firebaseUpdated = true;
+              firebaseNotice = `Recreated account in Firebase Auth with updated email (${cleanNewEmail}) and password.`;
             } catch (recreateErr) {
               console.warn('Firebase recreate user warning:', recreateErr);
             }
           }
         }
-
-        firebaseNotice = 'Credentials successfully synchronized with Firebase Auth and database.';
       } else {
-        // User could not be signed in via candidate PINs; attempt direct creation
+        // User could not be signed in via candidate PINs; attempt direct creation in Firebase Auth
         try {
           await createUserWithEmailAndPassword(secondaryAuth, cleanNewEmail, cleanNewPin);
           firebaseUpdated = true;
@@ -956,7 +996,7 @@ export async function updateOwnerCredentialsManually({
                 handleCodeInApp: true
               };
               await sendPasswordResetEmail(secondaryAuth, cleanNewEmail, actionCodeSettings);
-              firebaseNotice = `Database PIN updated to ${cleanNewPin}. Account exists in Firebase Auth; a password reset link was dispatched to ${cleanNewEmail} to confirm PIN synchronization.`;
+              firebaseNotice = `Database password updated to "${cleanNewPin}". Password reset link dispatched to ${cleanNewEmail} to confirm PIN synchronization with Firebase Auth.`;
             } catch {
               firebaseNotice = `Database credentials updated. Please use "Send Password Reset Link" to sync password in Firebase Auth.`;
             }
@@ -980,7 +1020,7 @@ export async function updateOwnerCredentialsManually({
     firebaseNotice = 'Owner credentials updated in local multi-tenant database (Demo Mode).';
   }
 
-  // Update local business record
+  // Update business record in database & Cloud Firestore
   const updates = {
     owner: {
       email: cleanNewEmail,
@@ -991,6 +1031,10 @@ export async function updateOwnerCredentialsManually({
   if (markVerified) {
     updates.status = 'active';
     updates.emailVerified = true;
+    updates.accountCreatedAt = new Date().toISOString();
+  } else {
+    updates.status = 'pending_verification';
+    updates.emailVerified = false;
   }
 
   const updateRes = updateBusiness(businessId, updates);
@@ -998,13 +1042,42 @@ export async function updateOwnerCredentialsManually({
     return { success: false, error: updateRes.error };
   }
 
+  // Persist systematically to Cloud Firestore
+  if (updateRes.business) {
+    await syncBusinessToCloud(updateRes.business).catch(() => {});
+  }
+
   // Broadcast update event across all windows and developer dashboard
-  broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, {
+  broadcastSyncEvent(SYNC_EVENTS.CREDENTIALS_UPDATED, {
     businessId,
     reason: 'credentials_override',
     newEmail: cleanNewEmail,
     newPin: cleanNewPin
   });
+
+  broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, {
+    businessId,
+    reason: 'credentials_override'
+  });
+
+  if (markVerified) {
+    broadcastSyncEvent(SYNC_EVENTS.EMAIL_VERIFIED, {
+      businessId,
+      businessName: updateRes.business?.name,
+      email: cleanNewEmail,
+      timestamp: new Date().toISOString()
+    }, null);
+
+    try {
+      window.dispatchEvent(new CustomEvent('ontap_email_verified', {
+        detail: {
+          businessId,
+          businessName: updateRes.business?.name,
+          email: cleanNewEmail
+        }
+      }));
+    } catch {}
+  }
 
   return {
     success: true,
