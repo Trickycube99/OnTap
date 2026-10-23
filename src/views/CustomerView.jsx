@@ -207,14 +207,16 @@ export default function CustomerView({
 
   // Find latest active customer order for this diner:
   // 1. Strictly prioritize the exact order placed by this diner in this session/device
-  // 2. Otherwise fall back to the most recent order on this table
+  // 2. Otherwise fall back to the most recent active in-progress order strictly on this verified table
   const activeCustomerOrder = useMemo(() => {
     if (lastPlacedOrderId) {
-      const placed = orders.find((o) => o.id === lastPlacedOrderId);
+      const placed = orders.find((o) => o.id === lastPlacedOrderId && o.table === activeTable);
       if (placed) return placed;
     }
-    const tableOrders = orders.filter((o) => o.table === activeTable);
-    return tableOrders.length > 0 ? tableOrders[0] : null;
+    const activeTableOrders = orders.filter(
+      (o) => o.table === activeTable && (o.status === 'received' || o.status === 'cooking' || o.status === 'ready' || o.status === 'in-progress')
+    );
+    return activeTableOrders.length > 0 ? activeTableOrders[0] : null;
   }, [orders, activeTable, lastPlacedOrderId]);
 
   // Sound and visual feedback when live status updates in real time (Accept -> Cooking, Ready -> Ready, Done -> Served, Rejected -> Alert)

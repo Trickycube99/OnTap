@@ -12,6 +12,7 @@ import {
   Utensils
 } from 'lucide-react';
 import { playTapSound, playSuccessChime } from '../utils/audio';
+import { computeTableSignature } from '../utils/tableSecurity';
 
 export default function TableQrModal({
   isOpen,
@@ -33,13 +34,14 @@ export default function TableQrModal({
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [isCopied, setIsCopied] = useState(false);
 
-  // Compute table number e.g. "04" from "Table 04" or "Takeaway" for Counter / Takeaway
+  // Compute table number and tamper-proof table signature
   const isTakeaway = (selectedTable || '').toLowerCase().includes('takeaway') || (selectedTable || '').toLowerCase().includes('counter');
   const tableNum = (selectedTable || 'Table 04').replace(/\D/g, '').padStart(2, '0');
   const cleanBiz = businessId || '';
+  const sig = computeTableSignature(cleanBiz, selectedTable);
   const directMenuUrl = isTakeaway
-    ? `${baseUrl}/?biz=${encodeURIComponent(cleanBiz)}&table=Takeaway&qr=true#customer`
-    : `${baseUrl}/?biz=${encodeURIComponent(cleanBiz)}&table=${tableNum}&qr=true#customer`;
+    ? `${baseUrl}/?biz=${encodeURIComponent(cleanBiz)}&table=Takeaway&sig=${encodeURIComponent(sig)}&qr=true#customer`
+    : `${baseUrl}/?biz=${encodeURIComponent(cleanBiz)}&table=${tableNum}&sig=${encodeURIComponent(sig)}&qr=true#customer`;
 
   // Sync selectedTable when modal opens or activeTable/tables changes
   useEffect(() => {

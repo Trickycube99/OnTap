@@ -42,56 +42,47 @@ import { subscribeSyncEvents, SYNC_EVENTS } from './utils/sync';
 import confetti from 'canvas-confetti';
 import { Server, Building2, PlusCircle } from 'lucide-react';
 
+import {
+  sanitizeTableFromParam,
+  verifyTableSignature,
+  verifyOrLockTable
+} from './utils/tableSecurity';
+
+export { sanitizeTableFromParam };
+
 /**
  * Check if current guest session has valid QR code access
- * (Customer menu is strictly accessible only via physical table QR codes)
+ * (Customer menu is strictly accessible only via physical table QR codes with authentic cryptographic signature)
  */
 export const checkGuestQrAccess = () => {
   if (typeof window === 'undefined') return false;
   const urlParams = new URLSearchParams(window.location.search);
   const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
   const hashParams = new URLSearchParams(hashQuery);
-  const hasTableParam = Boolean(
-    urlParams.get('table') || hashParams.get('table') ||
-    urlParams.get('t') || hashParams.get('t')
-  );
-  const hasQrParam = Boolean(
-    urlParams.get('qr') || hashParams.get('qr')
-  );
-  const hasBizParam = Boolean(
-    urlParams.get('biz') || hashParams.get('biz') ||
-    urlParams.get('b') || hashParams.get('b')
-  );
-  const hasSessionQr = typeof sessionStorage !== 'undefined' && (
-    sessionStorage.getItem('flowscape_guest_scanned_qr') === 'true' ||
-    Boolean(sessionStorage.getItem('flowscape_guest_table')) ||
-    Boolean(sessionStorage.getItem('flowscape_guest_scanned_biz'))
-  );
-  const rawHash = (window.location.hash || '').replace(/^#\/?/, '').toLowerCase().split('?')[0];
-  const isCustomerRoute = rawHash === 'customer' || rawHash === 'chef' || rawHash === 'menu' || rawHash === 'cart';
-  return hasTableParam || hasQrParam || hasSessionQr || (hasBizParam && isCustomerRoute);
-};
 
-/**
- * Sanitize and format the scanned table or takeaway station parameter
- * Supports individual table numbers (e.g. '04', 'Table 04') and takeaway stations (e.g. 'Takeaway', 'Counter / Takeaway')
- */
-export const sanitizeTableFromParam = (tableParam) => {
-  if (!tableParam) return 'Table 04';
-  const trimmed = String(tableParam).trim();
-  const lower = trimmed.toLowerCase();
-  if (lower === 'takeaway' || lower.includes('takeaway') || lower.includes('counter')) {
-    return 'Counter / Takeaway';
+  const tableParam = urlParams.get('table') || hashParams.get('table') || urlParams.get('t') || hashParams.get('t');
+  const sigParam = urlParams.get('sig') || hashParams.get('sig');
+  const bizParam = urlParams.get('biz') || hashParams.get('biz') || urlParams.get('b') || hashParams.get('b');
+
+  // 1. If customer already has an active verified table session in sessionStorage:
+  const hasSessionQr = typeof sessionStorage !== 'undefined' && (
+    sessionStorage.getItem('flowscape_guest_scanned_qr') === 'true' &&
+    Boolean(sessionStorage.getItem('flowscape_guest_table'))
+  );
+  if (hasSessionQr) return true;
+
+  // 2. Physical QR code scan containing authentic cryptographic table signature:
+  if (tableParam && sigParam && bizParam) {
+    if (verifyTableSignature(bizParam, tableParam, sigParam)) {
+      return true;
+    }
   }
-  if (lower.startsWith('table')) {
-    const numPart = lower.replace(/\D/g, '');
-    return numPart ? `Table ${numPart.padStart(2, '0')}` : trimmed;
-  }
-  const digits = lower.replace(/\D/g, '');
-  if (digits) {
-    return `Table ${digits.padStart(2, '0')}`;
-  }
-  return trimmed;
+
+  // 3. Fallback for QR param if session is verified
+  const hasQrParam = Boolean(urlParams.get('qr') || hashParams.get('qr'));
+  if (hasQrParam && hasSessionQr) return true;
+
+  return false;
 };
 
 export const normalizeStaffCredentials = (staffList) => {
@@ -254,13 +245,25 @@ export default function App() {
       const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
       const hashParams = new URLSearchParams(hashQuery);
       const t = urlParams.get('table') || hashParams.get('table') || urlParams.get('t') || hashParams.get('t');
-      if (t) {
-        return sanitizeTableFromParam(t);
+      const sig = urlParams.get('sig') || hashParams.get('sig');
+      const biz = urlParams.get('biz') || hashParams.get('biz') || urlParams.get('b') || hashParams.get('b') || initialBizId;
+
+      const isPrivileged = isDeveloperAuthenticated() || Boolean(
+        typeof sessionStorage !== 'undefined' && sessionStorage.getItem('flowscape_switched_from_admin') === 'true'
+      );
+
+      const check = verifyOrLockTable(biz, t, sig, isPrivileged);
+
+      // If URL tampering was attempted (e.g. user modified ?table=XX in URL while locked to another table):
+      if (!check.valid && check.reason === 'tamper_blocked') {
+        try {
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('table', check.table.replace(/\D/g, '') || check.table);
+          window.history.replaceState(null, '', currentUrl.toString());
+        } catch {}
       }
-      if (typeof sessionStorage !== 'undefined') {
-        const stored = sessionStorage.getItem('flowscape_guest_table');
-        if (stored) return sanitizeTableFromParam(stored);
-      }
+
+      return check.table;
     }
     return 'Table 04';
   });
@@ -592,14 +595,42 @@ export default function App() {
         }
       }
 
-      // 1. If QR parameters are present, initialize guest table session and open customer menu
+      // 1. If QR or table parameters are present, verify table access and guard against URL tampering
       if (tableParam || qrParam) {
-        const cleanTable = sanitizeTableFromParam(tableParam || '04');
-        setActiveTable(cleanTable);
-        if (typeof sessionStorage !== 'undefined') {
-          sessionStorage.setItem('flowscape_guest_scanned_qr', 'true');
-          sessionStorage.setItem('flowscape_guest_table', cleanTable);
+        const sigParam = urlParams.get('sig') || hashParams.get('sig');
+        const biz = bizParam || activeBusinessId || getInitialBusinessId();
+        const isPrivileged = isDeveloperAuthenticated() || canReturnToAdmin;
+
+        const tableCheck = verifyOrLockTable(biz, tableParam, sigParam, isPrivileged);
+
+        if (!tableCheck.valid && tableCheck.reason === 'tamper_blocked') {
+          // Table tampering attempt detected!
+          // Force revert URL parameter back to the locked table
+          try {
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('table', tableCheck.table.replace(/\D/g, '') || tableCheck.table);
+            window.history.replaceState(null, '', currentUrl.toString());
+          } catch {}
+          setActiveTable(tableCheck.table);
+          setCurrentRole('customer');
+          setActiveTab('menu');
+          return;
         }
+
+        if (!tableCheck.valid && tableCheck.reason === 'unverified_url') {
+          // Diner typed table directly in URL without a QR signature and has no verified session
+          // Force QR Code Gate
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.removeItem('flowscape_guest_scanned_qr');
+            sessionStorage.removeItem('flowscape_guest_table');
+            sessionStorage.removeItem('flowscape_table_sig');
+          }
+          setCurrentRole('customer');
+          return;
+        }
+
+        // Valid verified table
+        setActiveTable(tableCheck.table);
         setCurrentRole('customer');
         setActiveTab('menu');
         return;
