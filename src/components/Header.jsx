@@ -397,15 +397,6 @@ export default function Header({
             <span className="qr-pill-label">Table QRs</span>
           </button>
 
-          {/* Reset Demo Data Button */}
-          <button
-            className="btn-secondary-pill reset-demo-pill"
-            onClick={onResetDemo}
-            title="Reset demonstration data to fresh defaults"
-          >
-            <RotateCcw size={12} />
-            <span className="reset-label">Reset</span>
-          </button>
 
           {/* Exit / Lock Station Button (Returns safely to customer dining view) */}
           <button

@@ -1134,10 +1134,10 @@ export default function App() {
                   <Server size={32} color="#FFFFFF" />
                 </div>
                 <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 10px', color: '#F8FAFC' }}>
-                  No Restaurant Outlets Configured
+                  No Restaurant Configured
                 </h2>
                 <p style={{ fontSize: 14, color: '#94A3B8', lineHeight: 1.6, margin: '0 0 24px' }}>
-                  All previous pre-made mock demo accounts have been purged. The platform is ready from scratch for live production use. Log in to the Developer Console to register your first business account.
+                  Welcome! There are currently no active restaurant outlets registered. Please set up your restaurant to begin managing menus, orders, and counter billing.
                 </p>
                 <button
                   onClick={() => {
@@ -1161,8 +1161,8 @@ export default function App() {
                     boxShadow: '0 8px 20px rgba(2, 132, 199, 0.35)'
                   }}
                 >
-                  <Server size={18} />
-                  <span>Open Developer Console (#manj)</span>
+                  <Building2 size={18} />
+                  <span>Set Up Restaurant</span>
                 </button>
               </div>
             </div>

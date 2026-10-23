@@ -243,7 +243,7 @@ export default function CounterView({
           }
         } catch {}
         playSuccessChime();
-        setPermissionsToast('✓ Operator switched to Business Owner (Master Override).');
+        setPermissionsToast('✓ Operator switched to Business Owner.');
         setShowSwitchOperatorModal(false);
         setIsVerifyingSwitch(false);
         return;
@@ -275,7 +275,7 @@ export default function CounterView({
         }
       } catch {}
       playSuccessChime();
-      setPermissionsToast(`✓ Terminal operator successfully switched to ${targetStaff.name} (${targetStaff.role}).`);
+      setPermissionsToast(`✓ Terminal operator switched to ${targetStaff.name} (${targetStaff.role}).`);
       setShowSwitchOperatorModal(false);
       setIsVerifyingSwitch(false);
     } else {
@@ -297,7 +297,7 @@ export default function CounterView({
       } else if (msg.type === SYNC_EVENTS.STAFF_UPDATED) {
         if (Array.isArray(msg.payload) && setStaff) {
           setStaff(msg.payload);
-          setPermissionsToast('⚡ Terminal Permissions Updated: Staff permissions synchronized live from Owner Admin.');
+          setPermissionsToast('⚡ Terminal Permissions Updated.');
           setTimeout(() => setPermissionsToast(''), 4500);
         }
       }
@@ -392,7 +392,7 @@ export default function CounterView({
   const handleSavePrice = () => {
     if (!effectivePermissions.canEditPrice) {
       playAlertChime();
-      alert(`Access Restricted: Staff member "${currentStaff?.name || 'Operator'}" does not have permission to edit dish prices. The owner can grant this in Staff & Payroll.`);
+      alert('Access Restricted: You do not have permission to edit dish prices. Please contact your manager.');
       return;
     }
     playTapSound();
@@ -411,7 +411,7 @@ export default function CounterView({
     e.preventDefault();
     if (!effectivePermissions.canCreateDiscounts) {
       playAlertChime();
-      alert(`Access Restricted: Staff member "${currentStaff?.name || 'Operator'}" does not have permission to issue promotional offers. The owner can grant this in Staff & Payroll.`);
+      alert('Access Restricted: You do not have permission to create promotional offers. Please contact your manager.');
       return;
     }
     playTapSound();
@@ -442,7 +442,7 @@ export default function CounterView({
   const handleDeleteOffer = (offerId) => {
     if (!effectivePermissions.canCreateDiscounts) {
       playAlertChime();
-      alert(`Access Restricted: Staff member "${currentStaff?.name || 'Operator'}" does not have permission to modify promotional offers.`);
+      alert('Access Restricted: You do not have permission to modify promotional offers. Please contact your manager.');
       return;
     }
     playTapSound();
@@ -728,7 +728,7 @@ export default function CounterView({
             }}
           >
             <span style={{ fontWeight: 700 }}>
-              {isOwnerOverride ? '👑 Owner Admin (Master Override)' : (currentStaff?.name || 'Counter Staff')}
+              {isOwnerOverride ? '👑 Business Owner' : (currentStaff?.name || 'Counter Staff')}
             </span>
             <span
               style={{
@@ -1250,7 +1250,7 @@ export default function CounterView({
           <div className="ios-card" style={{ marginBottom: 16 }}>
             <div className="card-top-row">
               <div className="card-title-group">
-                <span className="card-heading">Suggestables & Upsell Pairing (FR-P6)</span>
+                <span className="card-heading">Suggestables & Upsell Pairing</span>
                 <span className="card-meta-text">Configure add-on featured pairing on customer menus</span>
               </div>
               <Sparkles size={18} color="#007AFF" />
@@ -1330,13 +1330,13 @@ export default function CounterView({
                       onClick={() => {
                         if (!effectivePermissions.canEditPrice) {
                           playAlertChime();
-                          alert(`Access Restricted: Staff member "${currentStaff?.name || 'Operator'}" is not authorized by the owner to edit item prices.`);
+                          alert('Access Restricted: You are not authorized to edit item prices. Please contact your manager.');
                           return;
                         }
                         setEditingItem(item);
                         setNewPrice(item.price.toString());
                       }}
-                      title={effectivePermissions.canEditPrice ? "Edit Item Price" : "Price editing locked by Owner"}
+                      title={effectivePermissions.canEditPrice ? "Edit Item Price" : "Price editing restricted"}
                     >
                       {!effectivePermissions.canEditPrice && <Lock size={10} color="#94A3B8" />}
                       <span>Edit ₹</span>
@@ -1389,7 +1389,7 @@ export default function CounterView({
               >
                 <Lock size={15} color="#DC2626" />
                 <span>
-                  Offers &amp; Discounts Creation Locked for <strong>{currentStaff?.name || 'Current Staff'}</strong>. The restaurant owner can grant "Can Issue Offers" in the Owner Admin Staff &amp; Payroll section.
+                  Offer &amp; discount creation is restricted for <strong>{currentStaff?.name || 'Current Staff'}</strong>. Please contact your manager for access.
                 </span>
               </div>
             )}
@@ -1483,7 +1483,7 @@ export default function CounterView({
                 }}
               >
                 {effectivePermissions.canCreateDiscounts ? <Tag size={15} /> : <Lock size={15} />}
-                <span>{effectivePermissions.canCreateDiscounts ? 'Publish New Offer' : 'Offer Creation Locked by Owner'}</span>
+                <span>{effectivePermissions.canCreateDiscounts ? 'Publish New Offer' : 'Offer Creation Restricted'}</span>
               </button>
             </form>
 
@@ -1695,7 +1695,7 @@ export default function CounterView({
                   <input
                     type="text"
                     className="ios-input"
-                    placeholder="Reason (e.g. Table 4 cash tip rounded down, bank UPI delayed sync)"
+                    placeholder="Reason (e.g. Table 4 cash tip rounded down, bank UPI payment received)"
                     value={varianceReason}
                     onChange={(e) => setVarianceReason(e.target.value)}
                     required

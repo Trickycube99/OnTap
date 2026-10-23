@@ -794,8 +794,8 @@ export default function AdminView({
 
     // 3. Clear, immediate feedback
     const permLabel = permKey === 'canEditPrice' ? 'POS Price Edit' : 'Issue Promo Offers';
-    const statusLabel = newPermVal ? '✓ Permission Granted' : '🔒 Permission Locked (Revoked)';
-    setStaffSyncFeedback(`${statusLabel}: "${permLabel}" for ${targetName}. Synced live to Counter POS.`);
+    const statusLabel = newPermVal ? '✓ Permission Granted' : '🔒 Permission Restricted';
+    setStaffSyncFeedback(`✓ ${statusLabel}: "${permLabel}" for ${targetName}.`);
     setStaffSaveSuccess(true);
     setTimeout(() => {
       setStaffSaveSuccess(false);
@@ -818,7 +818,7 @@ export default function AdminView({
     // 3. Success feedback
     playSuccessChime();
     setIsSavingStaff(false);
-    setStaffSyncFeedback('✓ All staff permissions and roles successfully broadcasted to Counter POS.');
+    setStaffSyncFeedback('✓ Staff permissions and roles saved successfully.');
     setStaffSaveSuccess(true);
     setTimeout(() => {
       setStaffSaveSuccess(false);
@@ -953,7 +953,7 @@ export default function AdminView({
     persistAndBroadcastStaff(updatedStaff);
     setShowStaffModal(false);
     playSuccessChime();
-    setStaffSyncFeedback('✓ Staff records & permissions saved and synced live to Counter POS.');
+    setStaffSyncFeedback('✓ Staff records and permissions saved successfully.');
     setStaffSaveSuccess(true);
     setTimeout(() => {
       setStaffSaveSuccess(false);
@@ -1967,7 +1967,7 @@ export default function AdminView({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#DC2626', fontWeight: 700 }}>
                 <AlertOctagon size={20} />
-                <span>Section 5.4 Alert: Cash Position Below Fixed Obligations!</span>
+                <span>Alert: Cash Position Below Fixed Commitments!</span>
               </div>
               <div style={{ fontSize: 12, color: '#991B1B', marginTop: 4 }}>
                 Available Funds (Cash in Hand ₹{totalAvailableFunds.toLocaleString('en-IN')}) is below upcoming obligations (₹{totalUpcomingObligations.toLocaleString('en-IN')}: Rent ₹{theme.upcomingObligations.rent.toLocaleString('en-IN')}, Payroll ₹{theme.upcomingObligations.payroll.toLocaleString('en-IN')}, EMI ₹{theme.upcomingObligations.emi.toLocaleString('en-IN')}) due on {theme.upcomingObligations.dueDate}.
@@ -2839,7 +2839,7 @@ export default function AdminView({
                     alignItems: 'center',
                     gap: 6
                   }}
-                  title="Save staff roster & broadcast permissions changes to Counter POS"
+                  title="Save staff roster and permissions"
                 >
                   <Save size={14} />
                   <span>{isSavingStaff ? 'Saving...' : 'Save Staff & Permissions'}</span>
@@ -2877,7 +2877,7 @@ export default function AdminView({
               >
                 <CheckCircle2 size={16} color="#16A34A" />
                 <span>
-                  {staffSyncFeedback || '✓ Staff changes & terminal permissions (Price Editing & Offers) saved and broadcast to all live POS terminals!'}
+                  {staffSyncFeedback || '✓ Staff changes and permissions saved successfully.'}
                 </span>
               </div>
             )}
@@ -3045,7 +3045,7 @@ export default function AdminView({
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 11.5, color: '#C7D2FE' }}>
                 <KeyRound size={13} color="#A5B4FC" />
                 <span>
-                  Synchronized in real-time with Developer Console (<strong>#manj</strong>). Use Owner Master PIN to access financial KPIs and Counter PIN to unlock POS stations.
+                  Use your Owner Master PIN to access financial KPIs and Counter PIN to unlock POS stations.
                 </span>
               </div>
             </div>
@@ -3681,10 +3681,10 @@ export default function AdminView({
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#166534', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <ShieldCheck size={16} color="#16A34A" />
-                  <span>Sync Changes to Counter POS &amp; Terminals</span>
+                  <span>Save Staff Changes &amp; Permissions</span>
                 </div>
                 <div style={{ fontSize: 11, color: '#15803D' }}>
-                  Save all wage modifications, month-end payouts, and terminal permissions (Edit Price &amp; Issue Offers).
+                  Save all wage modifications, month-end payouts, and staff permissions.
                 </div>
               </div>
 
@@ -3721,13 +3721,13 @@ export default function AdminView({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>Corporate Bank Payroll Batch Disbursal</div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Monthly Salary Payout</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    Direct NEFT/IMPS Salary Transmission via ICICI/HDFC Corporate CMS • {activeStaffList.length} Active Staff
+                    Record monthly staff payroll • {activeStaffList.length} Active Staff
                   </div>
                 </div>
                 <span className="status-pill done" style={{ fontSize: 10 }}>
-                  Statutory Verified
+                  Verified
                 </span>
               </div>
 
@@ -3738,7 +3738,7 @@ export default function AdminView({
                   onClick={handleExecuteBankPayrollBatch}
                 >
                   <Send size={13} />
-                  <span>Execute Bank Salary Disbursal (₹{totalNetPayroll.toLocaleString('en-IN')})</span>
+                  <span>Record Salary Payout (₹{totalNetPayroll.toLocaleString('en-IN')})</span>
                 </button>
 
                 <button
@@ -3747,14 +3747,14 @@ export default function AdminView({
                   onClick={handleExportPayrollCsv}
                 >
                   <Download size={13} />
-                  <span>Export Bank Batch CSV</span>
+                  <span>Export Payroll Summary (CSV)</span>
                 </button>
               </div>
 
               {payrollDisbursed && (
                 <div style={{ marginTop: 10, fontSize: 12, color: '#16A34A', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <CheckCircle2 size={14} />
-                  <span>Bank payment batch #CMS-SAL-OCT2026 executed successfully! Transaction reference: <strong>HDFC-CMS-994182</strong></span>
+                  <span>Salary payout of ₹{totalNetPayroll.toLocaleString('en-IN')} recorded successfully!</span>
                 </div>
               )}
             </div>
@@ -3956,7 +3956,7 @@ export default function AdminView({
                       </div>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Custom Logo Active</div>
-                        <div style={{ fontSize: 11, color: '#64748B' }}>PNG / Scaled for instant &lt;50ms cross-tab broadcast</div>
+                        <div style={{ fontSize: 11, color: '#64748B' }}>High-resolution brand logo</div>
                       </div>
                     </div>
 
@@ -4015,7 +4015,7 @@ export default function AdminView({
                       Click to Upload Restaurant Brand Logo
                     </div>
                     <div style={{ fontSize: 11, color: '#64748B' }}>
-                      PNG, JPG, SVG, WebP • Auto-optimized for instant multi-device synchronization
+                      Supported formats: PNG, JPG, SVG, WebP
                     </div>
                   </div>
                 )}
@@ -4832,12 +4832,12 @@ export default function AdminView({
                   {customizerSaveSuccess ? (
                     <>
                       <CheckCircle2 size={18} />
-                      <span>Settings &amp; Logo Saved and Synced!</span>
+                      <span>Settings &amp; Logo Saved!</span>
                     </>
                   ) : (
                     <>
                       <Save size={18} />
-                      <span>{isSavingCustomizer ? 'Saving & Syncing...' : 'Save & Apply Customizer Settings'}</span>
+                      <span>{isSavingCustomizer ? 'Saving...' : 'Save & Apply Customizer Settings'}</span>
                     </>
                   )}
                 </button>
@@ -4993,7 +4993,7 @@ export default function AdminView({
                     />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#15803D' }}>Photo Uploaded ✓</div>
-                      <div style={{ fontSize: 11, color: '#166534' }}>Ready to sync across customer devices</div>
+                      <div style={{ fontSize: 11, color: '#166534' }}>Dish image ready</div>
                     </div>
                     <button
                       type="button"

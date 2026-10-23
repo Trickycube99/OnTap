@@ -346,7 +346,7 @@ export async function logInUserWithVerification({ email, password }) {
   if (!matchingBiz) {
     return {
       success: false,
-      error: `No registered business account found for "${cleanEmail}". Check the Developer Dashboard (#manj) for authorized tenant credentials.`
+      error: `No registered business account found for "${cleanEmail}". Please check your email address or contact support.`
     };
   }
 
