@@ -1,0 +1,27 @@
+{
+  "hosting": {
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "redirects": [
+      {
+        "source": "/__/auth/action",
+        "destination": "https://restraunt-web-app.vercel.app",
+        "type": 302
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/__/auth/action",
+        "destination": "/__/auth/action.html"
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

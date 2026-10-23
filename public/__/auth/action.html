@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redirecting to Master PIN Reset...</title>
+  <script>
+    (function() {
+      // Forward all parameters (mode, oobCode, apiKey, etc.) to custom Vercel app
+      var search = window.location.search || '';
+      var hash = window.location.hash || '';
+      var target = 'https://restraunt-web-app.vercel.app/' + search + hash;
+      window.location.replace(target);
+    })();
+  </script>
+</head>
+<body style="background:#0F172A;color:#94A3B8;font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;">
+  <div style="width:48px;height:48px;border:3px solid rgba(139,92,246,0.2);border-top-color:#8B5CF6;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:16px;"></div>
+  <p style="font-size:15px;font-weight:600;color:#F8FAFC;margin:0 0 6px;">Redirecting to Master PIN Reset...</p>
+  <p style="font-size:12px;color:#64748B;margin:0;">Taking you to the secure restaurant back-office portal.</p>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</body>
+</html>
