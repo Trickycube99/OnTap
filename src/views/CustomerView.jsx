@@ -64,41 +64,57 @@ export default function CustomerView({
   const [customizingItem, setCustomizingItem] = useState(null);
   const [itemNoteInput, setItemNoteInput] = useState('');
   
-  // Diner Identification State (Mandatory Pop-up on Menu Landing - Tenant Scoped)
-  const dinerNameKey = `flowscape_diner_name_${activeBusinessId}`;
-  const dinerPhoneKey = `flowscape_diner_phone_${activeBusinessId}`;
+  // Diner Identification State (Scoped strictly to this browser tab session via sessionStorage)
+  // Survives page refresh within the same tab, but prompts again when opening a new tab
+  const dinerNameKey = `ontap_${activeBusinessId || 'default'}_diner_name`;
+  const dinerPhoneKey = `ontap_${activeBusinessId || 'default'}_diner_phone`;
 
   const [customerName, setCustomerName] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(dinerNameKey) || '';
+      return sessionStorage.getItem(dinerNameKey) || sessionStorage.getItem('ontap_diner_name') || '';
     }
     return '';
   });
   const [customerPhone, setCustomerPhone] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(dinerPhoneKey) || '';
+      return sessionStorage.getItem(dinerPhoneKey) || sessionStorage.getItem('ontap_diner_phone') || '';
     }
     return '';
   });
   const [showNameModal, setShowNameModal] = useState(() => {
     if (typeof window !== 'undefined') {
-      return !localStorage.getItem(dinerNameKey);
+      const savedInSession = sessionStorage.getItem(dinerNameKey) || sessionStorage.getItem('ontap_diner_name');
+      return !savedInSession;
     }
     return true;
   });
   const [customerNameInput, setCustomerNameInput] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(dinerNameKey) || '';
+      return sessionStorage.getItem(dinerNameKey) || sessionStorage.getItem('ontap_diner_name') || '';
     }
     return '';
   });
   const [customerPhoneInput, setCustomerPhoneInput] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(dinerPhoneKey) || '';
+      return sessionStorage.getItem(dinerPhoneKey) || sessionStorage.getItem('ontap_diner_phone') || '';
     }
     return '';
   });
   const [nameError, setNameError] = useState('');
+
+  // Clean up any cross-tab localStorage diner names so brand-new tabs always ask for the name
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(dinerNameKey);
+        localStorage.removeItem(`flowscape_diner_name_${activeBusinessId}`);
+        localStorage.removeItem('flowscape_diner_name');
+        localStorage.removeItem(dinerPhoneKey);
+        localStorage.removeItem(`flowscape_diner_phone_${activeBusinessId}`);
+        localStorage.removeItem('flowscape_diner_phone');
+      } catch (err) {}
+    }
+  }, [dinerNameKey, dinerPhoneKey, activeBusinessId]);
 
   // Scoped keys to track all tickets ordered by this diner session on this table
   const dinerOrderIdsKey = `ontap_${activeBusinessId}_customer_order_ids`;
@@ -340,10 +356,17 @@ export default function CustomerView({
 
     setCustomerName(cleanName);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(dinerNameKey, cleanName);
+      sessionStorage.setItem(dinerNameKey, cleanName);
+      sessionStorage.setItem('ontap_diner_name', cleanName);
       if (customerPhoneInput.trim()) {
-        localStorage.setItem(dinerPhoneKey, customerPhoneInput.trim());
+        sessionStorage.setItem(dinerPhoneKey, customerPhoneInput.trim());
+        sessionStorage.setItem('ontap_diner_phone', customerPhoneInput.trim());
       }
+      try {
+        localStorage.removeItem(dinerNameKey);
+        localStorage.removeItem(`flowscape_diner_name_${activeBusinessId}`);
+        localStorage.removeItem('flowscape_diner_name');
+      } catch (err) {}
     }
     setCustomerPhone(customerPhoneInput.trim());
     setShowNameModal(false);
@@ -1794,7 +1817,14 @@ export default function CustomerView({
                   className="ios-input"
                   placeholder={t('namePlaceholder')}
                   value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCustomerName(val);
+                    if (typeof window !== 'undefined') {
+                      sessionStorage.setItem(dinerNameKey, val);
+                      sessionStorage.setItem('ontap_diner_name', val);
+                    }
+                  }}
                 />
               </div>
               <div>
@@ -1806,7 +1836,14 @@ export default function CustomerView({
                   className="ios-input"
                   placeholder={t('phonePlaceholder')}
                   value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCustomerPhone(val);
+                    if (typeof window !== 'undefined') {
+                      sessionStorage.setItem(dinerPhoneKey, val);
+                      sessionStorage.setItem('ontap_diner_phone', val);
+                    }
+                  }}
                 />
               </div>
             </div>
