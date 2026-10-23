@@ -507,8 +507,18 @@ export default function App() {
         }
       } else if (msg.type === SYNC_EVENTS.ORDER_STATUS_UPDATED) {
         setOrders((prev) => {
-          const exists = prev.some((o) => o.id === msg.payload.id);
+          const exists = prev.find((o) => o.id === msg.payload.id);
           if (exists) {
+            // Guard: If existing order was served >30 minutes ago, prevent status reversal
+            const wasServed = exists.status === 'served' || exists.status === 'done';
+            const servedTime = exists.servedAt
+              ? new Date(exists.servedAt).getTime()
+              : (exists.updatedAt ? new Date(exists.updatedAt).getTime() : new Date(exists.createdAt).getTime());
+            const isServedLocked = wasServed && !isNaN(servedTime) && (Date.now() - servedTime >= 30 * 60 * 1000);
+            if (isServedLocked && msg.payload.status !== 'served' && msg.payload.status !== 'done') {
+              console.warn('[Orders] Prevented reversing status for order served over 30 minutes ago:', exists.id);
+              return prev;
+            }
             return prev.map((o) => (o.id === msg.payload.id ? { ...o, ...msg.payload } : o));
           }
           return [msg.payload, ...prev];

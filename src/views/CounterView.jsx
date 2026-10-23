@@ -42,6 +42,27 @@ function checkUnacceptedOverdue(order) {
   return { elapsedMins, isUnacceptedOverdue };
 }
 
+export const THIRTY_MINUTES_MS = 30 * 60 * 1000;
+
+export function getServedLockInfo(order) {
+  if (!order) return { isLocked: false, minutesRemaining: 0, servedMinutesAgo: 0, isServed: false };
+  const isServed = order.status === 'served' || order.status === 'done';
+  if (!isServed) return { isLocked: false, minutesRemaining: 0, servedMinutesAgo: 0, isServed: false };
+
+  const servedTime = order.servedAt
+    ? new Date(order.servedAt).getTime()
+    : (order.updatedAt ? new Date(order.updatedAt).getTime() : new Date(order.createdAt).getTime());
+
+  if (isNaN(servedTime)) return { isLocked: false, minutesRemaining: 0, servedMinutesAgo: 0, isServed: true };
+
+  const elapsedMs = Math.max(0, Date.now() - servedTime);
+  const isLocked = elapsedMs >= THIRTY_MINUTES_MS;
+  const servedMinutesAgo = Math.floor(elapsedMs / 60000);
+  const minutesRemaining = Math.max(0, Math.ceil((THIRTY_MINUTES_MS - elapsedMs) / 60000));
+
+  return { isLocked, minutesRemaining, servedMinutesAgo, isServed: true };
+}
+
 function isOfferExpired(offer) {
   if (!offer || !offer.expiryDate) return false;
   const today = new Date().toISOString().slice(0, 10);
@@ -197,6 +218,13 @@ export default function CounterView({
   }, [staff, activeStaffId, canReturnToAdmin]);
 
   const [permissionsToast, setPermissionsToast] = useState('');
+
+  // 30-second background ticker to automatically lock orders served >30 minutes ago
+  const [, setClockTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setClockTick((t) => t + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Operator Switching & PIN Verification Modal State
   const [showSwitchOperatorModal, setShowSwitchOperatorModal] = useState(false);
@@ -373,12 +401,24 @@ export default function CounterView({
     const target = orders.find((o) => o.id === orderId);
     if (!target) return;
 
+    // Check if the order was served over 30 minutes ago and cannot be reversed
+    const lockInfo = getServedLockInfo(target);
+    if (lockInfo.isLocked && newStatus !== 'served' && newStatus !== 'done') {
+      alert('This order was served over 30 minutes ago. Its status is finalized and cannot be reversed.');
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
     const updatedOrder = {
       ...target,
       businessId: activeBusinessId,
       status: newStatus,
       statusLabel: newLabel,
-      progressPercent: progressPercent
+      progressPercent: progressPercent,
+      servedAt: (newStatus === 'served' || newStatus === 'done')
+        ? (target.servedAt || nowIso)
+        : null, // Clear served timestamp if reversed within the 30-minute grace window
+      updatedAt: nowIso
     };
 
     setOrders((prev) =>
@@ -397,6 +437,13 @@ export default function CounterView({
     playTapSound();
     const target = orders.find((o) => o.id === rejectOrderId);
     if (!target) return;
+
+    const lockInfo = getServedLockInfo(target);
+    if (lockInfo.isLocked) {
+      alert('This order was served over 30 minutes ago and cannot be rejected or reversed.');
+      setRejectOrderId(null);
+      return;
+    }
 
     const chosenReason = rejectReason === 'Other / Custom Reason'
       ? (customRejectReason.trim() || 'Order could not be accepted')
@@ -1109,76 +1156,118 @@ export default function CounterView({
 
                     {/* One-tap Status Action Buttons Row (FR-P2: Accept -> Cooking, Ready -> Ready, Done -> Served) */}
                     {order.status !== 'rejected' && (
-                      <div
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(4, 1fr)',
-                          gap: 6,
-                          marginTop: 10
-                        }}
-                      >
-                        {/* 1. Accept Button -> Transitions to Cooking */}
-                        <button
-                          className="btn-secondary-pill"
-                          style={{
-                            padding: '7px 4px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            background: (order.status === 'cooking' || order.status === 'in-progress') ? '#E0F2FE' : '#F3F4F6',
-                            color: (order.status === 'cooking' || order.status === 'in-progress') ? '#0284C7' : '#374151',
-                            border: (order.status === 'cooking' || order.status === 'in-progress') ? '1.5px solid #0284C7' : '1px solid #E5E7EB'
-                          }}
-                          onClick={() => handleUpdateStatus(order.id, 'cooking', 'Cooking in Kitchen', 50)}
-                          title="Accept ticket and mark as Cooking"
-                        >
-                          {(order.status === 'cooking' || order.status === 'in-progress') ? '✓ Cooking' : 'Accept'}
-                        </button>
+                      (() => {
+                        const lockInfo = getServedLockInfo(order);
+                        if (lockInfo.isLocked) {
+                          return (
+                            <div
+                              style={{
+                                marginTop: 10,
+                                padding: '8px 12px',
+                                background: '#F0FDF4',
+                                border: '1px solid #86EFAC',
+                                borderRadius: 10,
+                                fontSize: 11.5,
+                                color: '#15803D',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 8
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
+                                <span>✓ Served & Completed</span>
+                                <span style={{ fontSize: 10, color: '#166534', background: '#DCFCE7', padding: '1px 6px', borderRadius: 999, fontWeight: 600 }}>
+                                  Finalized ({lockInfo.servedMinutesAgo}m ago)
+                                </span>
+                              </div>
+                              <span style={{ fontSize: 11, color: '#16A34A', fontWeight: 600 }}>
+                                Status locked
+                              </span>
+                            </div>
+                          );
+                        }
 
-                        {/* 2. Ready Button -> Transitions to Ready */}
-                        <button
-                          className="btn-secondary-pill"
-                          style={{
-                            padding: '7px 4px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            background: order.status === 'ready' ? '#FEF08A' : '#F3F4F6',
-                            color: order.status === 'ready' ? '#A16207' : '#374151',
-                            border: order.status === 'ready' ? '1.5px solid #EAB308' : '1px solid #E5E7EB'
-                          }}
-                          onClick={() => handleUpdateStatus(order.id, 'ready', 'Ready to Serve', 80)}
-                          title="Mark dishes Ready for service"
-                        >
-                          {order.status === 'ready' ? '✓ Ready' : 'Ready'}
-                        </button>
+                        return (
+                          <div>
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(4, 1fr)',
+                                gap: 6,
+                                marginTop: 10
+                              }}
+                            >
+                              {/* 1. Accept Button -> Transitions to Cooking */}
+                              <button
+                                className="btn-secondary-pill"
+                                style={{
+                                  padding: '7px 4px',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  background: (order.status === 'cooking' || order.status === 'in-progress') ? '#E0F2FE' : '#F3F4F6',
+                                  color: (order.status === 'cooking' || order.status === 'in-progress') ? '#0284C7' : '#374151',
+                                  border: (order.status === 'cooking' || order.status === 'in-progress') ? '1.5px solid #0284C7' : '1px solid #E5E7EB'
+                                }}
+                                onClick={() => handleUpdateStatus(order.id, 'cooking', 'Cooking in Kitchen', 50)}
+                                title="Accept ticket and mark as Cooking"
+                              >
+                                {(order.status === 'cooking' || order.status === 'in-progress') ? '✓ Cooking' : 'Accept'}
+                              </button>
 
-                        {/* 3. Done Button -> Transitions to Served */}
-                        <button
-                          className="btn-primary-pill"
-                          style={{
-                            padding: '7px 4px',
-                            fontSize: 11,
-                            background: (order.status === 'served' || order.status === 'done') ? '#15803D' : '#16A34A',
-                            border: (order.status === 'served' || order.status === 'done') ? '1.5px solid #166534' : 'none',
-                            fontWeight: 700
-                          }}
-                          onClick={() => handleUpdateStatus(order.id, 'served', 'Served to Table', 100)}
-                          title="Mark as Served & Done"
-                        >
-                          {(order.status === 'served' || order.status === 'done') ? '✓ Served' : 'Done'}
-                        </button>
+                              {/* 2. Ready Button -> Transitions to Ready */}
+                              <button
+                                className="btn-secondary-pill"
+                                style={{
+                                  padding: '7px 4px',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  background: order.status === 'ready' ? '#FEF08A' : '#F3F4F6',
+                                  color: order.status === 'ready' ? '#A16207' : '#374151',
+                                  border: order.status === 'ready' ? '1.5px solid #EAB308' : '1px solid #E5E7EB'
+                                }}
+                                onClick={() => handleUpdateStatus(order.id, 'ready', 'Ready to Serve', 80)}
+                                title="Mark dishes Ready for service"
+                              >
+                                {order.status === 'ready' ? '✓ Ready' : 'Ready'}
+                              </button>
 
-                        {/* 4. Reject Button */}
-                        <button
-                          className="btn-secondary-pill"
-                          style={{ padding: '7px 4px', fontSize: 11, color: '#DC2626' }}
-                          onClick={() => {
-                            playTapSound();
-                            setRejectOrderId(order.id);
-                          }}
-                        >
-                          Reject
-                        </button>
-                      </div>
+                              {/* 3. Done Button -> Transitions to Served */}
+                              <button
+                                className="btn-primary-pill"
+                                style={{
+                                  padding: '7px 4px',
+                                  fontSize: 11,
+                                  background: (order.status === 'served' || order.status === 'done') ? '#15803D' : '#16A34A',
+                                  border: (order.status === 'served' || order.status === 'done') ? '1.5px solid #166534' : 'none',
+                                  fontWeight: 700
+                                }}
+                                onClick={() => handleUpdateStatus(order.id, 'served', 'Served to Table', 100)}
+                                title="Mark as Served & Done"
+                              >
+                                {(order.status === 'served' || order.status === 'done') ? '✓ Served' : 'Done'}
+                              </button>
+
+                              {/* 4. Reject Button */}
+                              <button
+                                className="btn-secondary-pill"
+                                style={{ padding: '7px 4px', fontSize: 11, color: '#DC2626' }}
+                                onClick={() => {
+                                  playTapSound();
+                                  setRejectOrderId(order.id);
+                                }}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                            {lockInfo.isServed && !lockInfo.isLocked && (
+                              <div style={{ marginTop: 4, textAlign: 'right', fontSize: 10, color: '#15803D', fontWeight: 500 }}>
+                                Served • Reversible for next {lockInfo.minutesRemaining}m
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()
                     )}
 
                     {/* Rejected Order indicator & Reopen button */}
