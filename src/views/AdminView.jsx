@@ -43,6 +43,7 @@ import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
 import { purgeBusinessAccountComplete, syncBusinessToCloud } from '../utils/systematicDatabase';
+import { syncMenuToCloud } from '../utils/firebaseSync';
 
 // Coupons & Offers Helpers (placed outside component for purity)
 const isOfferExpired = (offer) => {
@@ -673,10 +674,20 @@ export default function AdminView({
       prepTime: '10-12 mins'
     };
 
+    const activeBiz = getActiveBusiness();
+    const bizId = activeBiz?.id || activeBusinessId || '';
+
     const updated = [newDish, ...(menu || [])];
     setMenu(updated);
+    if (bizId) {
+      saveData(getScopedKey(STORAGE_KEYS.MENU, bizId), updated);
+      updateBusiness(bizId, { menu: updated });
+      const freshBiz = getBusinesses().find((b) => b.id === bizId);
+      if (freshBiz) syncBusinessToCloud(freshBiz).catch(() => {});
+      syncMenuToCloud(updated, bizId).catch(() => {});
+    }
     saveData(STORAGE_KEYS.MENU, updated);
-    broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated);
+    broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated, bizId);
     setShowAddDishModal(false);
     setNewDishName('');
     setNewDishPrice('');
@@ -688,10 +699,20 @@ export default function AdminView({
   const handleDeleteDish = (id) => {
     playTapSound();
     if (window.confirm('Delete this dish from the menu across all devices?')) {
+      const activeBiz = getActiveBusiness();
+      const bizId = activeBiz?.id || activeBusinessId || '';
+
       const updated = (menu || []).filter((d) => d.id !== id);
       setMenu(updated);
+      if (bizId) {
+        saveData(getScopedKey(STORAGE_KEYS.MENU, bizId), updated);
+        updateBusiness(bizId, { menu: updated });
+        const freshBiz = getBusinesses().find((b) => b.id === bizId);
+        if (freshBiz) syncBusinessToCloud(freshBiz).catch(() => {});
+        syncMenuToCloud(updated, bizId).catch(() => {});
+      }
       saveData(STORAGE_KEYS.MENU, updated);
-      broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated);
+      broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated, bizId);
       playAlertChime();
     }
   };

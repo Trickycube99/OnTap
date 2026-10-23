@@ -58,11 +58,18 @@ export const checkGuestQrAccess = () => {
   const hasQrParam = Boolean(
     urlParams.get('qr') || hashParams.get('qr')
   );
+  const hasBizParam = Boolean(
+    urlParams.get('biz') || hashParams.get('biz') ||
+    urlParams.get('b') || hashParams.get('b')
+  );
   const hasSessionQr = typeof sessionStorage !== 'undefined' && (
     sessionStorage.getItem('flowscape_guest_scanned_qr') === 'true' ||
-    Boolean(sessionStorage.getItem('flowscape_guest_table'))
+    Boolean(sessionStorage.getItem('flowscape_guest_table')) ||
+    Boolean(sessionStorage.getItem('flowscape_guest_scanned_biz'))
   );
-  return hasTableParam || hasQrParam || hasSessionQr;
+  const rawHash = (window.location.hash || '').replace(/^#\/?/, '').toLowerCase().split('?')[0];
+  const isCustomerRoute = rawHash === 'customer' || rawHash === 'chef' || rawHash === 'menu' || rawHash === 'cart';
+  return hasTableParam || hasQrParam || hasSessionQr || (hasBizParam && isCustomerRoute);
 };
 
 /**
@@ -110,15 +117,16 @@ export const getInitialBusinessId = () => {
     const hashParams = new URLSearchParams(hashQuery);
     const bizParam = urlParams.get('biz') || hashParams.get('biz') || urlParams.get('b') || hashParams.get('b');
     if (bizParam) {
+      const cleanBizId = bizParam.trim();
       const businesses = getBusinesses();
-      const match = businesses.find((b) => b.id.toLowerCase() === bizParam.toLowerCase());
-      if (match) {
-        setActiveBusiness(match.id);
-        if (typeof sessionStorage !== 'undefined') {
-          sessionStorage.setItem('flowscape_guest_scanned_biz', match.id);
-        }
-        return match.id;
+      const match = businesses.find((b) => b.id.toLowerCase() === cleanBizId.toLowerCase());
+      const resolvedId = match ? match.id : cleanBizId;
+      setActiveBusiness(resolvedId);
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('flowscape_guest_scanned_biz', resolvedId);
+        sessionStorage.setItem('flowscape_guest_scanned_qr', 'true');
       }
+      return resolvedId;
     }
     if (typeof sessionStorage !== 'undefined') {
       try {
@@ -141,10 +149,9 @@ export const getInitialBusinessId = () => {
       if (sessionBiz) {
         const businesses = getBusinesses();
         const match = businesses.find((b) => b.id === sessionBiz);
-        if (match) {
-          setActiveBusiness(match.id);
-          return match.id;
-        }
+        const resolvedId = match ? match.id : sessionBiz;
+        setActiveBusiness(resolvedId);
+        return resolvedId;
       }
     }
   }
@@ -162,7 +169,10 @@ export default function App() {
 
   // Global Shared States (Persisted in localStorage scoped by active business)
   const [menu, setMenu] = useState(() => {
-    return loadData(getScopedKey(STORAGE_KEYS.MENU, initialBizId), []);
+    const scoped = loadData(getScopedKey(STORAGE_KEYS.MENU, initialBizId), null);
+    if (Array.isArray(scoped) && scoped.length > 0) return scoped;
+    if (initialBiz?.menu && Array.isArray(initialBiz.menu) && initialBiz.menu.length > 0) return initialBiz.menu;
+    return [];
   });
   const [chef, setChef] = useState(() => loadData(getScopedKey(STORAGE_KEYS.CHEF, initialBizId), verifiedChefData));
   const [orders, setOrders] = useState(() => {
@@ -264,6 +274,7 @@ export default function App() {
     const hashParams = new URLSearchParams(hashQuery);
     const tableParam = urlParams.get('table') || hashParams.get('table') || urlParams.get('t') || hashParams.get('t');
     const qrParam = urlParams.get('qr') || hashParams.get('qr');
+    const bizParam = urlParams.get('biz') || hashParams.get('biz') || urlParams.get('b') || hashParams.get('b');
     const hasSessionQr = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('flowscape_guest_scanned_qr') === 'true';
 
     const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
@@ -271,8 +282,13 @@ export default function App() {
     const route = rawHash || rawPath;
 
     // 1. Guest scanning a table QR code: open customer dining view
-    if (tableParam || qrParam || (route === 'customer' && hasSessionQr)) {
-      return 'customer';
+    if (tableParam || qrParam || route === 'customer' || hasSessionQr || (bizParam && route !== 'admin' && route !== 'counter' && route !== 'manj')) {
+      if (route !== 'manj' && route !== 'developer') {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('flowscape_guest_scanned_qr', 'true');
+        }
+        return 'customer';
+      }
     }
 
     // 2. Developer Superadmin dashboard (strictly accessible via direct #manj link)
@@ -358,6 +374,38 @@ export default function App() {
       if (unsubscribeCloud) unsubscribeCloud();
     };
   }, []);
+
+  // React immediately whenever businesses are merged or updated from the cloud
+  useEffect(() => {
+    const handleBusinessesUpdated = (e) => {
+      const updatedBusinesses = e.detail || getBusinesses();
+      if (Array.isArray(updatedBusinesses) && updatedBusinesses.length > 0) {
+        const targetId = activeBusinessId || getInitialBusinessId();
+        const currentBiz = updatedBusinesses.find((b) => b.id.toLowerCase() === (targetId || '').toLowerCase()) || getActiveBusiness() || updatedBusinesses[0];
+        if (currentBiz) {
+          if (!activeBusinessId || activeBusinessId !== currentBiz.id) {
+            setActiveBusinessId(currentBiz.id);
+            setActiveBusiness(currentBiz.id);
+          }
+          setTheme((prev) => ({
+            ...prev,
+            restaurantName: currentBiz.name || prev.restaurantName,
+            tagline: currentBiz.tagline || prev.tagline,
+            upiId: currentBiz.upiId || prev.upiId,
+            accentColor: currentBiz.accentColor || prev.accentColor,
+            logo: currentBiz.logo !== undefined ? currentBiz.logo : prev.logo,
+            tables: Array.isArray(currentBiz.tables) && currentBiz.tables.length > 0 ? currentBiz.tables : prev.tables
+          }));
+          if (Array.isArray(currentBiz.menu) && currentBiz.menu.length > 0) {
+            setMenu((prev) => (prev.length === 0 ? currentBiz.menu : prev));
+          }
+        }
+      }
+    };
+
+    window.addEventListener('flowscape_businesses_updated', handleBusinessesUpdated);
+    return () => window.removeEventListener('flowscape_businesses_updated', handleBusinessesUpdated);
+  }, [activeBusinessId]);
 
   useEffect(() => {
     if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
@@ -1020,8 +1068,8 @@ export default function App() {
       {/* Main Full-Viewport Content Area */}
       <main className="app-main-viewport">
         <div className="app-content-container">
-          {/* Zero-State Setup Gate when No Outlets Exist Yet */}
-          {getBusinesses().length === 0 && currentRole !== 'developer' && (
+          {/* Zero-State Setup Gate when No Outlets Exist Yet (Only for unconfigured Admin) */}
+          {getBusinesses().length === 0 && currentRole === 'admin' && !checkGuestQrAccess() && !activeBusinessId && (
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -1090,7 +1138,7 @@ export default function App() {
           )}
 
           {/* Dynamic Views Rendering */}
-          {getBusinesses().length > 0 && (currentRole === 'customer' || currentRole === 'chef') && (
+          {(getBusinesses().length > 0 || Boolean(activeBusinessId) || checkGuestQrAccess()) && (currentRole === 'customer' || currentRole === 'chef') && (
             !(checkGuestQrAccess() || canReturnToAdmin || isDeveloperAuthenticated()) ? (
               <QrCodeGate
                 onReturnToAdmin={() => handleRoleSwitch('admin')}

@@ -154,7 +154,8 @@ export default function CustomerView({
   const effectiveCategory = categoryKeys.some((c) => c.id === selectedCategory) ? selectedCategory : 'All';
 
   // Filter menu
-  const filteredMenu = menu.filter((item) => {
+  const safeMenu = Array.isArray(menu) ? menu : [];
+  const filteredMenu = safeMenu.filter((item) => {
     const matchesCat = effectiveCategory === 'All' || item.category === effectiveCategory;
     const matchesVeg = !vegOnly || item.isVeg;
     const matchesSearch =
@@ -178,13 +179,13 @@ export default function CustomerView({
             (cartSubtotal * Number(activePromo.value)) / 100
           ).toFixed(2)
         )
-      : Number(Math.min(Number(activePromo.value), cartSubtotal).toFixed(2))
+      : Number(Math.min(Number(appliedPromo.value), cartSubtotal).toFixed(2))
     : 0;
   const cartTotal = Math.max(0, Number((cartSubtotal + tax - discountAmount).toFixed(2)));
   const totalItemCount = cart.reduce((acc, i) => acc + i.quantity, 0);
 
   // Suggestable item for upsell (FR-C8)
-  const suggestableItem = menu.find((item) => item.id === 3) || menu[0];
+  const suggestableItem = safeMenu.find((item) => item.id === 3) || safeMenu[0];
 
   // Find latest active customer order for this diner:
   // 1. Strictly prioritize the exact order placed by this diner in this session/device

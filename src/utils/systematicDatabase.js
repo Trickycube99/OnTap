@@ -148,15 +148,22 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
       if (cloudStaff.length > 0) {
         saveData(getScopedKey(STORAGE_KEYS.STAFF, cloudBiz.id), cloudStaff);
       }
+      if (Array.isArray(cloudBiz.menu) && cloudBiz.menu.length > 0) {
+        saveData(getScopedKey(STORAGE_KEYS.MENU, cloudBiz.id), cloudBiz.menu);
+      }
       hasChanges = true;
     } else {
       // Existing business - merge cloud updates
       const local = merged[localIndex];
       const mergedStaff = cloudStaff.length > 0 ? cloudStaff : (Array.isArray(local.staff) ? local.staff : []);
+      const mergedMenu = (Array.isArray(cloudBiz.menu) && cloudBiz.menu.length > 0)
+        ? cloudBiz.menu
+        : (Array.isArray(local.menu) ? local.menu : []);
       const updated = {
         ...local,
         ...cloudBiz,
         staff: mergedStaff,
+        menu: mergedMenu,
         status: cloudBiz.status || local.status,
         emailVerified: cloudBiz.emailVerified !== undefined ? cloudBiz.emailVerified : local.emailVerified,
         owner: {
@@ -173,6 +180,9 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
 
       if (cloudStaff.length > 0) {
         saveData(getScopedKey(STORAGE_KEYS.STAFF, cloudBiz.id), cloudStaff);
+      }
+      if (Array.isArray(cloudBiz.menu) && cloudBiz.menu.length > 0) {
+        saveData(getScopedKey(STORAGE_KEYS.MENU, cloudBiz.id), cloudBiz.menu);
       }
 
       if (JSON.stringify(updated) !== JSON.stringify(local)) {
