@@ -519,9 +519,9 @@ export default function AdminView({
     return new Date();
   };
 
-  // Valid orders (excluding rejected orders)
+  // Valid orders (strictly excluding rejected and cancelled orders from expected amounts)
   const validOrders = useMemo(() => {
-    return (orders || []).filter((o) => o && o.status !== 'rejected');
+    return (orders || []).filter((o) => o && o.status !== 'rejected' && o.status !== 'cancelled');
   }, [orders]);
 
   // Today's orders (local calendar day: 00:00:00 to 23:59:59)

@@ -344,9 +344,10 @@ export function createStatutoryComplianceTombstone(business, options = {}) {
     expenses = []
   } = options;
 
-  const totalOrdersCount = orders.length > 0 ? orders.length : (business.totalOrders || 0);
-  const totalGmv = orders.length > 0
-    ? orders.reduce((sum, o) => sum + (Number(o.total) || Number(o.price) || 0), 0)
+  const nonRejectedOrders = orders.filter((o) => o && o.status !== 'rejected' && o.status !== 'cancelled');
+  const totalOrdersCount = nonRejectedOrders.length > 0 ? nonRejectedOrders.length : (business.totalOrders || 0);
+  const totalGmv = nonRejectedOrders.length > 0
+    ? nonRejectedOrders.reduce((sum, o) => sum + (Number(o.total) || Number(o.price) || 0), 0)
     : (business.gmv || 0);
 
   // Calculate estimated statutory GST liability (5% restaurant composite GST)

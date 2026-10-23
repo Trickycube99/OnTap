@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Layers,
   CheckCircle2,
@@ -305,18 +305,58 @@ export default function CounterView({
     return unsubscribe;
   }, [setStaff, activeBusinessId]);
 
-  // Calculate Expected Totals from recorded orders for today
-  const expectedCash = orders
-    .filter((o) => o.paymentMode.toLowerCase().includes('counter') || o.paymentMode.toLowerCase().includes('cash'))
-    .reduce((sum, o) => sum + o.total, 0);
+  // Helper to extract order creation date reliably
+  const getOrderDate = (order) => {
+    if (!order) return new Date();
+    if (order.createdAt) {
+      const d = new Date(order.createdAt);
+      if (!isNaN(d.getTime())) return d;
+    }
+    if (order.timestamp) {
+      const d = new Date(order.timestamp);
+      if (!isNaN(d.getTime())) return d;
+    }
+    if (typeof order.id === 'string' && order.id.startsWith('ord-')) {
+      const ts = parseInt(order.id.replace('ord-', ''), 10);
+      if (!isNaN(ts) && ts > 1000000000000) {
+        return new Date(ts);
+      }
+    }
+    return new Date();
+  };
 
-  const expectedCard = orders
-    .filter((o) => o.paymentMode.toLowerCase().includes('card'))
-    .reduce((sum, o) => sum + o.total, 0);
+  // Valid orders for today: strictly exclude rejected and cancelled orders from expected totals
+  const validTodayOrders = useMemo(() => {
+    const now = new Date();
+    return (orders || []).filter((o) => {
+      if (!o || o.status === 'rejected' || o.status === 'cancelled') return false;
+      const d = getOrderDate(o);
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      );
+    });
+  }, [orders]);
 
-  const expectedUpi = orders
-    .filter((o) => o.paymentMode.toLowerCase().includes('upi'))
-    .reduce((sum, o) => sum + o.total, 0);
+  // Calculate Expected Totals strictly from valid non-rejected recorded orders for today
+  const expectedCash = useMemo(() => {
+    return validTodayOrders
+      .filter((o) => (o.paymentMode || '').toLowerCase().includes('counter') || (o.paymentMode || '').toLowerCase().includes('cash'))
+      .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  }, [validTodayOrders]);
+
+  const expectedCard = useMemo(() => {
+    return validTodayOrders
+      .filter((o) => (o.paymentMode || '').toLowerCase().includes('card'))
+      .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  }, [validTodayOrders]);
+
+  const expectedUpi = useMemo(() => {
+    return validTodayOrders
+      .filter((o) => (o.paymentMode || '').toLowerCase().includes('upi'))
+      .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  }, [validTodayOrders]);
 
   const totalExpected = expectedCash + expectedCard + expectedUpi;
 
