@@ -24,7 +24,7 @@ import {
   ArrowLeftRight,
   X
 } from 'lucide-react';
-import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
+import { playTapSound, playSuccessChime, playAlertChime, playNewOrderChime } from '../utils/audio';
 import PrinterModal from '../components/PrinterModal';
 import WhatsAppAlertModal from '../components/WhatsAppAlertModal';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
@@ -319,7 +319,22 @@ export default function CounterView({
       if (!msg) return;
       if (msg.businessId && msg.businessId !== activeBusinessId) return;
 
-      if (msg.type === SYNC_EVENTS.CALL_SERVER) {
+      if (msg.type === SYNC_EVENTS.NEW_ORDER) {
+        const incoming = Array.isArray(msg.payload) ? msg.payload : [msg.payload];
+        if (setOrders) {
+          setOrders((prev) => {
+            const existingIds = new Set(prev.map((o) => o.id));
+            const newOrders = incoming.filter((item) => item && item.id && !existingIds.has(item.id));
+            if (newOrders.length === 0) return prev;
+            playNewOrderChime();
+            return [...newOrders, ...prev];
+          });
+        }
+      } else if (msg.type === SYNC_EVENTS.ORDER_STATUS_UPDATED && msg.payload?.id) {
+        if (setOrders) {
+          setOrders((prev) => prev.map((o) => (o.id === msg.payload.id ? { ...o, ...msg.payload } : o)));
+        }
+      } else if (msg.type === SYNC_EVENTS.CALL_SERVER) {
         setServerAlert(msg.payload);
         playAlertChime();
       } else if (msg.type === SYNC_EVENTS.STAFF_UPDATED) {
@@ -331,7 +346,46 @@ export default function CounterView({
       }
     }, activeBusinessId);
     return unsubscribe;
-  }, [setStaff, activeBusinessId]);
+  }, [setOrders, setStaff, activeBusinessId]);
+
+  // Real-time Storage Sync & Ultra-Fast Active Reconciliation (Ensures zero-refresh instant updates)
+  useEffect(() => {
+    if (!activeBusinessId || !setOrders) return;
+    const orderKey = getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId);
+
+    const syncFromStorage = () => {
+      try {
+        const raw = localStorage.getItem(orderKey);
+        if (!raw) return;
+        const storedOrders = JSON.parse(raw);
+        if (!Array.isArray(storedOrders) || storedOrders.length === 0) return;
+
+        setOrders((prev) => {
+          const existingIds = new Set(prev.map((o) => o.id));
+          const missing = storedOrders.filter((o) => o && o.id && !existingIds.has(o.id));
+          if (missing.length === 0) return prev;
+          playNewOrderChime();
+          return [...missing, ...prev];
+        });
+      } catch {}
+    };
+
+    const handleStorageEvent = (e) => {
+      if (!e.key) return;
+      if (e.key === orderKey || e.key.startsWith('flowscape_order_ping_') || e.key === 'flowscape_sync_event_ping') {
+        syncFromStorage();
+      }
+    };
+    window.addEventListener('storage', handleStorageEvent);
+
+    // High-speed reconciliation interval (1.5s): guarantees zero missed orders during high-volume bursts
+    const reconcileTimer = setInterval(syncFromStorage, 1500);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageEvent);
+      clearInterval(reconcileTimer);
+    };
+  }, [activeBusinessId, setOrders]);
 
   // Helper to extract order creation date reliably
   const getOrderDate = (order) => {

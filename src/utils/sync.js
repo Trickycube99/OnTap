@@ -82,6 +82,14 @@ export function broadcastSyncEvent(type, payload = {}, targetBusinessId = null) 
   // 2. LocalStorage event bus fallback for cross-window reliability on same device
   try {
     localStorage.setItem('flowscape_sync_event_ping', JSON.stringify(eventMessage));
+    // For NEW_ORDER, also write a dedicated uniquely-keyed order ping so burst/concurrent orders never overwrite each other
+    if (type === SYNC_EVENTS.NEW_ORDER) {
+      const pingId = `flowscape_order_ping_${payload?.id || Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      localStorage.setItem(pingId, JSON.stringify(eventMessage));
+      setTimeout(() => {
+        try { localStorage.removeItem(pingId); } catch {}
+      }, 8000);
+    }
   } catch {
     // Ignore storage quota warnings
   }
@@ -140,7 +148,8 @@ if (typeof window !== 'undefined') {
   }
 
   window.addEventListener('storage', (e) => {
-    if (e.key === 'flowscape_sync_event_ping' && e.newValue) {
+    if (!e.key || !e.newValue) return;
+    if (e.key === 'flowscape_sync_event_ping' || e.key.startsWith('flowscape_order_ping_')) {
       try {
         const parsed = JSON.parse(e.newValue);
         dispatchToSubscribers(parsed);

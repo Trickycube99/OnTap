@@ -329,7 +329,7 @@ export function subscribeToCloudOrders(businessId, onOrdersUpdated, onStatusUpda
   try {
     const ordersCol = collection(database, 'restaurant_orders');
     // STRICT MULTI-TENANT QUERY: Only fetch orders for target business
-    const q = query(ordersCol, where('businessId', '==', targetBizId), limit(100));
+    const q = query(ordersCol, where('businessId', '==', targetBizId), limit(500));
 
     let isInitial = true;
 
@@ -337,6 +337,7 @@ export function subscribeToCloudOrders(businessId, onOrdersUpdated, onStatusUpda
       q,
       (snapshot) => {
         updateSyncState({ status: 'connected', error: null, errorCode: null });
+        const addedOrders = [];
         snapshot.docChanges().forEach((change) => {
           const data = change.doc.data();
           if (!data || data.businessId !== targetBizId) return;
@@ -347,11 +348,20 @@ export function subscribeToCloudOrders(businessId, onOrdersUpdated, onStatusUpda
           };
 
           if (change.type === 'added') {
-            if (onOrdersUpdated) onOrdersUpdated(normalizedOrder, isInitial);
+            addedOrders.push(normalizedOrder);
           } else if (change.type === 'modified') {
             if (onStatusUpdated) onStatusUpdated(normalizedOrder);
           }
         });
+
+        if (addedOrders.length > 0 && onOrdersUpdated) {
+          if (addedOrders.length === 1) {
+            onOrdersUpdated(addedOrders[0], isInitial);
+          } else {
+            onOrdersUpdated(addedOrders, isInitial);
+          }
+        }
+
         isInitial = false;
       },
       (error) => {

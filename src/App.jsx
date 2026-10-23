@@ -379,7 +379,21 @@ export default function App() {
 
   useEffect(() => {
     if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
-      saveData(getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId), orders);
+      if (!activeBusinessId) return;
+      const orderKey = getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId);
+      const existingInStorage = loadData(orderKey, []);
+      if (Array.isArray(existingInStorage) && existingInStorage.length > 0) {
+        const mergedMap = new Map();
+        (orders || []).forEach((o) => { if (o && o.id) mergedMap.set(o.id, o); });
+        existingInStorage.forEach((o) => {
+          if (o && o.id && !mergedMap.has(o.id)) {
+            mergedMap.set(o.id, o);
+          }
+        });
+        saveData(orderKey, Array.from(mergedMap.values()));
+      } else {
+        saveData(orderKey, orders);
+      }
     }
   }, [orders, activeBusinessId]);
 
@@ -528,9 +542,12 @@ export default function App() {
       }
 
       if (msg.type === SYNC_EVENTS.NEW_ORDER) {
+        const incoming = Array.isArray(msg.payload) ? msg.payload : [msg.payload];
         setOrders((prev) => {
-          if (prev.some((o) => o.id === msg.payload.id)) return prev;
-          return [msg.payload, ...prev];
+          const existingIds = new Set(prev.map((o) => o.id));
+          const newOrders = incoming.filter((item) => item && item.id && !existingIds.has(item.id));
+          if (newOrders.length === 0) return prev;
+          return [...newOrders, ...prev];
         });
         if (!isSoundMuted && !msg.isInitial && currentRole === 'counter') {
           playNewOrderChime();
@@ -599,6 +616,39 @@ export default function App() {
     }, activeBusinessId);
 
     return unsubscribe;
+  }, [activeBusinessId, currentRole, isSoundMuted]);
+
+  // Real-time Storage Event Listener: Synchronize orders instantly across tabs/windows
+  useEffect(() => {
+    if (!activeBusinessId) return;
+    const orderKey = getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId);
+
+    const handleStorageChange = (e) => {
+      if (!e.key) return;
+      if (e.key === orderKey || e.key.startsWith('flowscape_order_ping_') || e.key === 'flowscape_sync_event_ping') {
+        try {
+          const freshOrders = loadData(orderKey, []);
+          if (Array.isArray(freshOrders)) {
+            setOrders((prev) => {
+              const existingIds = new Set(prev.map((o) => o.id));
+              const missing = freshOrders.filter((o) => o && o.id && !existingIds.has(o.id));
+              if (missing.length === 0) {
+                const prevMap = new Map(prev.map((o) => [o.id, `${o.status}-${o.paymentStatus}`]));
+                const hasChange = freshOrders.some((o) => o && prevMap.get(o.id) !== `${o.status}-${o.paymentStatus}`);
+                return hasChange ? freshOrders : prev;
+              }
+              if (currentRole === 'counter' && !isSoundMuted) {
+                playNewOrderChime();
+              }
+              return [...missing, ...prev];
+            });
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [activeBusinessId, currentRole, isSoundMuted]);
 
 
@@ -767,7 +817,22 @@ export default function App() {
       return;
     }
     const orderWithBiz = { ...newOrder, businessId: activeBusinessId };
-    setOrders((prev) => [orderWithBiz, ...prev]);
+
+    // Atomically persist to localStorage so concurrent tabs receive it immediately
+    if (activeBusinessId) {
+      try {
+        const orderKey = getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId);
+        const existing = loadData(orderKey, []);
+        if (!existing.some((o) => o.id === orderWithBiz.id)) {
+          saveData(orderKey, [orderWithBiz, ...existing]);
+        }
+      } catch {}
+    }
+
+    setOrders((prev) => {
+      if (prev.some((o) => o.id === orderWithBiz.id)) return prev;
+      return [orderWithBiz, ...prev];
+    });
     // Celebratory confetti
     confetti({
       particleCount: 80,

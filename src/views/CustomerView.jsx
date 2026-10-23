@@ -431,7 +431,7 @@ export default function CustomerView({
       return;
     }
     const orderNum = Math.floor(1000 + Math.random() * 9000);
-    const newOrderId = `ORD-${orderNum}`;
+    const newOrderId = `ORD-${Date.now().toString(36).toUpperCase()}-${orderNum}`;
     const finalCustomerName = customerName.trim();
     const newOrder = {
       id: newOrderId,
