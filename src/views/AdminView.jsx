@@ -499,15 +499,86 @@ export default function AdminView({
     setTimeout(() => setCustomizerSaveSuccess(false), 3500);
   };
 
-  // Sales KPIs calculation in ₹ (System Expected Numbers)
-  const totalOrdersCount = orders.length;
-  const todayGrossSales = orders.reduce((sum, o) => sum + o.total, 0);
-  const weekSales = todayGrossSales * 5.4;
-  const monthSales = todayGrossSales * 24.8;
+  // Helper to extract a reliable date from order records
+  const getOrderDate = (order) => {
+    if (!order) return new Date();
+    if (order.createdAt) {
+      const d = new Date(order.createdAt);
+      if (!isNaN(d.getTime())) return d;
+    }
+    if (order.timestamp) {
+      const d = new Date(order.timestamp);
+      if (!isNaN(d.getTime())) return d;
+    }
+    if (typeof order.id === 'string' && order.id.startsWith('ord-')) {
+      const ts = parseInt(order.id.replace('ord-', ''), 10);
+      if (!isNaN(ts) && ts > 1000000000000) {
+        return new Date(ts);
+      }
+    }
+    return new Date();
+  };
 
-  const cashSplit = orders.filter((o) => o.paymentMode.toLowerCase().includes('cash') || o.paymentMode.toLowerCase().includes('counter')).reduce((s, o) => s + o.total, 0);
-  const cardSplit = orders.filter((o) => o.paymentMode.toLowerCase().includes('card')).reduce((s, o) => s + o.total, 0);
-  const upiSplit = orders.filter((o) => o.paymentMode.toLowerCase().includes('upi')).reduce((s, o) => s + o.total, 0);
+  // Valid orders (excluding rejected orders)
+  const validOrders = useMemo(() => {
+    return (orders || []).filter((o) => o && o.status !== 'rejected');
+  }, [orders]);
+
+  // Today's orders (local calendar day: 00:00:00 to 23:59:59)
+  const todayOrders = useMemo(() => {
+    const now = new Date();
+    return validOrders.filter((o) => {
+      const d = getOrderDate(o);
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      );
+    });
+  }, [validOrders]);
+
+  // This Week's orders (current calendar week: Monday 00:00:00 to Sunday 23:59:59, resetting every week)
+  const weekOrders = useMemo(() => {
+    const now = new Date();
+    const currentDay = now.getDay();
+    const distanceToMonday = (currentDay + 6) % 7;
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday, 0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
+    return validOrders.filter((o) => {
+      const d = getOrderDate(o);
+      return d >= startOfWeek && d <= endOfWeek;
+    });
+  }, [validOrders]);
+
+  // This Month's orders (1st of current month to end of month, resetting every month)
+  const monthOrders = useMemo(() => {
+    const now = new Date();
+    return validOrders.filter((o) => {
+      const d = getOrderDate(o);
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth()
+      );
+    });
+  }, [validOrders]);
+
+  // Real Sales KPIs calculation in ₹ (starts at 0 and increments with real order data)
+  const totalOrdersCount = todayOrders.length;
+  const todayGrossSales = useMemo(() => {
+    return todayOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  }, [todayOrders]);
+
+  const weekSales = useMemo(() => {
+    return weekOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  }, [weekOrders]);
+
+  const monthSales = useMemo(() => {
+    return monthOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  }, [monthOrders]);
+
+  const cashSplit = todayOrders.filter((o) => (o.paymentMode || '').toLowerCase().includes('cash') || (o.paymentMode || '').toLowerCase().includes('counter')).reduce((s, o) => s + (Number(o.total) || 0), 0);
+  const cardSplit = todayOrders.filter((o) => (o.paymentMode || '').toLowerCase().includes('card')).reduce((s, o) => s + (Number(o.total) || 0), 0);
+  const upiSplit = todayOrders.filter((o) => (o.paymentMode || '').toLowerCase().includes('upi')).reduce((s, o) => s + (Number(o.total) || 0), 0);
 
   // EOD Closing Reconciliation & Staff Calculated Filled Amounts
   const todayDateStr = new Date().toLocaleDateString();
@@ -1680,7 +1751,9 @@ export default function AdminView({
               <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>
                 ₹{weekSales.toFixed(0)}
               </div>
-              <div style={{ fontSize: 10, color: '#16A34A', marginTop: 4 }}>+18% vs last wk</div>
+              <div style={{ fontSize: 10, color: '#16A34A', marginTop: 4 }}>
+                {weekOrders.length} {weekOrders.length === 1 ? 'order' : 'orders'} this week
+              </div>
             </div>
 
             <div className="ios-card" style={{ padding: '12px 10px' }}>
@@ -1688,7 +1761,9 @@ export default function AdminView({
               <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>
                 ₹{monthSales.toFixed(0)}
               </div>
-              <div style={{ fontSize: 10, color: '#16A34A', marginTop: 4 }}>Target on track</div>
+              <div style={{ fontSize: 10, color: '#16A34A', marginTop: 4 }}>
+                {monthOrders.length} {monthOrders.length === 1 ? 'order' : 'orders'} this month
+              </div>
             </div>
           </div>
 
@@ -1734,7 +1809,7 @@ export default function AdminView({
 
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
-                  <span>Card POS Swipe (Pine Labs)</span>
+                  <span>Card POS Swipe</span>
                   <div>
                     {hasEodSubmitted && (
                       <span style={{ color: 'var(--primary-blue)', fontWeight: 700, marginRight: 8 }}>
