@@ -116,13 +116,43 @@ export default function CustomerView({
     }
   }, [dinerNameKey, dinerPhoneKey, activeBusinessId]);
 
-  // Scoped keys to track all tickets ordered by this diner session on this table
-  const dinerOrderIdsKey = `ontap_${activeBusinessId}_customer_order_ids`;
-  const dinerLegacyOrderKey = `ontap_${activeBusinessId}_last_order_id`;
+  // Scoped key to track all tickets ordered by this diner session on this table in this browser tab
+  const dinerOrderIdsKey = `ontap_${activeBusinessId || 'default'}_customer_order_ids`;
+  const dinerLegacyOrderKey = `ontap_${activeBusinessId || 'default'}_last_order_id`;
+
+  // Detect if this page load is from a newly scanned table QR code
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+      const hashParams = new URLSearchParams(hashQuery);
+      const isFreshQrScan = urlParams.get('qr') === 'true' || hashParams.get('qr') === 'true';
+
+      if (isFreshQrScan) {
+        // Physical QR code was scanned again: clear old completed tickets to start fresh!
+        sessionStorage.removeItem(dinerOrderIdsKey);
+        sessionStorage.removeItem(dinerLegacyOrderKey);
+        sessionStorage.removeItem('ontap_customer_last_order_id');
+        try {
+          localStorage.removeItem(dinerOrderIdsKey);
+          localStorage.removeItem(dinerLegacyOrderKey);
+        } catch (e) {}
+        setPlacedOrderIds([]);
+
+        // Clean up ?qr=true from the address bar so normal page refreshes in this tab retain their tickets
+        try {
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.delete('qr');
+          window.history.replaceState(null, '', currentUrl.toString());
+        } catch (e) {}
+      }
+    }
+  }, [dinerOrderIdsKey, dinerLegacyOrderKey]);
+
   const [placedOrderIds, setPlacedOrderIds] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
-        const raw = sessionStorage.getItem(dinerOrderIdsKey) || localStorage.getItem(dinerOrderIdsKey);
+        const raw = sessionStorage.getItem(dinerOrderIdsKey);
         if (raw) {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -133,7 +163,6 @@ export default function CustomerView({
       const legacy =
         sessionStorage.getItem(dinerLegacyOrderKey) ||
         sessionStorage.getItem('ontap_customer_last_order_id') ||
-        localStorage.getItem(dinerLegacyOrderKey) ||
         '';
       return legacy ? [legacy] : [];
     }
@@ -240,23 +269,24 @@ export default function CustomerView({
   }, [upsellPairingId, safeMenu]);
 
   // Find all orders placed by this diner across rounds on this table:
-  // 1. Match all order IDs explicitly placed by this diner session on this table
-  // 2. Supplement with any active in-progress table orders
+  // All ordered tickets are retained in the live status stack (even when served)
+  // until the tab is closed or the QR code is scanned again!
   const customerOrders = useMemo(() => {
     let matched = [];
     if (placedOrderIds.length > 0) {
-      matched = orders.filter((o) => placedOrderIds.includes(o.id) && o.table === activeTable);
+      // Retain all tickets placed by this diner session regardless of status (received, cooking, ready, served, done, rejected)
+      matched = orders.filter((o) => placedOrderIds.includes(o.id));
     }
     if (matched.length === 0) {
       matched = orders.filter(
-        (o) => o.table === activeTable && (o.status === 'received' || o.status === 'cooking' || o.status === 'ready' || o.status === 'in-progress')
+        (o) => o.table === activeTable && (o.status === 'received' || o.status === 'cooking' || o.status === 'ready' || o.status === 'in-progress' || o.status === 'served' || o.status === 'done' || o.status === 'rejected')
       );
     } else {
-      // If there are other active orders on this table not in placedOrderIds (e.g. concurrent ordering on same table)
+      // Supplement with any concurrent orders on this table
       const extra = orders.filter(
         (o) => o.table === activeTable &&
-        (o.status === 'received' || o.status === 'cooking' || o.status === 'ready' || o.status === 'in-progress') &&
-        !matched.some((m) => m.id === o.id)
+        !matched.some((m) => m.id === o.id) &&
+        (o.status === 'received' || o.status === 'cooking' || o.status === 'ready' || o.status === 'in-progress' || o.status === 'served' || o.status === 'done')
       );
       matched = [...matched, ...extra];
     }
@@ -304,25 +334,28 @@ export default function CustomerView({
         if (typeof window !== 'undefined') {
           if (next.length > 0) {
             sessionStorage.setItem(dinerOrderIdsKey, JSON.stringify(next));
-            localStorage.setItem(dinerOrderIdsKey, JSON.stringify(next));
             sessionStorage.setItem(dinerLegacyOrderKey, next[0]);
           } else {
             sessionStorage.removeItem(dinerOrderIdsKey);
-            localStorage.removeItem(dinerOrderIdsKey);
             sessionStorage.removeItem(dinerLegacyOrderKey);
             sessionStorage.removeItem('ontap_customer_last_order_id');
-            localStorage.removeItem(dinerLegacyOrderKey);
           }
+          try {
+            localStorage.removeItem(dinerOrderIdsKey);
+            localStorage.removeItem(dinerLegacyOrderKey);
+          } catch (e) {}
         }
         return next;
       });
     } else {
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem(dinerOrderIdsKey);
-        localStorage.removeItem(dinerOrderIdsKey);
         sessionStorage.removeItem(dinerLegacyOrderKey);
         sessionStorage.removeItem('ontap_customer_last_order_id');
-        localStorage.removeItem(dinerLegacyOrderKey);
+        try {
+          localStorage.removeItem(dinerOrderIdsKey);
+          localStorage.removeItem(dinerLegacyOrderKey);
+        } catch (e) {}
       }
       setPlacedOrderIds([]);
       if (setActiveTab) setActiveTab('menu');
@@ -539,20 +572,23 @@ export default function CustomerView({
     // 1. Local state update
     onPlaceOrder(newOrder);
 
-    // Save this customer's exact order ID to session and local storage
+    // Save this diner's placed tickets strictly to sessionStorage (retained across refreshes, cleared when tab is closed)
     if (typeof window !== 'undefined') {
       try {
-        const existingRaw = sessionStorage.getItem(dinerOrderIdsKey) || localStorage.getItem(dinerOrderIdsKey);
+        const existingRaw = sessionStorage.getItem(dinerOrderIdsKey);
         const existingList = existingRaw ? JSON.parse(existingRaw) : [];
         const nextList = [newOrderId, ...(Array.isArray(existingList) ? existingList.filter((id) => id !== newOrderId) : [])];
         sessionStorage.setItem(dinerOrderIdsKey, JSON.stringify(nextList));
-        localStorage.setItem(dinerOrderIdsKey, JSON.stringify(nextList));
+        sessionStorage.setItem(dinerLegacyOrderKey, newOrderId);
+        sessionStorage.setItem('ontap_customer_last_order_id', newOrderId);
+        // Ensure legacy localStorage doesn't bleed across browser tabs
+        try {
+          localStorage.removeItem(dinerOrderIdsKey);
+          localStorage.removeItem(dinerLegacyOrderKey);
+        } catch (e) {}
       } catch (e) {
         // ignore
       }
-      sessionStorage.setItem(dinerLegacyOrderKey, newOrderId);
-      sessionStorage.setItem('ontap_customer_last_order_id', newOrderId);
-      localStorage.setItem(dinerLegacyOrderKey, newOrderId);
     }
     setPlacedOrderIds((prev) => [newOrderId, ...prev.filter((id) => id !== newOrderId)]);
 
@@ -799,12 +835,32 @@ export default function CustomerView({
 
   // VIEW 1: LIVE ORDER TRACKING TAB (FR-C6)
   if (activeTab === 'track') {
-    const totalDishesCount = customerOrders.reduce(
-      (sum, ord) => sum + (ord.items || []).reduce((itemSum, item) => itemSum + item.quantity, 0),
-      0
-    );
-    const grandTotal = customerOrders.reduce((sum, ord) => sum + (Number(ord.total) || 0), 0);
-    const activeTicketsCount = customerOrders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length;
+    // Final Bill Calculations:
+    // Added amount of all tickets minus rejected orders minus already paid by UPI
+    const grossTotal = customerOrders.reduce((sum, ord) => sum + (Number(ord.total) || 0), 0);
+    const rejectedTotal = customerOrders
+      .filter((ord) => ord.status === 'rejected')
+      .reduce((sum, ord) => sum + (Number(ord.total) || 0), 0);
+    const acceptedTotal = Math.max(0, grossTotal - rejectedTotal);
+    const upiPaidTotal = customerOrders
+      .filter((ord) => {
+        if (ord.status === 'rejected') return false;
+        return (
+          ord.paymentMode === 'UPI Instant QR' ||
+          (ord.paymentStatus && ord.paymentStatus.toLowerCase().includes('upi') && ord.paymentStatus.toLowerCase().includes('paid')) ||
+          (ord.paymentMode && ord.paymentMode.toLowerCase().includes('upi') && !ord.paymentStatus?.toLowerCase().includes('pending'))
+        );
+      })
+      .reduce((sum, ord) => sum + (Number(ord.total) || 0), 0);
+    const finalBillDue = Math.max(0, acceptedTotal - upiPaidTotal);
+
+    const totalDishesCount = customerOrders
+      .filter((ord) => ord.status !== 'rejected')
+      .reduce((sum, ord) => sum + (ord.items || []).reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
+
+    const activeTicketsCount = customerOrders.filter(
+      (o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected'
+    ).length;
 
     return (
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 110 }}>
@@ -1036,16 +1092,34 @@ export default function CustomerView({
                           : (language === 'hi' ? 'ऑर्डर अस्वीकृत (Rejected)' : 'Order Rejected')}
                       </span>
 
-                      <div
-                        style={{
-                          fontSize: 15,
-                          fontWeight: 700,
-                          color: order.status === 'rejected' ? '#DC2626' : 'var(--primary-blue)',
-                          marginTop: 4
-                        }}
-                      >
-                        ₹{(Number(order.total) || 0).toFixed(0)}
-                      </div>
+                      {order.status === 'rejected' ? (
+                        <div style={{ textAlign: 'right', marginTop: 4 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: '#DC2626', textDecoration: 'line-through' }}>
+                            ₹{(Number(order.total) || 0).toFixed(0)}
+                          </div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#DC2626' }}>
+                            {language === 'hi' ? 'अस्वीकृत (हटाया गया)' : 'Excluded (-₹0)'}
+                          </div>
+                        </div>
+                      ) : (order.paymentMode === 'UPI Instant QR' || (order.paymentStatus && order.paymentStatus.toLowerCase().includes('upi') && order.paymentStatus.toLowerCase().includes('paid')) || (order.paymentMode && order.paymentMode.toLowerCase().includes('upi') && !order.paymentStatus?.toLowerCase().includes('pending'))) ? (
+                        <div style={{ textAlign: 'right', marginTop: 4 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: '#15803D' }}>
+                            ₹{(Number(order.total) || 0).toFixed(0)}
+                          </div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#15803D' }}>
+                            {language === 'hi' ? 'UPI भुगतान पूर्ण ✓' : 'Paid by UPI ✓'}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: 'right', marginTop: 4 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--primary-blue)' }}>
+                            ₹{(Number(order.total) || 0).toFixed(0)}
+                          </div>
+                          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)' }}>
+                            {language === 'hi' ? 'काउंटर पर देय' : 'Pay at Counter'}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1382,31 +1456,18 @@ export default function CustomerView({
                     </div>
 
                     {(order.status === 'served' || order.status === 'done') && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button
-                          type="button"
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--text-muted)',
-                            fontSize: 11,
-                            textDecoration: 'underline',
-                            cursor: 'pointer',
-                            padding: '2px 4px'
-                          }}
-                          onClick={() => handleDismissOrder(order.id)}
-                        >
-                          {language === 'hi' ? 'यह टिकट हटाएं' : 'Dismiss ticket'}
-                        </button>
-                      </div>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#15803D', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <CheckCircle2 size={13} color="#15803D" />
+                        <span>{language === 'hi' ? 'परोस दिया गया' : 'Served to Table'}</span>
+                      </span>
                     )}
                   </div>
                 </div>
               );
             })}
 
-            {/* Combined Table Summary Card when multiple tickets are ordered */}
-            {customerOrders.length > 1 && (
+            {/* Final Table Bill Summary Card */}
+            {customerOrders.length > 0 && (
               <div
                 style={{
                   background: 'linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%)',
@@ -1417,62 +1478,137 @@ export default function CustomerView({
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {language === 'hi' ? 'टेबल कुल सारांश (सभी टिकट)' : 'Table Orders Summary'}
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {language === 'hi' ? 'टेबल अंतिम बिल सारांश' : 'Final Table Bill Summary'}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {customerOrders.length} {customerOrders.length > 1 ? 'tickets ordered' : 'ticket ordered'} • {totalDishesCount} dishes accepted
+                    </div>
                   </div>
                   <span
                     style={{
-                      background: '#DBEAFE',
-                      color: '#1E40AF',
-                      fontSize: 11,
+                      background: finalBillDue === 0 && upiPaidTotal > 0 ? '#DCFCE7' : '#DBEAFE',
+                      color: finalBillDue === 0 && upiPaidTotal > 0 ? '#15803D' : '#1E40AF',
+                      border: finalBillDue === 0 && upiPaidTotal > 0 ? '1px solid #86EFAC' : '1px solid #BFDBFE',
+                      fontSize: 11.5,
                       fontWeight: 700,
-                      padding: '3px 8px',
+                      padding: '3px 9px',
                       borderRadius: 12
                     }}
                   >
-                    {customerOrders.length} {language === 'hi' ? 'टिकट' : 'Tickets'} • {totalDishesCount} {language === 'hi' ? 'व्यंजन' : 'Dishes'}
+                    {finalBillDue === 0 && upiPaidTotal > 0
+                      ? (language === 'hi' ? 'पूर्ण भुगतान (UPI) ✓' : 'Fully Paid (UPI) ✓')
+                      : (language === 'hi' ? 'काउंटर पर देय' : 'Pay at Counter')}
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-                  {customerOrders.map((ord, idx) => (
-                    <div
-                      key={ord.id}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontSize: 12.5,
-                        color: 'var(--text-secondary)'
-                      }}
-                    >
-                      <span>
-                        Ticket #{customerOrders.length - idx} (Order #{ord.orderNumber || ord.id.replace(/\D/g, '').slice(-4)})
-                        <span style={{ fontSize: 11, marginLeft: 6, color: ord.status === 'ready' ? '#A16207' : ord.status === 'cooking' ? '#B45309' : ord.status === 'served' ? '#15803D' : ord.status === 'received' ? '#1D4ED8' : '#DC2626' }}>
-                          • {ord.status === 'ready' ? 'Ready' : ord.status === 'cooking' ? 'Cooking' : ord.status === 'served' ? 'Served' : ord.status === 'received' ? 'Received' : 'Rejected'}
-                        </span>
-                      </span>
-                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                        ₹{(Number(ord.total) || 0).toFixed(0)}
-                      </span>
+                {/* Per-ticket breakdown */}
+                {customerOrders.length > 1 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                    {customerOrders.map((ord, idx) => {
+                      const isRej = ord.status === 'rejected';
+                      const isUpi = !isRej && (
+                        ord.paymentMode === 'UPI Instant QR' ||
+                        (ord.paymentStatus && ord.paymentStatus.toLowerCase().includes('upi') && ord.paymentStatus.toLowerCase().includes('paid')) ||
+                        (ord.paymentMode && ord.paymentMode.toLowerCase().includes('upi') && !ord.paymentStatus?.toLowerCase().includes('pending'))
+                      );
+
+                      return (
+                        <div
+                          key={ord.id}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            fontSize: 12.5,
+                            color: isRej ? '#9CA3AF' : 'var(--text-secondary)',
+                            textDecoration: isRej ? 'line-through' : 'none',
+                            padding: '3px 0'
+                          }}
+                        >
+                          <div>
+                            <span>Ticket #{customerOrders.length - idx} (Order #{ord.orderNumber || ord.id.replace(/\D/g, '').slice(-4)})</span>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                marginLeft: 6,
+                                fontWeight: 600,
+                                color: isRej ? '#DC2626' : isUpi ? '#15803D' : ord.status === 'ready' ? '#A16207' : ord.status === 'cooking' ? '#B45309' : ord.status === 'served' ? '#15803D' : '#1D4ED8'
+                              }}
+                            >
+                              • {isRej ? 'Rejected (Excluded)' : isUpi ? 'Paid via UPI ✓' : (ord.status === 'served' ? 'Served' : ord.status === 'ready' ? 'Ready' : ord.status === 'cooking' ? 'Cooking' : 'Received')}
+                            </span>
+                          </div>
+                          <span style={{ fontWeight: 600, color: isRej ? '#9CA3AF' : 'var(--text-primary)' }}>
+                            ₹{(Number(ord.total) || 0).toFixed(0)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Mathematical Adjustments: Added Amount of all tickets, - Rejected, - Already Paid UPI */}
+                <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {customerOrders.length > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--text-secondary)' }}>
+                      <span>{language === 'hi' ? 'सभी टिकटों का कुल योग:' : 'Added amount of all tickets:'}</span>
+                      <span style={{ fontWeight: 600 }}>₹{grossTotal.toFixed(0)}</span>
                     </div>
-                  ))}
-                </div>
+                  )}
 
-                <div
-                  style={{
-                    borderTop: '1.5px dashed #93C5FD',
-                    paddingTop: 10,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                >
-                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {language === 'hi' ? 'टेबल का कुल बिल:' : 'Total Table Bill:'}
-                  </span>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--primary-blue)' }}>
-                    ₹{grandTotal.toFixed(0)}
-                  </span>
+                  {rejectedTotal > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#DC2626' }}>
+                      <span>{language === 'hi' ? 'अस्वीकृत ऑर्डर (हटाया गया):' : 'Minus Rejected order(s):'}</span>
+                      <span style={{ fontWeight: 700 }}>- ₹{rejectedTotal.toFixed(0)}</span>
+                    </div>
+                  )}
+
+                  {upiPaidTotal > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#15803D' }}>
+                      <span>{language === 'hi' ? 'पहले से UPI द्वारा भुगतान किया गया:' : 'Minus Already paid by UPI:'}</span>
+                      <span style={{ fontWeight: 700 }}>- ₹{upiPaidTotal.toFixed(0)}</span>
+                    </div>
+                  )}
+
+                  {/* Final Bill Row */}
+                  <div
+                    style={{
+                      borderTop: '1.5px dashed #93C5FD',
+                      paddingTop: 10,
+                      marginTop: 4,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>
+                        {language === 'hi' ? 'अंतिम बिल (देय राशि):' : 'Final Bill (Amount Due):'}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        {finalBillDue === 0 && upiPaidTotal > 0
+                          ? (language === 'hi' ? 'सभी स्वीकृत टिकटों का भुगतान हो चुका है' : 'All accepted tickets cleared via UPI')
+                          : (language === 'hi' ? 'काउंटर पर देय शेष राशि' : 'Net balance payable at counter')}
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <span
+                        style={{
+                          fontSize: 20,
+                          fontWeight: 800,
+                          color: finalBillDue === 0 && upiPaidTotal > 0 ? '#15803D' : 'var(--primary-blue)'
+                        }}
+                      >
+                        ₹{finalBillDue.toFixed(0)}
+                      </span>
+                      {finalBillDue === 0 && upiPaidTotal > 0 && (
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#15803D' }}>✓ Paid in Full</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1500,27 +1636,6 @@ export default function CustomerView({
                 <span>{language === 'hi' ? 'और व्यंजन जोड़ें' : 'Add More Dishes'}</span>
               </button>
             </div>
-
-            {/* If all tickets are served or rejected, option to clear all */}
-            {customerOrders.every((o) => o.status === 'served' || o.status === 'done' || o.status === 'rejected') && (
-              <div style={{ textAlign: 'center', marginTop: 4 }}>
-                <button
-                  type="button"
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    fontSize: 11.5,
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    padding: '4px 8px'
-                  }}
-                  onClick={() => handleDismissOrder()}
-                >
-                  {language === 'hi' ? 'नया ऑर्डर शुरू करें (Start New Order)' : 'Dismiss all tickets & start new order'}
-                </button>
-              </div>
-            )}
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
@@ -2266,21 +2381,24 @@ export default function CustomerView({
         </button>
       </div>
 
-      {/* Active Live Tracking Notification Card (if table has order(s) in kitchen) */}
-      {customerOrders && customerOrders.length > 0 && customerOrders.some((o) => o.status !== 'done' && o.status !== 'served') && (() => {
-        const activeTickets = customerOrders.filter((o) => o.status !== 'done' && o.status !== 'served');
+      {/* Active Live Tracking Notification Card (if table has order(s) in kitchen or served) */}
+      {customerOrders && customerOrders.length > 0 && (() => {
+        const activeTickets = customerOrders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected');
         const latestActive = activeTickets[0] || customerOrders[0];
-        const isMulti = activeTickets.length > 1;
+        const hasActive = activeTickets.length > 0;
+        const isMulti = customerOrders.length > 1;
+        const allServed = !hasActive && customerOrders.some((o) => o.status === 'served' || o.status === 'done');
 
         return (
           <div style={{ padding: '0 16px', marginBottom: 12 }}>
             <div
-              className="ios-card active-gradient"
+              className={`ios-card ${allServed ? 'ios-card-highlight' : 'active-gradient'}`}
               style={{
                 padding: '12px 14px',
                 cursor: 'pointer',
-                border: isMulti ? '1.5px solid #60A5FA' : undefined,
-                boxShadow: isMulti ? '0 4px 14px rgba(37, 99, 235, 0.12)' : undefined
+                border: allServed ? '1.5px solid #86EFAC' : isMulti ? '1.5px solid #60A5FA' : undefined,
+                boxShadow: allServed ? '0 4px 14px rgba(22, 163, 74, 0.12)' : isMulti ? '0 4px 14px rgba(37, 99, 235, 0.12)' : undefined,
+                background: allServed ? '#F0FDF4' : undefined
               }}
               onClick={() => {
                 playTapSound();
@@ -2290,28 +2408,38 @@ export default function CustomerView({
               <div className="card-top-row" style={{ marginBottom: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span
-                    className="status-pill progress"
+                    className={`status-pill ${allServed ? 'ready' : 'progress'}`}
                     style={{
                       fontSize: 11,
                       fontWeight: 700,
-                      background: isMulti ? '#EFF6FF' : undefined,
-                      color: isMulti ? '#1D4ED8' : undefined,
-                      border: isMulti ? '1px solid #BFDBFE' : undefined
+                      background: allServed ? '#DCFCE7' : isMulti ? '#EFF6FF' : undefined,
+                      color: allServed ? '#15803D' : isMulti ? '#1D4ED8' : undefined,
+                      border: allServed ? '1px solid #86EFAC' : isMulti ? '1px solid #BFDBFE' : undefined
                     }}
                   >
-                    {isMulti
-                      ? `${activeTickets.length} Active Tickets Ordered`
+                    {allServed
+                      ? (language === 'hi' ? 'सभी व्यंजन परोसे गए ✓' : 'All Dishes Served ✓')
+                      : isMulti
+                      ? `${activeTickets.length} Active Tickets in Kitchen`
                       : latestActive.statusLabel}
                   </span>
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {isMulti ? `Live Orders Stack` : latestActive.id}
+                    {allServed
+                      ? (language === 'hi' ? 'अंतिम बिल देखें' : 'View Final Bill & Stack')
+                      : isMulti
+                      ? 'Live Orders Stack'
+                      : latestActive.id}
                   </span>
                 </div>
-                <span className="card-meta-text">{latestActive.table} • Tap to Track</span>
+                <span className="card-meta-text">{latestActive.table || activeTable} • Tap to View</span>
               </div>
 
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                {isMulti ? (
+                {allServed ? (
+                  language === 'hi'
+                    ? 'आपके सभी स्वीकृत व्यंजन परोसे जा चुके हैं। कुल देय बिल व विवरण देखने हेतु टैप करें।'
+                    : 'All accepted dishes have been served. Tap to view itemized tickets and final bill amount.'
+                ) : isMulti ? (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {activeTickets.map((t, idx) => (
                       <span
@@ -2338,8 +2466,11 @@ export default function CustomerView({
                 <div
                   className="card-bottom-progress-fill progress"
                   style={{
+                    background: allServed ? '#16A34A' : undefined,
                     width: `${
-                      isMulti
+                      allServed
+                        ? 100
+                        : isMulti
                         ? Math.round(
                             activeTickets.reduce((acc, t) => {
                               const pct = t.status === 'ready' ? 75 : (t.status === 'cooking' || t.status === 'in-progress') ? 42 : 20;
