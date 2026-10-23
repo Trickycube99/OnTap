@@ -9,7 +9,7 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
       id: 1,
       sender: `${theme?.restaurantName || 'Restaurant'} Kitchen`,
       time: 'Just now',
-      text: `*Namaste ${order?.customerName || 'Guest'}!* 🙏\n\nYour order *#${order?.id || 'ORD-8821'}* from *${theme.restaurantName}* has been received by our kitchen team.\n\n🍽️ *Table:* ${order?.table || 'Table 04'}\n💰 *Total:* ₹${order?.total || 546}\n⚡ *Status:* Cooking in Kitchen\n\nTrack your order: https://advait.menu/t/4`,
+      text: `*Namaste ${order?.customerName || 'Guest'}!* 🙏\n\nYour order *#${order?.id || 'ORD-NEW'}* from *${theme?.restaurantName || 'Restaurant'}* has been received by our kitchen team.\n\n🍽️ *Table:* ${order?.table || 'Table 01'}\n💰 *Total:* ₹${order?.total || 0}\n⚡ *Status:* Cooking in Kitchen\n\nTrack your order in real time.`,
       status: 'read'
     }
   ]);

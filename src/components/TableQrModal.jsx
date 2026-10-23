@@ -26,7 +26,7 @@ export default function TableQrModal({
   restaurantName = 'Restaurant',
   logo = null,
   tagline = null,
-  businessId = 'biz_advait'
+  businessId = ''
 }) {
   const [selectedTable, setSelectedTable] = useState(activeTable || 'Table 04');
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://restraunt-web-app.vercel.app';
@@ -36,7 +36,7 @@ export default function TableQrModal({
   // Compute table number e.g. "04" from "Table 04" or "Takeaway" for Counter / Takeaway
   const isTakeaway = (selectedTable || '').toLowerCase().includes('takeaway') || (selectedTable || '').toLowerCase().includes('counter');
   const tableNum = (selectedTable || 'Table 04').replace(/\D/g, '').padStart(2, '0');
-  const cleanBiz = businessId || 'biz_advait';
+  const cleanBiz = businessId || '';
   const directMenuUrl = isTakeaway
     ? `${baseUrl}/?biz=${encodeURIComponent(cleanBiz)}&table=Takeaway&qr=true#customer`
     : `${baseUrl}/?biz=${encodeURIComponent(cleanBiz)}&table=${tableNum}&qr=true#customer`;

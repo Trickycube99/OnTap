@@ -51,11 +51,7 @@ export const ROLE_CONFIGS = {
     badge: 'Diner Check-In',
     securityLevel: 'Guest Table Session & Mobile Loyalty',
     description: 'Browse curated artisanal menu, place contactless table orders, and track live kitchen prep.',
-    demoCredentials: {
-      name: 'Aarav Sharma',
-      phone: '9876543210',
-      table: 'Table 04'
-    },
+    demoCredentials: null,
     validate: (creds) => {
       if (!creds?.name?.trim()) {
         return { valid: false, error: 'Please enter your diner name to register your table order.' };
@@ -84,10 +80,7 @@ export const ROLE_CONFIGS = {
     badge: 'POS Terminal Guard',
     securityLevel: 'Staff POS Credentials & Secret PIN Verification',
     description: 'Accept live dining orders, apply custom item modifiers, print 80mm GST thermal receipts, and reconcile EOD cash.',
-    demoCredentials: {
-      terminal: 'POS-01 (Flagship CP)',
-      pin: '440100'
-    },
+    demoCredentials: null,
     validate: (creds) => {
       const pin = (creds?.pin || '').toString().trim();
       const loginId = (creds?.loginId || '').trim();
@@ -135,11 +128,7 @@ export const ROLE_CONFIGS = {
     badge: 'Business Owner Back-Office',
     securityLevel: 'Master Financial Executive Dual-Factor (Owner Only)',
     description: 'Real-time sales KPIs, P&L cash check, HDFC bank CSV reconciliation, automated payroll batches, and accounting exports.',
-    demoCredentials: {
-      name: 'Sanjay Malhotra',
-      email: 'admin@advaitkitchen.com',
-      pin: '882100'
-    },
+    demoCredentials: null,
     validate: (creds) => {
       const email = (creds?.email || '').trim().toLowerCase();
       if (!email.includes('@') || !email.includes('.')) {
@@ -184,9 +173,7 @@ export const ROLE_CONFIGS = {
     badge: 'Platform Root Access',
     securityLevel: 'Master Developer Root Authentication',
     description: 'Manage all tenant businesses, provision new business accounts, monitor real-time platform telemetry and database partitions.',
-    demoCredentials: {
-      email: DEVELOPER_CREDENTIALS.email
-    },
+    demoCredentials: null,
     validate: (creds) => {
       const email = (creds?.email || '').trim().toLowerCase();
       const password = (creds?.password || creds?.pin || '').trim();
@@ -217,26 +204,23 @@ export const ROLE_CONFIGS = {
     badge: 'Culinary Master Audit',
     securityLevel: 'FSSAI Licensee & Culinary Master Passkey',
     description: 'Verify FSSAI laboratory audits, culinary provenance certifications, and curate signature menu items.',
-    demoCredentials: {
-      email: 'chef@advait.in',
-      pin: '1002'
-    },
+    demoCredentials: null,
     validate: () => ({ valid: true }),
     createSession: () => ({
       role: ROLES.CHEF,
-      name: 'Chef Advait Kapoor',
-      title: 'Executive Chef & Culinary Director',
-      fssaiLicense: 'FSSAI Lic #10022001004812',
+      name: 'Executive Chef',
+      title: 'Culinary Director',
+      fssaiLicense: '',
       token: `chef_${Date.now()}`,
       authenticatedAt: new Date().toISOString()
     })
   }
 };
 
-// Initial default sessions for immediate startup experience
+// Initial default sessions for clean zero-slate startup
 export const INITIAL_DEFAULT_SESSIONS = {
-  [ROLES.CUSTOMER]: ROLE_CONFIGS[ROLES.CUSTOMER].createSession(ROLE_CONFIGS[ROLES.CUSTOMER].demoCredentials),
-  [ROLES.CHEF]: ROLE_CONFIGS[ROLES.CHEF].createSession(ROLE_CONFIGS[ROLES.CHEF].demoCredentials),
+  [ROLES.CUSTOMER]: null,
+  [ROLES.CHEF]: null,
   [ROLES.COUNTER]: null,
   [ROLES.ADMIN]: null,
   [ROLES.DEVELOPER]: null

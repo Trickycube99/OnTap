@@ -64,7 +64,7 @@ function createClosingChecklistReport({ expected, actual, variance, varianceReas
 }
 
 export default function CounterView({
-  activeBusinessId = 'biz_advait',
+  activeBusinessId = '',
   orders,
   setOrders,
   menu,
@@ -1364,7 +1364,7 @@ export default function CounterView({
                   <input
                     type="text"
                     className="ios-input"
-                    placeholder="e.g. ADVAIT20"
+                    placeholder="e.g. SAVE20"
                     value={newOfferCode}
                     onChange={(e) => setNewOfferCode(e.target.value)}
                     disabled={!effectivePermissions.canCreateDiscounts}

@@ -113,9 +113,8 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
   // System Logs
   const [logs, setLogs] = useState(() => [
     { id: 1, time: 'Just now', type: 'system', text: 'Developer Console session initialized securely' },
-    { id: 2, time: '2 mins ago', type: 'auth', text: 'Multi-tenant database validated: 3 active business partitions' },
-    { id: 3, time: '14 mins ago', type: 'sync', text: 'Cross-tab broadcast channel heartbeat: OK (latency 12ms)' },
-    { id: 4, time: '1 hour ago', type: 'biz', text: 'Business "Advait Artisanal Kitchen" processed ₹18,400 in POS sales' }
+    { id: 2, time: 'Just now', type: 'auth', text: 'Multi-tenant database validated: 0 active business partitions (Clean Zero-State)' },
+    { id: 3, time: 'Just now', type: 'sync', text: 'Cross-tab broadcast channel heartbeat: OK' }
   ]);
 
   const refreshBusinesses = () => {
@@ -1364,13 +1363,69 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
               </button>
             </div>
 
-            {/* Businesses Grid */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-              gap: 16
-            }}>
-              {filteredBusinesses.map((biz) => {
+            {/* Businesses Grid / Empty Zero-State */}
+            {filteredBusinesses.length === 0 ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '60px 24px',
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px dashed rgba(255, 255, 255, 0.15)',
+                borderRadius: 20,
+                margin: '20px 0'
+              }}>
+                <div style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  background: 'rgba(2, 132, 199, 0.15)',
+                  border: '1px solid rgba(2, 132, 199, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px',
+                  color: '#38BDF8'
+                }}>
+                  <Building2 size={28} />
+                </div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 8px', color: '#F8FAFC' }}>
+                  No Business Accounts Registered
+                </h3>
+                <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 24px', maxWidth: 440, marginInline: 'auto', lineHeight: 1.6 }}>
+                  All previous pre-made mock demo accounts have been purged. The platform is ready from scratch for live production use. Click below to provision your first restaurant outlet.
+                </p>
+                <button
+                  onClick={() => {
+                    playTapSound();
+                    setFormError('');
+                    setCreatedSuccessBiz(null);
+                    setShowCreateModal(true);
+                  }}
+                  style={{
+                    padding: '12px 24px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #06B6D4 0%, #0284C7 100%)',
+                    color: '#FFFFFF',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    boxShadow: '0 4px 14px rgba(6, 182, 212, 0.35)'
+                  }}
+                >
+                  <PlusCircle size={16} />
+                  <span>+ Create First Business Account</span>
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+                gap: 16
+              }}>
+                {filteredBusinesses.map((biz) => {
                 const isActive = biz.status === 'active';
                 const currentActiveId = getActiveBusiness()?.id;
                 const isCurrentlyActiveWorkspace = currentActiveId === biz.id;
@@ -1664,7 +1719,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           onClick={() => {
                             playTapSound();
                             const table = (biz.tables && biz.tables[0]) ? biz.tables[0].replace(/\D/g, '').padStart(2, '0') : '01';
-                            const cleanBiz = biz.id || 'biz_advait';
+                            const cleanBiz = biz.id || '';
                             window.open(`/?biz=${encodeURIComponent(cleanBiz)}&table=${table}&qr=true#customer`, '_blank');
                           }}
                           style={{
@@ -1825,8 +1880,9 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                 );
               })}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
         {/* TAB 2: SYSTEM HEALTH & TELEMETRY */}
         {activeTab === 'health' && (

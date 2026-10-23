@@ -54,7 +54,7 @@ const isOfferExpired = (offer) => {
 };
 
 export default function AdminView({
-  activeBusinessId = 'biz_advait',
+  activeBusinessId = '',
   orders,
   setOrders,
   menu,
@@ -281,8 +281,8 @@ export default function AdminView({
 
   // App Customizer Draft State & Handlers (FR-A5)
   const [customizerDraft, setCustomizerDraft] = useState(() => ({
-    restaurantName: theme?.restaurantName || 'Advait Artisanal Kitchen',
-    tagline: theme?.tagline || 'Progressive Indian Table & Craft Kitchen',
+    restaurantName: theme?.restaurantName || 'Restaurant',
+    tagline: theme?.tagline || 'Craft Kitchen & Dining',
     welcomeMessage: theme?.welcomeMessage || 'Scan table QR, order effortlessly, and track your kitchen ticket in real time.',
     accentColor: theme?.accentColor || '#007AFF',
     menuLayout: theme?.menuLayout || 'grid',
@@ -296,10 +296,10 @@ export default function AdminView({
 
   // Chef Customizer Draft State & Handlers
   const [chefDraft, setChefDraft] = useState(() => ({
-    name: chef?.name || 'Rakesh Sharma',
-    title: chef?.title || 'Executive Chef & Master Director',
+    name: chef?.name || 'Head Chef',
+    title: chef?.title || 'Executive Chef & Culinary Director',
     portrait: chef?.portrait || '/assets/chef_portrait.jpg',
-    experienceYears: chef?.experienceYears || 18,
+    experienceYears: chef?.experienceYears || 10,
     bio: chef?.bio || '',
     philosophy: chef?.philosophy || '',
     showVerifiedBadge: chef?.showVerifiedBadge ?? (chef?.isVerified ?? true),
@@ -314,8 +314,8 @@ export default function AdminView({
   if (theme !== prevTheme) {
     setPrevTheme(theme);
     setCustomizerDraft({
-      restaurantName: theme?.restaurantName || 'Advait Artisanal Kitchen',
-      tagline: theme?.tagline || 'Progressive Indian Table & Craft Kitchen',
+      restaurantName: theme?.restaurantName || 'Restaurant',
+      tagline: theme?.tagline || 'Craft Kitchen & Dining',
       welcomeMessage: theme?.welcomeMessage || 'Scan table QR, order effortlessly, and track your kitchen ticket in real time.',
       accentColor: theme?.accentColor || '#007AFF',
       menuLayout: theme?.menuLayout || 'grid',
@@ -478,12 +478,12 @@ export default function AdminView({
     }
 
     // 3. Save scoped theme and chef to localStorage
-    const scopedThemeKey = activeBiz?.id && activeBiz.id !== 'biz_advait'
+    const scopedThemeKey = activeBiz?.id
       ? `${STORAGE_KEYS.THEME}_${activeBiz.id}`
       : STORAGE_KEYS.THEME;
     saveData(scopedThemeKey, updatedTheme);
 
-    const scopedChefKey = activeBiz?.id && activeBiz.id !== 'biz_advait'
+    const scopedChefKey = activeBiz?.id
       ? `${STORAGE_KEYS.CHEF}_${activeBiz.id}`
       : STORAGE_KEYS.CHEF;
     saveData(scopedChefKey, updatedChef);
@@ -572,7 +572,7 @@ export default function AdminView({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `advait_orders_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `restaurant_orders_export_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -711,7 +711,8 @@ export default function AdminView({
   // Helper to persist staff to active business record & scoped localStorage, and broadcast live
   const persistAndBroadcastStaff = (updatedStaff) => {
     const activeBiz = getActiveBusiness();
-    const bizId = activeBiz?.id || activeBusinessId || 'biz_advait';
+    const bizId = activeBiz?.id || activeBusinessId || '';
+    if (!bizId) return;
 
     // 1. Authoritative scoped storage key (e.g. ontap_v5_staff_...)
     const officialScopedKey = getScopedKey(STORAGE_KEYS.STAFF, bizId);
@@ -719,12 +720,7 @@ export default function AdminView({
 
     // 2. Cross-compatibility keys
     saveData(`${STORAGE_KEYS.STAFF}_${bizId}`, updatedStaff);
-    if (bizId === 'biz_advait') {
-      saveData(STORAGE_KEYS.STAFF, updatedStaff);
-      saveData('flowscape_staff_inr_v2', updatedStaff);
-    } else {
-      saveData(`flowscape_staff_inr_v2_${bizId}`, updatedStaff);
-    }
+    saveData(`flowscape_staff_inr_v2_${bizId}`, updatedStaff);
 
     // 3. Attach staff to active business in businessManager multi-tenant database
     updateBusiness(bizId, { staff: updatedStaff });
@@ -1012,7 +1008,7 @@ export default function AdminView({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `advait_bank_payroll_batch_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `restaurant_bank_payroll_batch_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -4065,7 +4061,7 @@ export default function AdminView({
                       setCustomizerDraft({ ...customizerDraft, restaurantName: e.target.value });
                       setCustomizerSaveSuccess(false);
                     }}
-                    placeholder="e.g. Advait Artisanal Kitchen"
+                    placeholder="e.g. The Grand Bistro"
                   />
                 </div>
 
@@ -5122,7 +5118,7 @@ export default function AdminView({
               <div style={{ textAlign: 'center', marginBottom: 14 }}>
                 <div className="card-heading" style={{ fontSize: 18 }}>Monthly Salary Payslip</div>
                 <div className="card-meta-text">
-                  {theme?.restaurantName || 'Advait Artisanal Kitchen'} • Period: {new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' })}
+                  {theme?.restaurantName || 'Restaurant'} • Period: {new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' })}
                 </div>
               </div>
 
@@ -5588,7 +5584,7 @@ export default function AdminView({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. ADVAIT25"
+                    placeholder="e.g. FESTIVE25"
                     className="ios-input"
                     value={couponForm.code}
                     onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase() })}

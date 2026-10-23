@@ -13,7 +13,7 @@ import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
 
 export default function PunchWalkInOrders({
-  activeBusinessId = 'biz_advait',
+  activeBusinessId = '',
   orders,
   setOrders,
   menu = [],

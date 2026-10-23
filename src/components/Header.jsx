@@ -87,12 +87,12 @@ export default function Header({
                 ) : (chef?.portrait && chef?.showAboutChef !== false && theme?.showAboutChef !== false) ? (
                   <img src={chef.portrait} alt={theme.restaurantName} />
                 ) : (
-                  <span>{(theme?.restaurantName || 'AD').substring(0, 2).toUpperCase()}</span>
+                  <span>{(theme?.restaurantName || 'RS').substring(0, 2).toUpperCase()}</span>
                 )}
               </div>
               <div className="brand-info">
                 <div className="brand-name-row">
-                  <span className="brand-title">{theme.restaurantName || 'Advait Artisanal Kitchen'}</span>
+                  <span className="brand-title">{theme?.restaurantName || 'Restaurant'}</span>
                 </div>
                 <div className="fssai-micro-badge">
                   <ShieldCheck size={11} color="#16A34A" />

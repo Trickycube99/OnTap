@@ -112,9 +112,21 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
   const localBusinesses = getBusinesses();
   let hasChanges = false;
   const merged = [...localBusinesses];
+  const demoIds = ['biz_advait', 'biz_copper_chimney', 'biz_chai_point'];
+  const database = initFirebase();
 
   for (const cloudBiz of cloudBusinesses) {
     if (!cloudBiz || !cloudBiz.id) continue;
+    // Filter out and clean up legacy mock demo accounts permanently
+    if (demoIds.includes(cloudBiz.id)) {
+      if (database) {
+        try {
+          deleteDoc(doc(database, 'businesses', cloudBiz.id)).catch(() => {});
+        } catch {}
+      }
+      continue;
+    }
+
     const localIndex = merged.findIndex((b) => b.id === cloudBiz.id);
     const cloudStaff = Array.isArray(cloudBiz.staff) ? cloudBiz.staff : [];
 
@@ -126,10 +138,10 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
         owner: {
           name: cloudBiz.owner?.name || 'Owner',
           email: (cloudBiz.owner?.email || '').trim().toLowerCase(),
-          pin: cloudBiz.owner?.pin ? String(cloudBiz.owner.pin).trim() : '882100'
+          pin: cloudBiz.owner?.pin ? String(cloudBiz.owner.pin).trim() : ''
         },
         counter: {
-          pin: cloudBiz.counter?.pin ? String(cloudBiz.counter.pin).trim() : '442100',
+          pin: cloudBiz.counter?.pin ? String(cloudBiz.counter.pin).trim() : '',
           terminalName: cloudBiz.counter?.terminalName || `${cloudBiz.name} POS`
         }
       });
@@ -417,13 +429,6 @@ export async function purgeBusinessAccountComplete({
   const cleanId = (businessId || '').trim();
   const businesses = getBusinesses();
 
-  if (businesses.length <= 1) {
-    return {
-      success: false,
-      error: 'Cannot delete the only remaining business on the platform. At least one business account must remain active.'
-    };
-  }
-
   const targetBiz = businesses.find((b) => b.id === cleanId);
   if (!targetBiz) {
     return { success: false, error: `Business account "${cleanId}" not found.` };
@@ -567,7 +572,11 @@ export async function purgeBusinessAccountComplete({
 
   const currentActive = getActiveBusiness();
   if (currentActive?.id === cleanId) {
-    setActiveBusiness(remainingBusinesses[0].id);
+    if (remainingBusinesses.length > 0) {
+      setActiveBusiness(remainingBusinesses[0].id);
+    } else {
+      localStorage.removeItem('flowscape_active_business_id_v1');
+    }
   }
 
   // --- STEP 7: BROADCAST REAL-TIME DELETION EVENT ---
@@ -586,4 +595,79 @@ export async function purgeBusinessAccountComplete({
     complianceRecord,
     message: `Account "${targetBiz.name}" and all associated data have been permanently erased from Firebase Users, Authentication, and the operational database. A statutory tax audit record (${complianceRecord.complianceId}) has been sealed for legal compliance.`
   };
+}
+
+/**
+ * AUTOMATIC SYSTEM PURGE OF ALL PRE-MADE MOCK DEMO ACCOUNTS & DATA
+ * Completely clears legacy test data from localStorage, active sessions, and Cloud Firestore.
+ */
+export async function purgeAllPreMadeMockAccountsAndData() {
+  const demoIds = ['biz_advait', 'biz_copper_chimney', 'biz_chai_point'];
+
+  // 1. Purge from Firestore cloud collections if connected
+  const database = initFirebase();
+  if (database) {
+    for (const id of demoIds) {
+      try {
+        await deleteDoc(doc(database, 'businesses', id));
+        await deleteCloudOrdersForBusiness(id).catch(() => {});
+      } catch {}
+    }
+  }
+
+  // 2. Purge from localStorage
+  if (typeof localStorage !== 'undefined') {
+    const allKeys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      allKeys.push(localStorage.key(i));
+    }
+    for (const k of allKeys) {
+      if (!k) continue;
+      if (
+        k.includes('biz_advait') ||
+        k.includes('biz_copper_chimney') ||
+        k.includes('biz_chai_point') ||
+        k.includes('advait_')
+      ) {
+        localStorage.removeItem(k);
+      }
+    }
+
+    try {
+      const raw = localStorage.getItem('flowscape_businesses_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const clean = parsed.filter((b) => b && !demoIds.includes(b.id));
+          localStorage.setItem('flowscape_businesses_v1', JSON.stringify(clean));
+        }
+      }
+    } catch {}
+
+    const activeId = localStorage.getItem('flowscape_active_business_id_v1');
+    if (demoIds.includes(activeId)) {
+      localStorage.removeItem('flowscape_active_business_id_v1');
+    }
+  }
+
+  // 3. Purge sessions if belonged to demo
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem('flowscape_guest_scanned_biz');
+    try {
+      const rawSess = sessionStorage.getItem('flowscape_auth_sessions_v3');
+      if (rawSess) {
+        const parsed = JSON.parse(rawSess);
+        if (demoIds.includes(parsed?.admin?.businessId) || demoIds.includes(parsed?.counter?.businessId)) {
+          sessionStorage.removeItem('flowscape_auth_sessions_v3');
+        }
+      }
+    } catch {}
+  }
+}
+
+// Automatically execute once on client startup to ensure clean zero-slate
+if (typeof window !== 'undefined') {
+  try {
+    purgeAllPreMadeMockAccountsAndData().catch(() => {});
+  } catch {}
 }

@@ -33,7 +33,7 @@ import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 import { getActiveBusiness } from '../utils/businessManager';
 
 export default function CustomerView({
-  activeBusinessId = 'biz_advait',
+  activeBusinessId = '',
   menu,
   chef,
   theme,
@@ -70,31 +70,31 @@ export default function CustomerView({
 
   const [customerName, setCustomerName] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(dinerNameKey) || (activeBusinessId === 'biz_advait' ? localStorage.getItem('advait_customer_name') : '') || '';
+      return localStorage.getItem(dinerNameKey) || '';
     }
     return '';
   });
   const [customerPhone, setCustomerPhone] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(dinerPhoneKey) || (activeBusinessId === 'biz_advait' ? localStorage.getItem('advait_customer_phone') : '') || '';
+      return localStorage.getItem(dinerPhoneKey) || '';
     }
     return '';
   });
   const [showNameModal, setShowNameModal] = useState(() => {
     if (typeof window !== 'undefined') {
-      return !(localStorage.getItem(dinerNameKey) || (activeBusinessId === 'biz_advait' ? localStorage.getItem('advait_customer_name') : ''));
+      return !localStorage.getItem(dinerNameKey);
     }
     return true;
   });
   const [customerNameInput, setCustomerNameInput] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(dinerNameKey) || (activeBusinessId === 'biz_advait' ? localStorage.getItem('advait_customer_name') : '') || '';
+      return localStorage.getItem(dinerNameKey) || '';
     }
     return '';
   });
   const [customerPhoneInput, setCustomerPhoneInput] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(dinerPhoneKey) || (activeBusinessId === 'biz_advait' ? localStorage.getItem('advait_customer_phone') : '') || '';
+      return localStorage.getItem(dinerPhoneKey) || '';
     }
     return '';
   });
@@ -477,7 +477,7 @@ export default function CustomerView({
 
   // Dynamic UPI Deep Link URL for native mobile apps (GPay, PhonePe, Paytm, CRED)
   const upiVpa = theme?.upiId || '9119069179@nyes';
-  const payeeRestaurantName = theme?.restaurantName || 'Advait Artisanal Kitchen';
+  const payeeRestaurantName = theme?.restaurantName || 'Restaurant';
   const upiPayUrl = `upi://pay?pa=${upiVpa}&pn=${encodeURIComponent(payeeRestaurantName)}&am=${cartTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`${activeTable || 'Dine-In'} Order`)}`;
   const qrCodeApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(upiPayUrl)}`;
 
@@ -1825,8 +1825,8 @@ export default function CustomerView({
             )}
             <span>
               {language === 'hi'
-                ? (chef?.showVerifiedBadge !== false ? `शेफ ${chef?.name || 'अद्वैत'} व FSSAI प्रमाण देखें` : `शेफ ${chef?.name || 'अद्वैत'} के बारे में जानें`)
-                : (chef?.showVerifiedBadge !== false ? `About Chef ${chef?.name || 'Advait'} & Credentials` : `About Chef ${chef?.name || 'Advait'}`)}
+                ? (chef?.showVerifiedBadge !== false ? `शेफ ${chef?.name || ''} व FSSAI प्रमाण देखें` : `शेफ ${chef?.name || ''} के बारे में जानें`)
+                : (chef?.showVerifiedBadge !== false ? `About Chef ${chef?.name || ''} & Credentials` : `About Chef ${chef?.name || ''}`)}
             </span>
             <ChevronRight size={12} color="#94A3B8" />
           </button>

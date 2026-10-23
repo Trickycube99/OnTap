@@ -25,7 +25,7 @@ import { getScopedKey, STORAGE_KEYS } from './storage';
 
 export { getCloudSyncState, subscribeCloudSyncState, isCloudSyncEnabled };
 
-const CHANNEL_NAME = 'advait_restaurant_pos_channel_v1';
+const CHANNEL_NAME = 'flowscape_pos_sync_channel_v1';
 
 let broadcastChannel = null;
 
@@ -60,7 +60,7 @@ const currentClientId = Math.random().toString(36).substring(2, 9);
  * Broadcast an event to all open tabs, windows and cross-device cloud (Strictly Scoped by Business)
  */
 export function broadcastSyncEvent(type, payload = {}, targetBusinessId = null) {
-  const currentBizId = targetBusinessId || payload?.businessId || getActiveBusiness()?.id || 'biz_advait';
+  const currentBizId = targetBusinessId || payload?.businessId || getActiveBusiness()?.id || '';
 
   const eventMessage = {
     type,
@@ -242,8 +242,10 @@ export function subscribeSyncEvents(callback, filterBusinessId = null) {
   const sub = { callback, filterBusinessId };
   activeSubscribers.add(sub);
 
-  const targetBizId = filterBusinessId || getActiveBusiness()?.id || 'biz_advait';
-  ensureCloudSync(targetBizId);
+  const targetBizId = filterBusinessId || getActiveBusiness()?.id || '';
+  if (targetBizId) {
+    ensureCloudSync(targetBizId);
+  }
 
   return () => {
     activeSubscribers.delete(sub);

@@ -678,7 +678,7 @@ export async function handleVerifyPasswordResetCode(oobCode) {
     const active = businesses[0];
     return {
       success: true,
-      email: active?.owner?.email || 'admin@advaitkitchen.com',
+      email: active?.owner?.email || '',
       isDemoPreview: true
     };
   }
@@ -695,9 +695,12 @@ export async function handleVerifyPasswordResetCode(oobCode) {
   }
 
   // Local fallback mode
+  const businesses = getBusinesses();
+  const active = businesses[0];
   return {
-    success: true,
-    email: 'admin@advaitkitchen.com'
+    success: !!active?.owner?.email,
+    email: active?.owner?.email || '',
+    error: active?.owner?.email ? null : 'No business account found'
   };
 }
 

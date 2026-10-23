@@ -16,84 +16,8 @@ export const DEVELOPER_CREDENTIALS = {
   role: 'developer'
 };
 
-// Initial default business accounts configured on platform
-export const DEFAULT_BUSINESSES = [
-  {
-    id: 'biz_advait',
-    name: 'Advait Artisanal Kitchen',
-    tagline: 'Progressive Indian Table & Craft Kitchen',
-    category: 'Fine Dining / Artisanal',
-    city: 'Connaught Place, New Delhi',
-    plan: 'Enterprise',
-    status: 'active',
-    emailVerified: true,
-    owner: {
-      name: 'Sanjay Malhotra',
-      email: 'admin@advaitkitchen.com',
-      pin: '882100'
-    },
-    counter: {
-      pin: '442100',
-      terminalName: 'POS-01 (Flagship CP)'
-    },
-    upiId: '9119069179@nyes',
-    tables: ['Table 01', 'Table 02', 'Table 03', 'Table 04', 'Table 05', 'Table 06', 'Takeaway'],
-    accentColor: '#007AFF',
-    totalOrders: 142,
-    gmv: 184500,
-    createdAt: '2026-08-15T10:00:00.000Z'
-  },
-  {
-    id: 'biz_copper_chimney',
-    name: 'Copper Chimney Grill & Bar',
-    tagline: 'Charcoal Tandoor & Mughlai Heritage',
-    category: 'Casual Dining & Bar',
-    city: 'Bandra West, Mumbai',
-    plan: 'Pro',
-    status: 'active',
-    emailVerified: true,
-    owner: {
-      name: 'Priya Nair',
-      email: 'priya@copperchimney.in',
-      pin: '552200'
-    },
-    counter: {
-      pin: '331100',
-      terminalName: 'POS-01 (Bandra)'
-    },
-    upiId: 'copperchimney@upi',
-    tables: ['Table 01', 'Table 02', 'Table 03', 'Table 04', 'Bar 01', 'Bar 02'],
-    accentColor: '#F59E0B',
-    totalOrders: 89,
-    gmv: 112400,
-    createdAt: '2026-09-01T11:30:00.000Z'
-  },
-  {
-    id: 'biz_chai_point',
-    name: 'Chai Point Cafe & Bakery',
-    tagline: 'Artisanal Teas, Cold Brews & Puffs',
-    category: 'QSR / Cafe',
-    city: 'Indiranagar, Bengaluru',
-    plan: 'Starter',
-    status: 'active',
-    emailVerified: true,
-    owner: {
-      name: 'Amit Deshmukh',
-      email: 'amit@chaipoint.com',
-      pin: '771100'
-    },
-    counter: {
-      pin: '220000',
-      terminalName: 'Express Counter 01'
-    },
-    upiId: 'chaipoint@upi',
-    tables: ['Table 01', 'Table 02', 'Table 03', 'Counter Pickup'],
-    accentColor: '#10B981',
-    totalOrders: 215,
-    gmv: 86500,
-    createdAt: '2026-09-20T09:15:00.000Z'
-  }
-];
+// Initial default business accounts configured on platform (Clean Zero-State for real use)
+export const DEFAULT_BUSINESSES = [];
 
 /**
  * Retrieve all registered business accounts
@@ -102,25 +26,30 @@ export function getBusinesses() {
   try {
     const raw = localStorage.getItem(BUSINESSES_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(BUSINESSES_STORAGE_KEY, JSON.stringify(DEFAULT_BUSINESSES));
-      return DEFAULT_BUSINESSES;
+      return [];
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(BUSINESSES_STORAGE_KEY, JSON.stringify(DEFAULT_BUSINESSES));
-      return DEFAULT_BUSINESSES;
+      return [];
     }
 
-    // Automatically migrate any legacy 4-digit PINs to standard 6-digit PINs (e.g. 8821 -> 882100)
+    // Automatically filter out any legacy pre-made mock demo accounts
     let needsMigration = false;
-    const migrated = parsed.map((b) => {
-      let updatedOwnerPin = b.owner?.pin ? String(b.owner.pin).trim() : '882100';
-      let updatedCounterPin = b.counter?.pin ? String(b.counter.pin).trim() : '442100';
-      if (updatedOwnerPin.length < 6) {
+    const cleaned = parsed.filter(
+      (b) => b && b.id !== 'biz_advait' && b.id !== 'biz_copper_chimney' && b.id !== 'biz_chai_point'
+    );
+    if (cleaned.length !== parsed.length) {
+      needsMigration = true;
+    }
+
+    const migrated = cleaned.map((b) => {
+      let updatedOwnerPin = b.owner?.pin ? String(b.owner.pin).trim() : '';
+      let updatedCounterPin = b.counter?.pin ? String(b.counter.pin).trim() : '';
+      if (updatedOwnerPin && updatedOwnerPin.length < 6) {
         updatedOwnerPin = updatedOwnerPin.padEnd(6, '0');
         needsMigration = true;
       }
-      if (updatedCounterPin.length < 6) {
+      if (updatedCounterPin && updatedCounterPin.length < 6) {
         updatedCounterPin = updatedCounterPin.padEnd(6, '0');
         needsMigration = true;
       }
@@ -137,7 +66,7 @@ export function getBusinesses() {
     return migrated;
   } catch (err) {
     console.error('Error loading businesses:', err);
-    return DEFAULT_BUSINESSES;
+    return [];
   }
 }
 
@@ -151,7 +80,7 @@ export function saveBusinesses(businesses) {
       window.dispatchEvent(new CustomEvent('flowscape_businesses_updated', { detail: businesses }));
       try {
         if ('BroadcastChannel' in window) {
-          const bc = new BroadcastChannel('advait_restaurant_pos_channel_v1');
+          const bc = new BroadcastChannel('flowscape_pos_sync_channel_v1');
           bc.postMessage({
             type: 'BUSINESSES_UPDATED',
             payload: businesses,
@@ -171,6 +100,7 @@ export function saveBusinesses(businesses) {
  */
 export function getActiveBusiness() {
   const businesses = getBusinesses();
+  if (!businesses || businesses.length === 0) return null;
   let activeId = null;
 
   // 1. Prioritize active tab session in sessionStorage (isolated per tab, preserved across refreshes)
@@ -193,8 +123,8 @@ export function getActiveBusiness() {
     activeId = localStorage.getItem(ACTIVE_BUSINESS_ID_KEY);
   }
 
-  const found = businesses.find((b) => b.id === (activeId || 'biz_advait'));
-  return found || businesses[0] || DEFAULT_BUSINESSES[0];
+  const found = businesses.find((b) => b.id === activeId);
+  return found || businesses[0] || null;
 }
 
 /**
@@ -337,10 +267,6 @@ export function updateBusiness(id, updates) {
  */
 export function deleteBusiness(id) {
   const businesses = getBusinesses();
-  if (businesses.length <= 1) {
-    return { success: false, error: 'Cannot delete the only remaining business on the platform.' };
-  }
-
   const targetBiz = businesses.find((b) => b.id === id);
   if (!targetBiz) {
     return { success: false, error: 'Business account not found.' };
@@ -415,10 +341,14 @@ export function deleteBusiness(id) {
   const filtered = businesses.filter((b) => b.id !== id);
   saveBusinesses(filtered);
 
-  // 4. If deleted business was currently active, switch to first available
+  // 4. If deleted business was currently active, switch to first available or clear
   const activeId = localStorage.getItem(ACTIVE_BUSINESS_ID_KEY);
   if (activeId === id) {
-    setActiveBusiness(filtered[0].id);
+    if (filtered.length > 0) {
+      setActiveBusiness(filtered[0].id);
+    } else {
+      localStorage.removeItem(ACTIVE_BUSINESS_ID_KEY);
+    }
   }
 
   return { success: true, deletedBusiness: targetBiz };
@@ -627,11 +557,9 @@ export function authenticateStaffMemberByLoginId(loginId, pin) {
     if ((!Array.isArray(staffList) || staffList.length === 0) && typeof localStorage !== 'undefined') {
       const candidateKeys = [
         `ontap_v5_staff_${(b.id || '').toLowerCase()}`,
-        b.id === 'biz_advait' ? 'ontap_v5_staff_biz_advait' : null,
         `staff_${b.id}`,
         `${b.id}_staff`,
-        b.id === 'biz_advait' ? 'staff' : null,
-        b.id === 'biz_advait' ? 'flowscape_staff_inr_v2' : `flowscape_staff_inr_v2_${b.id}`
+        `flowscape_staff_inr_v2_${b.id}`
       ].filter(Boolean);
 
       for (const k of candidateKeys) {
@@ -648,9 +576,9 @@ export function authenticateStaffMemberByLoginId(loginId, pin) {
       }
     }
 
-    // Source C: Initial mock staff fallback
+    // Source C: Initial staff fallback
     if (!Array.isArray(staffList) || staffList.length === 0) {
-      staffList = initialStaffByBusiness?.[b.id] || (b.id === 'biz_advait' ? initialStaff : []);
+      staffList = initialStaffByBusiness?.[b.id] || [];
     }
 
     // Check staff in this business

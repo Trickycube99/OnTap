@@ -40,6 +40,7 @@ import { playNewOrderChime, playTapSound } from './utils/audio';
 import { syncAllBusinessesToCloud, subscribeBusinessesFromCloud, fetchBusinessesFromCloud } from './utils/systematicDatabase';
 import { subscribeSyncEvents, SYNC_EVENTS } from './utils/sync';
 import confetti from 'canvas-confetti';
+import { Server, Building2, PlusCircle } from 'lucide-react';
 
 /**
  * Check if current guest session has valid QR code access
@@ -148,13 +149,12 @@ export const getInitialBusinessId = () => {
     }
   }
   const currentActive = getActiveBusiness();
-  return currentActive?.id || 'biz_advait';
+  return currentActive?.id || '';
 };
 
 export default function App() {
   const initialBizId = getInitialBusinessId();
   const initialBiz = getBusinesses().find((b) => b.id === initialBizId) || getActiveBusiness();
-  const isDefaultBiz = initialBizId === 'biz_advait';
 
   const [activeBusinessId, setActiveBusinessId] = useState(initialBizId);
   const loadedBusinessIdRef = useRef(initialBizId);
@@ -162,31 +162,22 @@ export default function App() {
 
   // Global Shared States (Persisted in localStorage scoped by active business)
   const [menu, setMenu] = useState(() => {
-    const fallback = initialMenuByBusiness?.[initialBizId] || (initialBizId === 'biz_advait' ? initialMenu : []);
-    return loadData(getScopedKey(STORAGE_KEYS.MENU, initialBizId), fallback);
+    return loadData(getScopedKey(STORAGE_KEYS.MENU, initialBizId), []);
   });
   const [chef, setChef] = useState(() => loadData(getScopedKey(STORAGE_KEYS.CHEF, initialBizId), verifiedChefData));
   const [orders, setOrders] = useState(() => {
-    const loaded = loadData(getScopedKey(STORAGE_KEYS.ORDERS, initialBizId), isDefaultBiz ? initialOrders : []);
-    return loaded.map((o) =>
-      o.id === 'ORD-8821' && o.status === 'in-progress'
-        ? { ...o, status: 'received', statusLabel: 'Received', progressPercent: 25 }
-        : o
-    );
+    return loadData(getScopedKey(STORAGE_KEYS.ORDERS, initialBizId), []);
   });
-  const [expenses, setExpenses] = useState(() => loadData(getScopedKey(STORAGE_KEYS.EXPENSES, initialBizId), isDefaultBiz ? initialExpenses : []));
+  const [expenses, setExpenses] = useState(() => loadData(getScopedKey(STORAGE_KEYS.EXPENSES, initialBizId), []));
   const [staff, setStaff] = useState(() => {
-    const staffFallback = (Array.isArray(initialBiz?.staff) && initialBiz.staff.length > 0)
-      ? initialBiz.staff
-      : (isDefaultBiz ? initialStaff : (initialStaffByBusiness?.[initialBizId] || []));
-    const raw = loadData(getScopedKey(STORAGE_KEYS.STAFF, initialBizId), staffFallback);
+    const raw = loadData(getScopedKey(STORAGE_KEYS.STAFF, initialBizId), initialBiz?.staff || []);
     return normalizeStaffCredentials(raw);
   });
-  const [offers, setOffers] = useState(() => loadData(getScopedKey(STORAGE_KEYS.OFFERS, initialBizId), isDefaultBiz ? initialOffers : []));
+  const [offers, setOffers] = useState(() => loadData(getScopedKey(STORAGE_KEYS.OFFERS, initialBizId), []));
   const [theme, setTheme] = useState(() => {
     const initialBizTheme = getInitialThemeForBusiness(initialBizId);
     const loaded = loadData(getScopedKey(STORAGE_KEYS.THEME, initialBizId), initialBizTheme);
-    const activeBiz = getBusinesses().find((b) => b.id === initialBizId) || getActiveBusiness();
+    const activeBiz = initialBiz || getActiveBusiness();
     const bizOverride = activeBiz ? {
       restaurantName: activeBiz.name,
       tagline: activeBiz.tagline || loaded?.tagline || initialBizTheme.tagline,
@@ -200,7 +191,7 @@ export default function App() {
       ...loaded,
       ...bizOverride,
       logo: bizOverride.logo !== undefined ? bizOverride.logo : (loaded?.logo || null),
-      upiId: loaded?.upiId || bizOverride.upiId || initialBizTheme.upiId || '9119069179@nyes'
+      upiId: loaded?.upiId || bizOverride.upiId || initialBizTheme.upiId || ''
     };
   });
   const [checklists, setChecklists] = useState(() => loadData(getScopedKey(STORAGE_KEYS.CHECKLISTS, initialBizId), []));
@@ -662,20 +653,19 @@ export default function App() {
     setActiveTab('track');
   };
 
-  // Reset demo state helper
+  // Reset state helper
   const handleResetDemo = () => {
     playTapSound();
-    if (window.confirm('Reset all demo data (menu, orders, expenses, staff & sessions) to fresh defaults?')) {
+    if (window.confirm('Reset all data (menu, orders, expenses, staff & sessions) for this business?')) {
       resetAllDataToDefault(activeBusinessId);
       resetAllSessions();
       setAuthSessions(getStoredSessions());
-      const freshMenu = initialMenuByBusiness?.[activeBusinessId] || initialMenu;
-      setMenu(freshMenu);
+      setMenu([]);
       setChef(verifiedChefData);
-      setOrders(activeBusinessId === 'biz_advait' ? initialOrders : []);
-      setExpenses(activeBusinessId === 'biz_advait' ? initialExpenses : []);
-      setStaff(initialStaffByBusiness?.[activeBusinessId] || (activeBusinessId === 'biz_advait' ? initialStaff : []));
-      setOffers(activeBusinessId === 'biz_advait' ? initialOffers : []);
+      setOrders([]);
+      setExpenses([]);
+      setStaff([]);
+      setOffers([]);
       setTheme(initialTheme);
       setChecklists([]);
       setCart([]);
@@ -688,7 +678,6 @@ export default function App() {
     loadedBusinessIdRef.current = bizId;
     setCart([]); // Clear any items left in cart from another restaurant
 
-    const isDefault = !bizId || bizId === 'biz_advait';
     const biz = bizObj || getBusinesses().find((b) => b.id === bizId);
 
     if (biz && Array.isArray(biz.tables) && biz.tables.length > 0) {
@@ -701,15 +690,11 @@ export default function App() {
       }
     }
 
-    const fallbackMenu = initialMenuByBusiness?.[bizId] || (bizId === 'biz_advait' ? initialMenu : []);
-    const loadedMenu = loadData(getScopedKey(STORAGE_KEYS.MENU, bizId), fallbackMenu);
-    const loadedOrders = loadData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), isDefault ? initialOrders : []);
-    const loadedExpenses = loadData(getScopedKey(STORAGE_KEYS.EXPENSES, bizId), isDefault ? initialExpenses : []);
-    const staffFallback = (Array.isArray(biz?.staff) && biz.staff.length > 0)
-      ? biz.staff
-      : (isDefault ? initialStaff : (initialStaffByBusiness?.[bizId] || []));
-    const loadedStaff = normalizeStaffCredentials(loadData(getScopedKey(STORAGE_KEYS.STAFF, bizId), staffFallback));
-    const loadedOffers = loadData(getScopedKey(STORAGE_KEYS.OFFERS, bizId), isDefault ? initialOffers : []);
+    const loadedMenu = loadData(getScopedKey(STORAGE_KEYS.MENU, bizId), []);
+    const loadedOrders = loadData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), []);
+    const loadedExpenses = loadData(getScopedKey(STORAGE_KEYS.EXPENSES, bizId), []);
+    const loadedStaff = normalizeStaffCredentials(loadData(getScopedKey(STORAGE_KEYS.STAFF, bizId), biz?.staff || []));
+    const loadedOffers = loadData(getScopedKey(STORAGE_KEYS.OFFERS, bizId), []);
     const loadedChecklists = loadData(getScopedKey(STORAGE_KEYS.CHECKLISTS, bizId), []);
 
     const initialBizTheme = getInitialThemeForBusiness(bizId);
@@ -1035,8 +1020,77 @@ export default function App() {
       {/* Main Full-Viewport Content Area */}
       <main className="app-main-viewport">
         <div className="app-content-container">
+          {/* Zero-State Setup Gate when No Outlets Exist Yet */}
+          {getBusinesses().length === 0 && currentRole !== 'developer' && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: '70vh',
+              padding: 24,
+              fontFamily: "'Inter', -apple-system, sans-serif"
+            }}>
+              <div style={{
+                maxWidth: 480,
+                width: '100%',
+                background: 'rgba(15, 23, 42, 0.85)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: 24,
+                padding: 32,
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                backdropFilter: 'blur(20px)',
+                textAlign: 'center'
+              }}>
+                <div style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 20,
+                  background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 20px',
+                  boxShadow: '0 8px 24px rgba(2, 132, 199, 0.4)'
+                }}>
+                  <Server size={32} color="#FFFFFF" />
+                </div>
+                <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 10px', color: '#F8FAFC' }}>
+                  No Restaurant Outlets Configured
+                </h2>
+                <p style={{ fontSize: 14, color: '#94A3B8', lineHeight: 1.6, margin: '0 0 24px' }}>
+                  All previous pre-made mock demo accounts have been purged. The platform is ready from scratch for live production use. Log in to the Developer Console to register your first business account.
+                </p>
+                <button
+                  onClick={() => {
+                    window.location.hash = 'manj';
+                    setCurrentRole('developer');
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '14px 20px',
+                    borderRadius: 14,
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
+                    color: '#FFFFFF',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                    boxShadow: '0 8px 20px rgba(2, 132, 199, 0.35)'
+                  }}
+                >
+                  <Server size={18} />
+                  <span>Open Developer Console (#manj)</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Dynamic Views Rendering */}
-          {(currentRole === 'customer' || currentRole === 'chef') && (
+          {getBusinesses().length > 0 && (currentRole === 'customer' || currentRole === 'chef') && (
             !(checkGuestQrAccess() || canReturnToAdmin || isDeveloperAuthenticated()) ? (
               <QrCodeGate
                 onReturnToAdmin={() => handleRoleSwitch('admin')}

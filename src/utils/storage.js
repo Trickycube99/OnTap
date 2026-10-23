@@ -25,8 +25,8 @@ const STORAGE_KEYS = {
 const STORAGE_PREFIX = 'ontap_v5';
 
 export function getScopedKey(baseKey, bizId) {
-  const cleanId = (bizId || 'biz_advait').trim().toLowerCase();
-  return `${STORAGE_PREFIX}_${baseKey}_${cleanId}`;
+  const cleanId = (bizId || '').trim().toLowerCase();
+  return cleanId ? `${STORAGE_PREFIX}_${baseKey}_${cleanId}` : `${STORAGE_PREFIX}_${baseKey}`;
 }
 
 export function purgeLegacyStorage() {
@@ -35,7 +35,19 @@ export function purgeLegacyStorage() {
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && (k.startsWith('flowscape_') || k.startsWith('ontap_v1_') || k.startsWith('ontap_v2_') || k.startsWith('ontap_v3_') || k.startsWith('ontap_v4_'))) {
+      if (
+        k && (
+          k.startsWith('flowscape_') ||
+          k.startsWith('ontap_v1_') ||
+          k.startsWith('ontap_v2_') ||
+          k.startsWith('ontap_v3_') ||
+          k.startsWith('ontap_v4_') ||
+          k.includes('biz_advait') ||
+          k.includes('biz_copper_chimney') ||
+          k.includes('biz_chai_point') ||
+          k.includes('advait_')
+        )
+      ) {
         keysToRemove.push(k);
       }
     }
@@ -45,7 +57,7 @@ export function purgeLegacyStorage() {
   }
 }
 
-// Auto-purge legacy corrupted keys once on import
+// Auto-purge legacy corrupted and demo keys once on import
 purgeLegacyStorage();
 
 export function loadData(key, fallback) {
@@ -67,15 +79,15 @@ export function saveData(key, value) {
   }
 }
 
-export function resetAllDataToDefault(bizId = 'biz_advait') {
-  const cleanId = (bizId || 'biz_advait').trim().toLowerCase();
-  const fallbackMenu = initialMenuByBusiness?.[cleanId] || (cleanId === 'biz_advait' ? initialMenu : []);
-  saveData(getScopedKey(STORAGE_KEYS.MENU, cleanId), fallbackMenu);
+export function resetAllDataToDefault(bizId) {
+  if (!bizId) return;
+  const cleanId = String(bizId).trim().toLowerCase();
+  saveData(getScopedKey(STORAGE_KEYS.MENU, cleanId), []);
   saveData(getScopedKey(STORAGE_KEYS.CHEF, cleanId), verifiedChefData);
-  saveData(getScopedKey(STORAGE_KEYS.ORDERS, cleanId), cleanId === 'biz_advait' ? initialOrders : []);
-  saveData(getScopedKey(STORAGE_KEYS.EXPENSES, cleanId), cleanId === 'biz_advait' ? initialExpenses : []);
-  saveData(getScopedKey(STORAGE_KEYS.STAFF, cleanId), initialStaffByBusiness?.[cleanId] || (cleanId === 'biz_advait' ? initialStaff : []));
-  saveData(getScopedKey(STORAGE_KEYS.OFFERS, cleanId), cleanId === 'biz_advait' ? initialOffers : []);
+  saveData(getScopedKey(STORAGE_KEYS.ORDERS, cleanId), []);
+  saveData(getScopedKey(STORAGE_KEYS.EXPENSES, cleanId), []);
+  saveData(getScopedKey(STORAGE_KEYS.STAFF, cleanId), []);
+  saveData(getScopedKey(STORAGE_KEYS.OFFERS, cleanId), []);
   saveData(getScopedKey(STORAGE_KEYS.THEME, cleanId), getInitialThemeForBusiness(cleanId));
   saveData(getScopedKey(STORAGE_KEYS.CHECKLISTS, cleanId), []);
 }

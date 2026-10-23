@@ -210,7 +210,8 @@ export async function syncOrderToCloud(order, businessId = null) {
   const database = initFirebase();
   if (!database || !order || !order.id) return false;
 
-  const targetBizId = businessId || order.businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || order.businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return false;
 
   try {
     const cleanOrder = sanitizeForFirestore(order);
@@ -239,7 +240,8 @@ export async function syncStatusToCloud(orderId, updateData, businessId = null) 
   const database = initFirebase();
   if (!database || !orderId) return false;
 
-  const targetBizId = businessId || updateData?.businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || updateData?.businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return false;
 
   try {
     const cleanUpdate = sanitizeForFirestore(updateData);
@@ -266,7 +268,8 @@ export async function syncServerCallToCloud(callData, businessId = null) {
   const database = initFirebase();
   if (!database) return false;
 
-  const targetBizId = businessId || callData?.businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || callData?.businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return false;
 
   try {
     const cleanCall = sanitizeForFirestore(callData);
@@ -289,7 +292,8 @@ export function subscribeToCloudServerCalls(businessId, onCallReceived) {
   const database = initFirebase();
   if (!database) return () => {};
 
-  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return () => {};
 
   try {
     const alertRef = doc(database, 'restaurant_alerts', `${targetBizId}_latest_call_server`);
@@ -319,7 +323,8 @@ export function subscribeToCloudOrders(businessId, onOrdersUpdated, onStatusUpda
     return () => {};
   }
 
-  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return () => {};
 
   try {
     const ordersCol = collection(database, 'restaurant_orders');
@@ -384,7 +389,8 @@ export async function syncOffersToCloud(offers, businessId = null) {
   const database = initFirebase();
   if (!database || !Array.isArray(offers)) return false;
 
-  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return false;
   const hashKey = `${targetBizId}_offers`;
   if (!hasDataChanged(hashKey, offers)) {
     return true; // Data has not changed, zero-cost redundant write skip
@@ -412,7 +418,8 @@ export function subscribeToCloudOffers(businessId, onOffersUpdated) {
   const database = initFirebase();
   if (!database) return () => {};
 
-  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return () => {};
 
   try {
     const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_offers`);
@@ -443,7 +450,8 @@ export async function syncMenuToCloud(menu, businessId = null) {
   const database = initFirebase();
   if (!database || !Array.isArray(menu)) return false;
 
-  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return false;
   const hashKey = `${targetBizId}_menu`;
   if (!hasDataChanged(hashKey, menu)) {
     return true; // Data has not changed, zero-cost redundant write skip
@@ -471,7 +479,8 @@ export function subscribeToCloudMenu(businessId, onMenuUpdated) {
   const database = initFirebase();
   if (!database) return () => {};
 
-  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return () => {};
 
   try {
     const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_menu`);
@@ -502,7 +511,8 @@ export async function syncStaffToCloud(staff, businessId = null) {
   const database = initFirebase();
   if (!database || !Array.isArray(staff)) return false;
 
-  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return false;
   const hashKey = `${targetBizId}_staff`;
   if (!hasDataChanged(hashKey, staff)) {
     return true; // Data has not changed, zero-cost redundant write skip
@@ -530,7 +540,8 @@ export function subscribeToCloudStaff(businessId, onStaffUpdated) {
   const database = initFirebase();
   if (!database) return () => {};
 
-  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return () => {};
 
   try {
     const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_staff`);
@@ -561,7 +572,8 @@ export async function syncChecklistToCloud(report, businessId = null) {
   const database = initFirebase();
   if (!database || !report || !report.id) return false;
 
-  const targetBizId = businessId || report.businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || report.businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return false;
 
   try {
     const cloudDocId = `${targetBizId}_${report.id}`;
@@ -587,7 +599,8 @@ export function subscribeToCloudChecklists(businessId, onChecklistUpdated) {
   const database = initFirebase();
   if (!database) return () => {};
 
-  const targetBizId = businessId || getActiveBusiness()?.id || 'biz_advait';
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return () => {};
 
   try {
     const colRef = collection(database, 'restaurant_checklists');
