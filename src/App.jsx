@@ -120,6 +120,22 @@ export const getInitialBusinessId = () => {
       }
     }
     if (typeof sessionStorage !== 'undefined') {
+      try {
+        const rawSessions = sessionStorage.getItem('flowscape_auth_sessions_v3');
+        if (rawSessions) {
+          const sessions = JSON.parse(rawSessions);
+          const activeSessionBizId = sessions?.admin?.businessId || sessions?.counter?.businessId;
+          if (activeSessionBizId) {
+            const businesses = getBusinesses();
+            const match = businesses.find((b) => b.id === activeSessionBizId);
+            if (match) {
+              setActiveBusiness(match.id);
+              return match.id;
+            }
+          }
+        }
+      } catch {}
+
       const sessionBiz = sessionStorage.getItem('flowscape_guest_scanned_biz');
       if (sessionBiz) {
         const businesses = getBusinesses();

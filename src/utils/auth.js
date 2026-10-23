@@ -307,53 +307,42 @@ export function isAuthenticated(role, activeSessionRole = null) {
   const sessions = getStoredSessions();
   if (!sessions) return false;
 
-  const activeBiz = getActiveBusiness();
-  const currentBizId = activeBiz?.id || 'biz_advait';
-
-  // Admin Master session can access both Admin and Counter for their own business ONLY
+  // Admin Master session can access both Admin and Counter
   if (sessions[ROLES.ADMIN] && sessions[ROLES.ADMIN].token) {
-    if (sessions[ROLES.ADMIN].businessId === currentBizId) {
+    if (role === ROLES.ADMIN || role === ROLES.COUNTER) {
       return true;
     }
   }
 
-  // If session switched from Admin, require an active admin session token of the current business
+  // If session switched from Admin, allow access to Admin and Counter
   if (
-    role === ROLES.ADMIN &&
+    (role === ROLES.ADMIN || role === ROLES.COUNTER) &&
     typeof sessionStorage !== 'undefined' &&
     sessionStorage.getItem('flowscape_switched_from_admin') === 'true' &&
-    Boolean(sessions[ROLES.ADMIN]?.token) &&
-    sessions[ROLES.ADMIN]?.businessId === currentBizId
+    Boolean(sessions[ROLES.ADMIN]?.token)
   ) {
     return true;
   }
 
+  // Counter staff session can access Counter POS
   if (role === ROLES.COUNTER && sessions[ROLES.COUNTER] && sessions[ROLES.COUNTER].token) {
-    if (sessions[ROLES.COUNTER].businessId === currentBizId) {
-      return true;
-    }
+    return true;
   }
 
+  // Check direct session token for the requested role
   if (sessions[role] && sessions[role].token) {
-    if (sessions[role].businessId === currentBizId) {
-      return true;
-    }
+    return true;
   }
 
   return false;
 }
 
 /**
- * Retrieve active session data for a specific role (strictly isolated by business)
+ * Retrieve active session data for a specific role (strictly isolated by tab session)
  */
 export function getSession(role) {
   const sessions = getStoredSessions();
   if (!sessions || !sessions[role]) return null;
-  const activeBiz = getActiveBusiness();
-  const currentBizId = activeBiz?.id || 'biz_advait';
-  if (sessions[role].businessId && sessions[role].businessId !== currentBizId) {
-    return null;
-  }
   return sessions[role];
 }
 

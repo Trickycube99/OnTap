@@ -171,8 +171,29 @@ export function saveBusinesses(businesses) {
  */
 export function getActiveBusiness() {
   const businesses = getBusinesses();
-  const activeId = localStorage.getItem(ACTIVE_BUSINESS_ID_KEY) || 'biz_advait';
-  const found = businesses.find((b) => b.id === activeId);
+  let activeId = null;
+
+  // 1. Prioritize active tab session in sessionStorage (isolated per tab, preserved across refreshes)
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      const raw = sessionStorage.getItem('flowscape_auth_sessions_v3');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.admin?.businessId) {
+          activeId = parsed.admin.businessId;
+        } else if (parsed?.counter?.businessId) {
+          activeId = parsed.counter.businessId;
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Fall back to localStorage if set
+  if (!activeId && typeof localStorage !== 'undefined') {
+    activeId = localStorage.getItem(ACTIVE_BUSINESS_ID_KEY);
+  }
+
+  const found = businesses.find((b) => b.id === (activeId || 'biz_advait'));
   return found || businesses[0] || DEFAULT_BUSINESSES[0];
 }
 
