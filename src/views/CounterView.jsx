@@ -952,7 +952,6 @@ export default function CounterView({
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#F8FAFC', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span>Live POS Orders Stack</span>
-                  <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#10B981', color: '#FFFFFF', fontWeight: 600 }}>Active</span>
                 </div>
                 <div style={{ fontSize: 11, color: '#94A3B8' }}>
                   {orders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length} Live Kitchen Prep Tickets • 80mm GST Thermal Receipt Ready
@@ -1293,7 +1292,6 @@ export default function CounterView({
                 <span className="card-heading">Suggestables & Upsell Pairing</span>
                 <span className="card-meta-text">Configure add-on featured pairing on customer menus</span>
               </div>
-              <Sparkles size={18} color="#007AFF" />
             </div>
 
             <div style={{ marginBottom: 10 }}>

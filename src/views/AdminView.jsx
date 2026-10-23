@@ -2990,19 +2990,6 @@ export default function AdminView({
                       <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>
                         Executive Owner Master Login Credentials
                       </span>
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: 8,
-                          background: (activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? 'rgba(52, 211, 153, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                          color: (activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? '#6EE7B7' : '#FCA5A5',
-                          border: `1px solid ${(activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? 'rgba(52, 211, 153, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`
-                        }}
-                      >
-                        {(activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? '● Verified & Active' : '○ Suspended'}
-                      </span>
                     </div>
                     <div style={{ fontSize: 12, color: '#C7D2FE', marginTop: 2 }}>
                       {activeBiz?.name} • Restaurant Owner Account
@@ -3783,56 +3770,6 @@ export default function AdminView({
                 <span>{isSavingStaff ? 'Saving...' : 'Save Staff & Permissions'}</span>
               </button>
             </div>
-
-            {/* Corporate Bank Salary Disbursal Card */}
-            <div
-              style={{
-                marginTop: 14,
-                padding: '14px',
-                background: '#FFFFFF',
-                borderRadius: 14,
-                border: '1px solid #E5E7EB'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>Monthly Salary Payout</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    Record monthly staff payroll • {activeStaffList.length} Active Staff
-                  </div>
-                </div>
-                <span className="status-pill done" style={{ fontSize: 10 }}>
-                  Verified
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                <button
-                  className="btn-primary-pill"
-                  style={{ fontSize: 12, padding: '7px 14px', background: '#0284C7' }}
-                  onClick={handleExecuteBankPayrollBatch}
-                >
-                  <Send size={13} />
-                  <span>Record Salary Payout (₹{totalNetPayroll.toLocaleString('en-IN')})</span>
-                </button>
-
-                <button
-                  className="btn-secondary-pill"
-                  style={{ fontSize: 12, padding: '7px 14px' }}
-                  onClick={handleExportPayrollCsv}
-                >
-                  <Download size={13} />
-                  <span>Export Payroll Summary (CSV)</span>
-                </button>
-              </div>
-
-              {payrollDisbursed && (
-                <div style={{ marginTop: 10, fontSize: 12, color: '#16A34A', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <CheckCircle2 size={14} />
-                  <span>Salary payout of ₹{totalNetPayroll.toLocaleString('en-IN')} recorded successfully!</span>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}
@@ -3847,7 +3784,6 @@ export default function AdminView({
                 <span className="card-heading">Suggestables & Upsell Pairing</span>
                 <span className="card-meta-text">Configure add-on featured pairing on customer menus</span>
               </div>
-              <Sparkles size={18} color="#007AFF" />
             </div>
 
             <div style={{ marginBottom: 10 }}>

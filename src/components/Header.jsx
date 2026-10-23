@@ -47,8 +47,6 @@ export default function Header({
   isSoundMuted = false,
   onToggleSound
 }) {
-  const [activeBranch, setActiveBranch] = useState('Connaught Place, New Delhi');
-  const [showBranchMenu, setShowBranchMenu] = useState(false);
   const [cloudSyncState, setCloudSyncState] = useState(getCloudSyncState());
   const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
 
@@ -56,12 +54,6 @@ export default function Header({
     const unsub = subscribeCloudSyncState(setCloudSyncState);
     return unsub;
   }, []);
-
-  const branches = [
-    'Connaught Place, New Delhi (Flagship)',
-    'DLF Cyber Hub, Gurugram',
-    '12th Main Indiranagar, Bengaluru'
-  ];
 
   const currentSession = authSessions[currentRole];
   const isCustomer = currentRole === 'customer' || currentRole === 'chef';
@@ -221,46 +213,11 @@ export default function Header({
                     ? `${theme?.restaurantName ? `${theme.restaurantName} • ` : ''}Billing Counter`
                     : `${theme?.restaurantName ? `${theme.restaurantName} • ` : ''}Manager Dashboard`}
                 </span>
-                <span className="staff-online-dot" title="Workstation Online" />
               </div>
 
-              {/* Branch Selector Pill or Developer Root Badge */}
-              {currentRole === 'developer' ? (
+              {currentRole === 'developer' && (
                 <div style={{ fontSize: 10, color: '#38BDF8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                   <span>Platform Superadmin Root</span>
-                </div>
-              ) : (
-                <div
-                  className="branch-selector-pill"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    playTapSound();
-                    setShowBranchMenu(!showBranchMenu);
-                  }}
-                >
-                  <MapPin size={10} color="#007AFF" />
-                  <span>{activeBranch.split('(')[0].trim()}</span>
-                  <ChevronDown size={10} />
-                </div>
-              )}
-
-              {showBranchMenu && (
-                <div className="branch-dropdown-menu">
-                  {branches.map((b) => (
-                    <div
-                      key={b}
-                      className={`branch-dropdown-item ${activeBranch === b ? 'selected' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        playTapSound();
-                        setActiveBranch(b);
-                        setShowBranchMenu(false);
-                      }}
-                    >
-                      <CheckCircle2 size={12} color={activeBranch === b ? '#007AFF' : 'transparent'} />
-                      <span>{b}</span>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
@@ -329,46 +286,10 @@ export default function Header({
 
         {/* Right: Staff Profile, Sound Toggle, QR Standees, Reset & Logout */}
         <div className="header-right">
-          {/* Cloud Sync Indicator Pill */}
-          <div
-            className="btn-secondary-pill cloud-sync-badge-pill"
-            onClick={() => {
-              if (currentRole === 'developer') {
-                playTapSound();
-                setShowCloudSyncModal(true);
-              }
-            }}
-            style={{
-              padding: '4px 9px',
-              fontSize: 11,
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              borderColor: cloudSyncState.status === 'connected' ? '#BBF7D0' : cloudSyncState.status === 'error' ? '#FECACA' : '#E5E7EB',
-              background: cloudSyncState.status === 'connected' ? '#F0FDF4' : cloudSyncState.status === 'error' ? '#FEF2F2' : '#F9FAFB',
-              color: cloudSyncState.status === 'connected' ? '#15803D' : cloudSyncState.status === 'error' ? '#DC2626' : '#4B5563',
-              cursor: currentRole === 'developer' ? 'pointer' : 'default'
-            }}
-            title={currentRole === 'developer' ? 'Cloud Diagnostics' : 'Online'}
-          >
-            <Cloud size={12} color={cloudSyncState.status === 'connected' ? '#16A34A' : cloudSyncState.status === 'error' ? '#DC2626' : '#64748B'} />
-            <span style={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              backgroundColor: cloudSyncState.status === 'connected' ? '#16A34A' : cloudSyncState.status === 'error' ? '#DC2626' : '#9CA3AF'
-            }} />
-            <span className="cloud-sync-label">
-              {cloudSyncState.status === 'connected' ? 'Online' : cloudSyncState.status === 'error' ? 'Offline' : 'Online'}
-            </span>
-          </div>
-
           {/* Active Staff Operator Badge */}
           <div className="header-auth-profile-pill">
             <User size={13} color={currentRole === 'developer' ? '#38BDF8' : '#007AFF'} />
             <span>{currentRole === 'developer' ? 'Root Dev' : currentSession ? currentSession.name.split(' ')[0] : 'Staff'}</span>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: currentRole === 'developer' ? '#38BDF8' : '#10B981' }} />
           </div>
 
           {/* Sound Alert Toggle */}
