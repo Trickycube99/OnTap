@@ -31,10 +31,13 @@ import {
   PauseCircle,
   PlayCircle,
   Clock,
-  Sparkles
+  Sparkles,
+  Utensils,
+  Store
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import TableQrModal from '../components/TableQrModal';
+import { computeTableSignature } from '../utils/tableSecurity';
 import {
   purgeBusinessAccountComplete,
   getLegalComplianceRecords,
@@ -101,6 +104,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     ownerPin: '',
     counterPin: '',
     upiId: '',
+    serviceType: 'dine_in', // 'dine_in' | 'stall'
     tableCount: 6,
     accentColor: '#007AFF'
   });
@@ -304,8 +308,14 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       return;
     }
 
-    const tables = Array.from({ length: Number(newBiz.tableCount) || 6 }, (_, i) => `Table ${String(i + 1).padStart(2, '0')}`);
-    tables.push('Takeaway / Counter');
+    const isStall = newBiz.serviceType === 'stall';
+    const tableCount = isStall ? 0 : (parseInt(newBiz.tableCount, 10) || 6);
+    const tables = isStall
+      ? ['Counter / Stand & Eat']
+      : [
+          ...Array.from({ length: tableCount }, (_, i) => `Table ${String(i + 1).padStart(2, '0')}`),
+          'Counter / Takeaway'
+        ];
 
     const isDemoMode = Boolean(provRes.isLocalFallback);
     const initialStatus = isDemoMode ? 'active' : 'pending_verification';
@@ -316,6 +326,8 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       ...newBiz,
       ownerPin: trimmedOwnerPin,
       counterPin: trimmedCounterPin,
+      serviceType: newBiz.serviceType || 'dine_in',
+      tableCount,
       tables,
       status: initialStatus,
       emailVerified: initialVerified
@@ -347,6 +359,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
         ownerPin: '',
         counterPin: '',
         upiId: '',
+        serviceType: 'dine_in',
         tableCount: 6,
         accentColor: '#007AFF'
       });
@@ -1565,6 +1578,32 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           Plan: {biz.plan}
                         </span>
 
+                        {/* Format Badge */}
+                        <span style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          background: (biz.serviceType === 'stall' || (biz.tables?.length === 1 && biz.tables[0].includes('Stand'))) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(14, 165, 233, 0.15)',
+                          color: (biz.serviceType === 'stall' || (biz.tables?.length === 1 && biz.tables[0].includes('Stand'))) ? '#34D399' : '#38BDF8',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}>
+                          {(biz.serviceType === 'stall' || (biz.tables?.length === 1 && biz.tables[0].includes('Stand'))) ? (
+                            <>
+                              <Store size={11} />
+                              <span>Stand & Eat Stall</span>
+                            </>
+                          ) : (
+                            <>
+                              <Utensils size={11} />
+                              <span>{biz.tableCount || (biz.tables?.filter(t => t.toLowerCase().startsWith('table')).length || 6)} Tables</span>
+                            </>
+                          )}
+                        </span>
+
                         {/* Status Badge */}
                         {isActive ? (
                           <span style={{
@@ -1718,9 +1757,12 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         <button
                           onClick={() => {
                             playTapSound();
-                            const table = (biz.tables && biz.tables[0]) ? biz.tables[0].replace(/\D/g, '').padStart(2, '0') : '01';
+                            const isStall = biz.serviceType === 'stall' || (biz.tables?.length === 1 && biz.tables[0].includes('Stand'));
+                            const tableParam = isStall ? 'Stand' : ((biz.tables && biz.tables[0]) ? biz.tables[0].replace(/\D/g, '').padStart(2, '0') : '01');
                             const cleanBiz = biz.id || '';
-                            window.open(`/?biz=${encodeURIComponent(cleanBiz)}&table=${table}&qr=true#customer`, '_blank');
+                            const selectedTable = isStall ? 'Counter / Stand & Eat' : (biz.tables?.[0] || 'Table 01');
+                            const sig = computeTableSignature(cleanBiz, selectedTable);
+                            window.open(`/?biz=${encodeURIComponent(cleanBiz)}&table=${tableParam}&sig=${encodeURIComponent(sig)}&qr=true#customer`, '_blank');
                           }}
                           style={{
                             flex: '0 0 auto',
@@ -1764,7 +1806,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           title="View & Download printable QR tent standees for this business"
                         >
                           <QrCode size={13} />
-                          <span>Table QRs</span>
+                          <span>{(biz.serviceType === 'stall' || (biz.tables?.length === 1 && biz.tables[0].includes('Stand'))) ? 'Counter QR' : 'Table QRs'}</span>
                         </button>
                       </div>
 
@@ -2304,6 +2346,182 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       <option value="Enterprise">Enterprise (₹8,999/mo)</option>
                     </select>
                   </div>
+                </div>
+
+                {/* RESTAURANT SERVICE FORMAT & TABLES SETUP */}
+                <div style={{
+                  background: 'rgba(30, 41, 59, 0.4)',
+                  padding: 12,
+                  borderRadius: 12,
+                  border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#38BDF8', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <QrCode size={14} color="#38BDF8" />
+                    <span>Restaurant Service Format & Tables</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 10 }}>
+                    Select how customers order and dine at this establishment
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                    {/* Option 1: Dine-In Restaurant */}
+                    <div
+                      onClick={() => setNewBiz({ ...newBiz, serviceType: 'dine_in' })}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: newBiz.serviceType !== 'stall' ? '2px solid #0284C7' : '1px solid rgba(255, 255, 255, 0.1)',
+                        background: newBiz.serviceType !== 'stall' ? 'rgba(2, 132, 199, 0.15)' : 'rgba(15, 23, 42, 0.6)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                        <div style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 6,
+                          background: newBiz.serviceType !== 'stall' ? '#0284C7' : 'rgba(255, 255, 255, 0.1)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#FFFFFF'
+                        }}>
+                          <Utensils size={13} />
+                        </div>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: newBiz.serviceType !== 'stall' ? '#38BDF8' : '#CBD5E1' }}>
+                          Dine-In Restaurant
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 10.5, color: '#94A3B8', lineHeight: 1.35 }}>
+                        Numbered dining tables. Generates separate QR standees for each table.
+                      </div>
+                    </div>
+
+                    {/* Option 2: Stand & Eat Stall */}
+                    <div
+                      onClick={() => setNewBiz({ ...newBiz, serviceType: 'stall' })}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: newBiz.serviceType === 'stall' ? '2px solid #10B981' : '1px solid rgba(255, 255, 255, 0.1)',
+                        background: newBiz.serviceType === 'stall' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(15, 23, 42, 0.6)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                        <div style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 6,
+                          background: newBiz.serviceType === 'stall' ? '#10B981' : 'rgba(255, 255, 255, 0.1)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#FFFFFF'
+                        }}>
+                          <Store size={13} />
+                        </div>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: newBiz.serviceType === 'stall' ? '#34D399' : '#CBD5E1' }}>
+                          Stand & Eat Stall
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 10.5, color: '#94A3B8', lineHeight: 1.35 }}>
+                        Counter service. Single QR standee; orders handed out using Order Numbers.
+                      </div>
+                    </div>
+                  </div>
+
+                  {newBiz.serviceType !== 'stall' ? (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 600, color: '#CBD5E1' }}>
+                          Number of Dining Tables:
+                        </label>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: '#38BDF8' }}>
+                          {newBiz.tableCount || 6} Tables (+ Takeaway)
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={newBiz.tableCount || 6}
+                          onChange={(e) => {
+                            const val = Math.max(1, Math.min(50, parseInt(e.target.value, 10) || 1));
+                            setNewBiz({ ...newBiz, tableCount: val });
+                          }}
+                          style={{
+                            width: 70,
+                            padding: '6px 8px',
+                            borderRadius: 8,
+                            background: 'rgba(15, 23, 42, 0.8)',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            color: '#F8FAFC',
+                            fontSize: 13,
+                            fontWeight: 700,
+                            textAlign: 'center'
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flex: 1, maxHeight: 48, overflowY: 'auto' }}>
+                          {Array.from({ length: Math.min(newBiz.tableCount || 6, 6) }, (_, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                fontSize: 9.5,
+                                fontWeight: 600,
+                                padding: '2px 6px',
+                                borderRadius: 5,
+                                background: 'rgba(2, 132, 199, 0.2)',
+                                color: '#38BDF8',
+                                border: '1px solid rgba(2, 132, 199, 0.3)'
+                              }}
+                            >
+                              Table {String(i + 1).padStart(2, '0')}
+                            </span>
+                          ))}
+                          {(newBiz.tableCount || 6) > 6 && (
+                            <span style={{ fontSize: 9.5, color: '#94A3B8', padding: '2px 4px' }}>
+                              +{(newBiz.tableCount || 6) - 6} more
+                            </span>
+                          )}
+                          <span
+                            style={{
+                              fontSize: 9.5,
+                              fontWeight: 600,
+                              padding: '2px 6px',
+                              borderRadius: 5,
+                              background: 'rgba(255, 255, 255, 0.05)',
+                              color: '#CBD5E1',
+                              border: '1px solid rgba(255, 255, 255, 0.1)'
+                            }}
+                          >
+                            Counter / Takeaway
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 4 }}>
+                        Individual QR tent cards will be generated for Table 01 through Table {String(newBiz.tableCount || 6).padStart(2, '0')}.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      background: 'rgba(16, 185, 129, 0.1)',
+                      border: '1px solid rgba(16, 185, 129, 0.2)',
+                      borderRadius: 8,
+                      padding: '8px 10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}>
+                      <CheckCircle2 size={14} color="#34D399" style={{ flexShrink: 0 }} />
+                      <div style={{ fontSize: 10.5, color: '#A7F3D0', lineHeight: 1.35 }}>
+                        Generates a single <strong>Counter QR Standee</strong>. Customers order at the counter and receive sequential <strong>Order Numbers (e.g. #101)</strong> for pickup.
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{
@@ -3075,6 +3293,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
           logo={tableQrBiz.logo}
           tagline={tableQrBiz.tagline}
           businessId={tableQrBiz.id}
+          serviceType={tableQrBiz.serviceType || (tableQrBiz.tables?.length === 1 && tableQrBiz.tables[0].includes('Stand') ? 'stall' : 'dine_in')}
         />
       )}
 

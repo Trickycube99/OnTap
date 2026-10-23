@@ -34,7 +34,8 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   KeyRound,
-  ExternalLink
+  ExternalLink,
+  Store
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
@@ -288,6 +289,8 @@ export default function AdminView({
     menuLayout: theme?.menuLayout || 'grid',
     upiId: theme?.upiId || '9119069179@nyes',
     logo: theme?.logo || null,
+    serviceType: theme?.serviceType || (theme?.tables?.length === 1 && theme?.tables[0].includes('Stand') ? 'stall' : 'dine_in'),
+    tableCount: theme?.tableCount || (theme?.tables?.filter(t => t.toLowerCase().startsWith('table')).length || 6),
     showAboutChef: theme?.showAboutChef !== false && chef?.showAboutChef !== false
   }));
   const [customizerSaveSuccess, setCustomizerSaveSuccess] = useState(false);
@@ -321,6 +324,8 @@ export default function AdminView({
       menuLayout: theme?.menuLayout || 'grid',
       upiId: theme?.upiId || '9119069179@nyes',
       logo: theme?.logo || null,
+      serviceType: theme?.serviceType || (theme?.tables?.length === 1 && theme?.tables[0].includes('Stand') ? 'stall' : 'dine_in'),
+      tableCount: theme?.tableCount || (theme?.tables?.filter(t => t.toLowerCase().startsWith('table')).length || 6),
       showAboutChef: theme?.showAboutChef !== false && chef?.showAboutChef !== false
     });
   }
@@ -446,9 +451,21 @@ export default function AdminView({
 
     const isChefVisible = (chefDraft.showAboutChef !== false) && (customizerDraft.showAboutChef !== false);
 
+    const isStall = customizerDraft.serviceType === 'stall';
+    const tableCount = isStall ? 0 : (parseInt(customizerDraft.tableCount, 10) || 6);
+    const computedTables = isStall
+      ? ['Counter / Stand & Eat']
+      : [
+          ...Array.from({ length: tableCount }, (_, i) => `Table ${String(i + 1).padStart(2, '0')}`),
+          'Counter / Takeaway'
+        ];
+
     const updatedTheme = {
       ...theme,
       ...customizerDraft,
+      serviceType: customizerDraft.serviceType || 'dine_in',
+      tableCount,
+      tables: computedTables,
       showAboutChef: isChefVisible
     };
 
@@ -472,6 +489,9 @@ export default function AdminView({
         upiId: customizerDraft.upiId,
         accentColor: customizerDraft.accentColor,
         logo: customizerDraft.logo,
+        serviceType: customizerDraft.serviceType || 'dine_in',
+        tableCount,
+        tables: computedTables,
         showAboutChef: isChefVisible,
         chef: updatedChef
       });
@@ -4168,7 +4188,203 @@ export default function AdminView({
                 </div>
               </div>
 
-              {/* Section D: Instant UPI Merchant ID */}
+              {/* Section D: Restaurant Service Format & Tables Configuration */}
+              <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: 16, padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <QrCode size={16} color={customizerDraft.accentColor || '#007AFF'} />
+                      <span>Restaurant Service Format & Tables</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                      Configure whether your establishment has numbered dining tables or operates as a stand & eat counter.
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapSound();
+                      if (onOpenTableQr) onOpenTableQr();
+                    }}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: 8,
+                      border: '1.5px solid #007AFF',
+                      background: '#EFF6FF',
+                      color: '#007AFF',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}
+                  >
+                    <QrCode size={14} />
+                    <span>View & Print QR Standees</span>
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginBottom: 14 }}>
+                  {/* Option 1: Dine-In Restaurant */}
+                  <div
+                    onClick={() => {
+                      playTapSound();
+                      setCustomizerDraft({ ...customizerDraft, serviceType: 'dine_in' });
+                      setCustomizerSaveSuccess(false);
+                    }}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      border: customizerDraft.serviceType !== 'stall' ? '2px solid #007AFF' : '1px solid #E2E8F0',
+                      background: customizerDraft.serviceType !== 'stall' ? '#EFF6FF' : '#FFFFFF',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <div style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 6,
+                        background: customizerDraft.serviceType !== 'stall' ? '#007AFF' : '#F1F5F9',
+                        color: customizerDraft.serviceType !== 'stall' ? '#FFFFFF' : '#64748B',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Utensils size={14} />
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: customizerDraft.serviceType !== 'stall' ? '#007AFF' : '#0F172A' }}>
+                        Dine-In Restaurant
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B', lineHeight: 1.35 }}>
+                      Numbered dining tables. Generates separate QR tent cards for each table.
+                    </div>
+                  </div>
+
+                  {/* Option 2: Stand & Eat Stall */}
+                  <div
+                    onClick={() => {
+                      playTapSound();
+                      setCustomizerDraft({ ...customizerDraft, serviceType: 'stall' });
+                      setCustomizerSaveSuccess(false);
+                    }}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      border: customizerDraft.serviceType === 'stall' ? '2px solid #10B981' : '1px solid #E2E8F0',
+                      background: customizerDraft.serviceType === 'stall' ? '#F0FDF4' : '#FFFFFF',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <div style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 6,
+                        background: customizerDraft.serviceType === 'stall' ? '#10B981' : '#F1F5F9',
+                        color: customizerDraft.serviceType === 'stall' ? '#FFFFFF' : '#64748B',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Store size={14} />
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: customizerDraft.serviceType === 'stall' ? '#16A34A' : '#0F172A' }}>
+                        Stand & Eat Stall / Counter
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B', lineHeight: 1.35 }}>
+                      Counter service. Single QR standee; orders handed out using Order Numbers.
+                    </div>
+                  </div>
+                </div>
+
+                {customizerDraft.serviceType !== 'stall' ? (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+                        Number of Dining Tables:
+                      </label>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#007AFF' }}>
+                        {customizerDraft.tableCount || 6} Tables (+ Takeaway)
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <input
+                        type="number"
+                        min={1}
+                        max={50}
+                        className="ios-input"
+                        value={customizerDraft.tableCount || 6}
+                        onChange={(e) => {
+                          const val = Math.max(1, Math.min(50, parseInt(e.target.value, 10) || 1));
+                          setCustomizerDraft({ ...customizerDraft, tableCount: val });
+                          setCustomizerSaveSuccess(false);
+                        }}
+                        style={{ width: 80, textAlign: 'center', fontWeight: 700, fontSize: 14 }}
+                      />
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flex: 1 }}>
+                        {Array.from({ length: Math.min(customizerDraft.tableCount || 6, 8) }, (_, i) => (
+                          <span
+                            key={i}
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 600,
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                              background: '#EFF6FF',
+                              color: '#007AFF',
+                              border: '1px solid #BFDBFE'
+                            }}
+                          >
+                            Table {String(i + 1).padStart(2, '0')}
+                          </span>
+                        ))}
+                        {(customizerDraft.tableCount || 6) > 8 && (
+                          <span style={{ fontSize: 11, color: '#64748B', padding: '3px 4px' }}>
+                            +{(customizerDraft.tableCount || 6) - 8} more
+                          </span>
+                        )}
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            background: '#F1F5F9',
+                            color: '#475569',
+                            border: '1px solid #E2E8F0'
+                          }}
+                        >
+                          Counter / Takeaway
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{
+                    background: '#DCFCE7',
+                    border: '1px solid #86EFAC',
+                    borderRadius: 10,
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}>
+                    <CheckCircle2 size={16} color="#15803D" style={{ flexShrink: 0 }} />
+                    <div style={{ fontSize: 11.5, color: '#166534', lineHeight: 1.4 }}>
+                      Operating in <strong>Stand & Eat Stall</strong> format. A single <strong>Counter QR Standee</strong> is active. Orders placed by customers will be issued sequential <strong>Order Numbers (e.g. #101)</strong> for pickup.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section E: Instant UPI Merchant ID */}
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
                   UPI Merchant ID / VPA (Customer QR &amp; Instant App Payment)

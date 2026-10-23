@@ -7,10 +7,13 @@ const TABLE_SECRET_SALT = 'ontap_secure_table_salt_8921_v5';
  * Sanitize and format the scanned table or takeaway station parameter
  * Supports individual table numbers (e.g. '04', 'Table 04') and takeaway stations (e.g. 'Takeaway', 'Counter / Takeaway')
  */
-export const sanitizeTableFromParam = (tableParam) => {
-  if (!tableParam) return 'Table 04';
+export const sanitizeTableFromParam = (tableParam, defaultTable = 'Table 04') => {
+  if (!tableParam) return defaultTable;
   const trimmed = String(tableParam).trim();
   const lower = trimmed.toLowerCase();
+  if (lower === 'stand' || lower === 'stall' || lower.includes('stand') || lower.includes('stall')) {
+    return 'Counter / Stand & Eat';
+  }
   if (lower === 'takeaway' || lower.includes('takeaway') || lower.includes('counter')) {
     return 'Counter / Takeaway';
   }
@@ -67,8 +70,8 @@ export function verifyTableSignature(bizId, table, signature) {
  * @param {boolean} isPrivileged - True if Admin or Developer (bypass URL tamper lock)
  * @returns {{ valid: boolean, table: string, reason: string, attemptedTable?: string }}
  */
-export function verifyOrLockTable(bizId, requestedTable, incomingSig, isPrivileged = false) {
-  const cleanRequested = sanitizeTableFromParam(requestedTable);
+export function verifyOrLockTable(bizId, requestedTable, incomingSig, isPrivileged = false, defaultTable = 'Table 04') {
+  const cleanRequested = sanitizeTableFromParam(requestedTable, defaultTable);
 
   // 1. Privileged accounts (Admin / Developer) can test and switch any table freely
   if (isPrivileged) {
@@ -136,5 +139,5 @@ export function verifyOrLockTable(bizId, requestedTable, incomingSig, isPrivileg
   }
 
   // Fallback default
-  return { valid: true, table: 'Table 04', reason: 'default' };
+  return { valid: true, table: defaultTable, reason: 'default' };
 }

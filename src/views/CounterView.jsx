@@ -1012,8 +1012,21 @@ export default function CounterView({
                     {/* Top Row: Title & Status */}
                     <div className="card-top-row">
                       <div className="card-title-group">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           <span className="card-heading">{order.id}</span>
+                          {(order.orderNumber || (order.id && order.id.replace(/\D/g, ''))) && (
+                            <span style={{
+                              background: '#0284C7',
+                              color: '#FFFFFF',
+                              fontSize: 11,
+                              fontWeight: 800,
+                              padding: '2px 7px',
+                              borderRadius: 6,
+                              letterSpacing: '0.04em'
+                            }}>
+                              Order #{order.orderNumber || order.id.replace(/\D/g, '').slice(-4)}
+                            </span>
+                          )}
                           <span className="status-pill tag" style={{ fontSize: 10 }}>
                             {order.table}
                           </span>

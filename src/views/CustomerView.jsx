@@ -715,9 +715,19 @@ export default function CustomerView({
         <div style={{ marginBottom: 14 }}>
           <div className="screen-title">{t('liveOrderTracking')}</div>
           <div className="screen-subtitle">
-            {language === 'hi'
-              ? `${activeTable} के लिए लाइव रसोई प्रगति`
-              : `Real-time kitchen ticket progress for ${activeTable}`}
+            {(() => {
+              const isStall = (activeTable || '').toLowerCase().includes('stand') ||
+                              (activeTable || '').toLowerCase().includes('stall') ||
+                              theme?.serviceType === 'stall';
+              if (isStall) {
+                return language === 'hi'
+                  ? 'काउंटर ऑर्डर की लाइव रसोई प्रगति'
+                  : 'Real-time kitchen ticket progress for your counter order';
+              }
+              return language === 'hi'
+                ? `${activeTable} के लिए लाइव रसोई प्रगति`
+                : `Real-time kitchen ticket progress for ${activeTable}`;
+            })()}
           </div>
         </div>
 
@@ -755,10 +765,24 @@ export default function CustomerView({
             {/* Header row */}
             <div className="card-top-row" style={{ marginBottom: 10 }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span className="card-heading" style={{ fontSize: 18 }}>
                     {activeCustomerOrder.id}
                   </span>
+                  {(activeCustomerOrder.orderNumber || (activeCustomerOrder.id && activeCustomerOrder.id.replace(/\D/g, ''))) && (
+                    <span style={{
+                      background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
+                      color: '#FFFFFF',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      letterSpacing: '0.04em',
+                      boxShadow: '0 2px 6px rgba(2, 132, 199, 0.25)'
+                    }}>
+                      Order #{activeCustomerOrder.orderNumber || activeCustomerOrder.id.replace(/\D/g, '').slice(-4)}
+                    </span>
+                  )}
                   <span className="status-pill tag" style={{ fontSize: 11 }}>{activeCustomerOrder.table}</span>
                 </div>
                 <div className="card-meta-text" style={{ marginTop: 2 }}>
@@ -1044,30 +1068,44 @@ export default function CustomerView({
                   </div>
                 )}
 
-                {activeCustomerOrder.status === 'ready' && (
-                  <div
-                    style={{
-                      background: '#FEF08A',
-                      border: '1.5px solid #EAB308',
-                      borderRadius: 12,
-                      padding: '10px 14px',
-                      color: '#854D0E',
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      marginBottom: 12
-                    }}
-                  >
-                    <Sparkles size={17} color="#CA8A04" />
-                    <span>
-                      {language === 'hi'
-                        ? 'व्यंजन तैयार हैं! सर्विस टीम आपकी टेबल पर ला रही है।'
-                        : 'Order is Ready! Plated hot and on the way to your table right now.'}
-                    </span>
-                  </div>
-                )}
+                {activeCustomerOrder.status === 'ready' && (() => {
+                  const isStallOrder = (activeCustomerOrder.table || '').toLowerCase().includes('stand') ||
+                                       (activeCustomerOrder.table || '').toLowerCase().includes('stall') ||
+                                       (activeCustomerOrder.table || '').toLowerCase().includes('counter') ||
+                                       (activeCustomerOrder.table || '').toLowerCase().includes('takeaway') ||
+                                       theme?.serviceType === 'stall';
+                  const orderNumBadge = activeCustomerOrder.orderNumber || activeCustomerOrder.id.replace(/\D/g, '').slice(-4);
+                  return (
+                    <div
+                      style={{
+                        background: '#FEF08A',
+                        border: '1.5px solid #EAB308',
+                        borderRadius: 12,
+                        padding: '12px 14px',
+                        color: '#854D0E',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        marginBottom: 12
+                      }}
+                    >
+                      <Sparkles size={18} color="#CA8A04" style={{ flexShrink: 0 }} />
+                      <span>
+                        {isStallOrder ? (
+                          language === 'hi'
+                            ? `ऑर्डर #${orderNumBadge} तैयार है! कृपया काउंटर से अपना ऑर्डर प्राप्त करें।`
+                            : `Order #${orderNumBadge} is Ready! Please collect your order from the counter.`
+                        ) : (
+                          language === 'hi'
+                            ? 'व्यंजन तैयार हैं! सर्विस टीम आपकी टेबल पर ला रही है।'
+                            : 'Order is Ready! Plated hot and on the way to your table right now.'
+                        )}
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {(activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done') && (
                   <div
@@ -1775,9 +1813,19 @@ export default function CustomerView({
           <div>
             <div className="screen-title">{theme.restaurantName}</div>
             <div className="screen-subtitle">
-              {language === 'hi'
-                ? `${activeTable} पर आपका स्वागत है। मेनू देखें और तुरंत ऑर्डर करें।`
-                : (theme.welcomeMessage || `Welcome to ${activeTable}! Order fresh dishes directly to your table.`)}
+              {(() => {
+                const isStall = (activeTable || '').toLowerCase().includes('stand') ||
+                                (activeTable || '').toLowerCase().includes('stall') ||
+                                theme?.serviceType === 'stall';
+                if (isStall) {
+                  return language === 'hi'
+                    ? 'काउंटर स्टैंड व ईट पर आपका स्वागत है। मेनू देखें और तुरंत ऑर्डर करें।'
+                    : 'Welcome! Scan, order effortlessly, and pick up your food by Order Number.';
+                }
+                return language === 'hi'
+                  ? `${activeTable} पर आपका स्वागत है। मेनू देखें और तुरंत ऑर्डर करें।`
+                  : (theme.welcomeMessage || `Welcome to ${activeTable}! Order fresh dishes directly to your table.`);
+              })()}
             </div>
           </div>
         </div>

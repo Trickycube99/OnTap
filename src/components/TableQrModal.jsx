@@ -9,7 +9,8 @@ import {
   X,
   CheckCircle2,
   Sparkles,
-  Utensils
+  Utensils,
+  Store
 } from 'lucide-react';
 import { playTapSound, playSuccessChime } from '../utils/audio';
 import { computeTableSignature } from '../utils/tableSecurity';
@@ -27,19 +28,23 @@ export default function TableQrModal({
   restaurantName = 'Restaurant',
   logo = null,
   tagline = null,
-  businessId = ''
+  businessId = '',
+  serviceType = 'dine_in'
 }) {
   const [selectedTable, setSelectedTable] = useState(activeTable || 'Table 04');
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://restraunt-web-app.vercel.app';
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [isCopied, setIsCopied] = useState(false);
 
-  // Compute table number and tamper-proof table signature
-  const isTakeaway = (selectedTable || '').toLowerCase().includes('takeaway') || (selectedTable || '').toLowerCase().includes('counter');
+  const isStallMode = serviceType === 'stall' || (tables.length === 1 && (tables[0].toLowerCase().includes('stand') || tables[0].toLowerCase().includes('stall')));
+  const isCurrentStall = isStallMode || (selectedTable || '').toLowerCase().includes('stand') || (selectedTable || '').toLowerCase().includes('stall');
+  const isTakeaway = isCurrentStall || (selectedTable || '').toLowerCase().includes('takeaway') || (selectedTable || '').toLowerCase().includes('counter');
   const tableNum = (selectedTable || 'Table 04').replace(/\D/g, '').padStart(2, '0');
   const cleanBiz = businessId || '';
   const sig = computeTableSignature(cleanBiz, selectedTable);
-  const directMenuUrl = isTakeaway
+  const directMenuUrl = isCurrentStall
+    ? `${baseUrl}/?biz=${encodeURIComponent(cleanBiz)}&table=Stand&sig=${encodeURIComponent(sig)}&qr=true#customer`
+    : isTakeaway
     ? `${baseUrl}/?biz=${encodeURIComponent(cleanBiz)}&table=Takeaway&sig=${encodeURIComponent(sig)}&qr=true#customer`
     : `${baseUrl}/?biz=${encodeURIComponent(cleanBiz)}&table=${tableNum}&sig=${encodeURIComponent(sig)}&qr=true#customer`;
 
@@ -115,12 +120,20 @@ export default function TableQrModal({
         {/* Modal Header */}
         <div className="table-qr-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div className="table-qr-avatar">
-              <QrCode size={22} color="#007AFF" />
+            <div className="table-qr-avatar" style={{ background: isStallMode ? 'rgba(16, 185, 129, 0.15)' : 'rgba(0, 122, 255, 0.15)' }}>
+              {isStallMode ? (
+                <Store size={22} color="#10B981" />
+              ) : (
+                <QrCode size={22} color="#007AFF" />
+              )}
             </div>
             <div>
-              <div className="table-qr-badge">Table QR Code</div>
-              <h3 className="table-qr-title">Table QR Code for Menu</h3>
+              <div className="table-qr-badge" style={{ color: isStallMode ? '#10B981' : '#007AFF' }}>
+                {isStallMode ? 'Counter Standee QR Code' : 'Table QR Code'}
+              </div>
+              <h3 className="table-qr-title">
+                {isStallMode ? 'Counter QR Standee (Order Number Handout)' : 'Table QR Code for Menu'}
+              </h3>
             </div>
           </div>
           <button
@@ -139,17 +152,21 @@ export default function TableQrModal({
         <div className="table-qr-banner">
           <div className="table-qr-banner-title">
             <Sparkles size={14} color="#16A34A" />
-            <span>Easy Customer Ordering</span>
+            <span>{isStallMode ? 'Counter / Stall Standee' : 'Easy Customer Ordering'}</span>
           </div>
           <p className="table-qr-banner-text">
-            Customers simply open their mobile camera and scan this QR code to view the menu and order food. <strong>No app download or sign-in needed.</strong>
+            {isStallMode ? (
+              <>Place this QR standee at your food stall or counter. Customers scan with their mobile camera to order, and receive an <strong>Order Number</strong> for quick counter pickup.</>
+            ) : (
+              <>Customers simply open their mobile camera and scan this QR code to view the menu and order food. <strong>No app download or sign-in needed.</strong></>
+            )}
           </p>
         </div>
 
         {/* Table Selector Pills */}
         <div style={{ marginBottom: 14 }}>
           <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, display: 'block' }}>
-            Select Dining Table
+            {isStallMode ? 'Active Counter Standee' : 'Select Dining Table'}
           </label>
           <div className="table-selector-scroll">
             {tables.map((t) => (
@@ -185,12 +202,21 @@ export default function TableQrModal({
               />
             )}
             <span className="qr-standee-brand">{restaurantName}</span>
-            <span className="qr-standee-sub">{tagline || 'Scan to View Menu & Order'}</span>
+            <span className="qr-standee-sub">{tagline || (isStallMode ? 'Scan to Order • Pick Up at Counter' : 'Scan to View Menu & Order')}</span>
           </div>
 
-          <div className="qr-standee-table-badge">
-            <Utensils size={12} color="#007AFF" />
-            <span>{selectedTable}</span>
+          <div className="qr-standee-table-badge" style={{ borderColor: isStallMode ? '#10B981' : undefined, color: isStallMode ? '#047857' : undefined }}>
+            {isStallMode ? (
+              <>
+                <Store size={12} color="#10B981" />
+                <span>Counter • Stand & Eat (Order Numbers)</span>
+              </>
+            ) : (
+              <>
+                <Utensils size={12} color="#007AFF" />
+                <span>{selectedTable}</span>
+              </>
+            )}
           </div>
 
           {/* Scannable High-Res QR */}
@@ -209,8 +235,14 @@ export default function TableQrModal({
           </div>
 
           <div className="qr-standee-footer">
-            <div className="qr-cta-bold">SCAN WITH CAMERA TO ORDER</div>
-            <div className="qr-cta-sub">{isTakeaway ? 'Instant Counter / Takeaway Pick-Up • No Sign-In Required' : 'Instant Table Service • No Sign-In Required'}</div>
+            <div className="qr-cta-bold">
+              {isStallMode ? 'SCAN TO ORDER • PICK UP BY ORDER NUMBER' : 'SCAN WITH CAMERA TO ORDER'}
+            </div>
+            <div className="qr-cta-sub">
+              {isStallMode
+                ? 'Orders Handed Out by Order Number • No Sign-In Required'
+                : (isTakeaway ? 'Instant Counter / Takeaway Pick-Up • No Sign-In Required' : 'Instant Table Service • No Sign-In Required')}
+            </div>
           </div>
         </div>
 

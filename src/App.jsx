@@ -179,13 +179,16 @@ export default function App() {
     const initialBizTheme = getInitialThemeForBusiness(initialBizId);
     const loaded = loadData(getScopedKey(STORAGE_KEYS.THEME, initialBizId), initialBizTheme);
     const activeBiz = initialBiz || getActiveBusiness();
+    const isStall = activeBiz?.serviceType === 'stall' || (activeBiz?.tables?.length === 1 && activeBiz.tables[0].includes('Stand'));
     const bizOverride = activeBiz ? {
       restaurantName: activeBiz.name,
       tagline: activeBiz.tagline || loaded?.tagline || initialBizTheme.tagline,
       upiId: activeBiz.upiId || loaded?.upiId || initialBizTheme.upiId,
       accentColor: activeBiz.accentColor || loaded?.accentColor || initialBizTheme.accentColor,
       logo: activeBiz.logo !== undefined ? activeBiz.logo : (loaded?.logo || null),
-      tables: Array.isArray(activeBiz.tables) && activeBiz.tables.length > 0 ? activeBiz.tables : (loaded?.tables || initialBizTheme.tables)
+      tables: Array.isArray(activeBiz.tables) && activeBiz.tables.length > 0 ? activeBiz.tables : (loaded?.tables || initialBizTheme.tables),
+      serviceType: activeBiz.serviceType || loaded?.serviceType || (isStall ? 'stall' : 'dine_in'),
+      tableCount: activeBiz.tableCount !== undefined ? activeBiz.tableCount : (loaded?.tableCount || 6)
     } : {};
     return {
       ...initialBizTheme,
@@ -240,6 +243,10 @@ export default function App() {
   // Cart & Active Table State (Customer specific, initialized from scanned QR if present)
   const [cart, setCart] = useState([]);
   const [activeTable, setActiveTable] = useState(() => {
+    const activeBiz = initialBiz || getActiveBusiness();
+    const isStall = activeBiz?.serviceType === 'stall' || (activeBiz?.tables?.length === 1 && activeBiz.tables[0].includes('Stand'));
+    const defaultTable = isStall ? 'Counter / Stand & Eat' : (activeBiz?.tables?.[0] || 'Table 04');
+
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
@@ -252,7 +259,7 @@ export default function App() {
         typeof sessionStorage !== 'undefined' && sessionStorage.getItem('flowscape_switched_from_admin') === 'true'
       );
 
-      const check = verifyOrLockTable(biz, t, sig, isPrivileged);
+      const check = verifyOrLockTable(biz, t, sig, isPrivileged, defaultTable);
 
       // If URL tampering was attempted (e.g. user modified ?table=XX in URL while locked to another table):
       if (!check.valid && check.reason === 'tamper_blocked') {
@@ -265,7 +272,7 @@ export default function App() {
 
       return check.table;
     }
-    return 'Table 04';
+    return defaultTable;
   });
 
   // Navigation & View State
@@ -1352,6 +1359,7 @@ export default function App() {
         logo={theme.logo}
         tagline={theme.tagline}
         businessId={activeBusinessId}
+        serviceType={theme.serviceType || (theme.tables?.length === 1 && theme.tables[0].includes('Stand') ? 'stall' : 'dine_in')}
       />
     </div>
   );

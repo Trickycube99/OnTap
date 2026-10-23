@@ -174,6 +174,20 @@ export function createBusiness(data) {
   }
 
   const id = `biz_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const serviceType = data.serviceType === 'stall' ? 'stall' : 'dine_in';
+  let tableCount = serviceType === 'stall' ? 0 : (data.tableCount !== undefined ? (parseInt(data.tableCount, 10) || 6) : 6);
+  if (serviceType === 'dine_in' && tableCount < 1) tableCount = 1;
+
+  let computedTables = [];
+  if (data.tables && Array.isArray(data.tables) && data.tables.length > 0) {
+    computedTables = data.tables;
+  } else if (serviceType === 'stall') {
+    computedTables = ['Counter / Stand & Eat'];
+  } else {
+    computedTables = Array.from({ length: tableCount }, (_, i) => `Table ${String(i + 1).padStart(2, '0')}`);
+    computedTables.push('Counter / Takeaway');
+  }
+
   const newBusiness = {
     id,
     name: (data.name || '').trim() || 'New Craft Restaurant',
@@ -183,6 +197,8 @@ export function createBusiness(data) {
     plan: data.plan || 'Starter',
     status: data.status ? data.status : (data.emailVerified === true ? 'active' : 'suspended'),
     emailVerified: data.emailVerified === true ? true : false,
+    serviceType,
+    tableCount,
     owner: {
       name: (data.ownerName || '').trim() || 'Business Owner',
       email: cleanEmail,
@@ -193,9 +209,7 @@ export function createBusiness(data) {
       terminalName: `${(data.name || 'POS').split(' ')[0]} Terminal 01`
     },
     upiId: (data.upiId || '').trim() || 'payment@upi',
-    tables: data.tables && data.tables.length > 0
-      ? data.tables
-      : ['Table 01', 'Table 02', 'Table 03', 'Table 04', 'Counter / Takeaway'],
+    tables: computedTables,
     accentColor: data.accentColor || '#007AFF',
     totalOrders: 0,
     gmv: 0,
