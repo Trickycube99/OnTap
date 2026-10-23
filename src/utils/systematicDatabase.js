@@ -604,7 +604,7 @@ export async function purgeBusinessAccountComplete({
     success: true,
     deletedBusiness: targetBiz,
     complianceRecord,
-    message: `Account "${targetBiz.name}" and all associated data have been permanently erased from Firebase Users, Authentication, and the operational database. A statutory tax audit record (${complianceRecord.complianceId}) has been sealed for legal compliance.`
+    message: `Account "${targetBiz.name}" and all associated data have been permanently deleted.`
   };
 }
 

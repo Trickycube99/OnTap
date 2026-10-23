@@ -127,7 +127,6 @@ export default function AdminView({
       if (res.success) {
         playSuccessChime();
         setShowDeleteAccountModal(false);
-        alert(res.message);
         if (onDeleteAccountComplete) {
           onDeleteAccountComplete(res);
         } else {

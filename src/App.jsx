@@ -10,6 +10,7 @@ import CounterView from './views/CounterView';
 import AdminView from './views/AdminView';
 import DeveloperAdminView from './views/DeveloperAdminView';
 import AuthActionView from './views/AuthActionView';
+import AccountDeletedView from './views/AccountDeletedView';
 import {
   initialMenu,
   initialMenuByBusiness,
@@ -318,6 +319,35 @@ export default function App() {
   const [counterSubTab, setCounterSubTab] = useState('orders'); // counter: 'orders','manual','stock','checklist'
   const [adminTab, setAdminTab] = useState('sales');
 
+  // Dedicated state for Account and Data Deleted screen
+  const [deletedAccountNotice, setDeletedAccountNotice] = useState(() => {
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        const raw = sessionStorage.getItem('flowscape_deleted_account_notice');
+        if (raw) return JSON.parse(raw);
+      }
+    } catch {}
+    return null;
+  });
+
+  const triggerAccountDeletedNotice = (info) => {
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('flowscape_deleted_account_notice', JSON.stringify(info));
+      }
+    } catch {}
+    setDeletedAccountNotice(info);
+  };
+
+  const clearAccountDeletedNotice = () => {
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('flowscape_deleted_account_notice');
+      }
+    } catch {}
+    setDeletedAccountNotice(null);
+  };
+
   // Accessibility, Language & Audio Preferences
   const [language, setLanguage] = useState('en'); // 'en' | 'hi' (PRD Section 7)
   const [isSoundMuted, setIsSoundMuted] = useState(false);
@@ -558,10 +588,12 @@ export default function App() {
         }
       } else if (msg.type === SYNC_EVENTS.BUSINESS_DELETED) {
         if (msg.payload?.businessId === activeBusinessId) {
-          const fallbackBiz = getActiveBusiness();
-          setActiveBusiness(fallbackBiz.id);
-          setActiveBusinessId(fallbackBiz.id);
-          window.location.reload();
+          handleLogoutRole('admin');
+          handleLogoutRole('counter');
+          triggerAccountDeletedNotice({
+            businessName: theme?.restaurantName || 'Restaurant',
+            businessId: msg.payload?.businessId || activeBusinessId
+          });
         }
       }
     }, activeBusinessId);
@@ -1075,6 +1107,31 @@ export default function App() {
     );
   }
 
+  // Dedicated Render for Account and Data Deleted Page (Customer, Admin/Owner, Counter)
+  if (deletedAccountNotice) {
+    return (
+      <div className="app-container" style={{ minHeight: '100vh', background: '#090D16' }}>
+        <AccountDeletedView
+          deletedInfo={deletedAccountNotice}
+          onResetToHome={() => {
+            clearAccountDeletedNotice();
+            const available = getBusinesses();
+            if (available.length > 0) {
+              setActiveBusiness(available[0].id);
+              setActiveBusinessId(available[0].id);
+            }
+            window.location.href = window.location.pathname;
+          }}
+          onOpenSetup={() => {
+            clearAccountDeletedNotice();
+            window.location.hash = 'manj';
+            setCurrentRole('developer');
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
       {/* Dynamic Header: Clean & Isolated for Customer with QR, Workstation for Authenticated Staff */}
@@ -1287,12 +1344,14 @@ export default function App() {
                 activeAdminTab={adminTab}
                 setActiveAdminTab={setAdminTab}
                 onOpenTableQr={() => setIsTableQrOpen(true)}
-                onDeleteAccountComplete={() => {
+                onDeleteAccountComplete={(deletionResult) => {
                   handleLogoutRole('admin');
-                  const fallbackBiz = getActiveBusiness();
-                  setActiveBusiness(fallbackBiz.id);
-                  setActiveBusinessId(fallbackBiz.id);
-                  window.location.reload();
+                  handleLogoutRole('counter');
+                  const deletedName = deletionResult?.deletedBusiness?.name || activeBiz?.name || theme?.restaurantName || 'Restaurant';
+                  triggerAccountDeletedNotice({
+                    businessName: deletedName,
+                    businessId: activeBusinessId
+                  });
                 }}
               />
             )
