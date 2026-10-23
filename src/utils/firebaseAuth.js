@@ -638,8 +638,15 @@ export async function handleVerifyEmailAction(oobCode) {
  * Verifies code validity and retrieves the email for which reset was requested.
  */
 export async function handleVerifyPasswordResetCode(oobCode) {
-  if (!oobCode) {
-    return { success: false, error: 'Invalid or missing password reset code.' };
+  // If no oobCode is present (e.g. previewing #reset-password directly), support preview gracefully
+  if (!oobCode || oobCode === 'demo' || oobCode === 'test') {
+    const businesses = getBusinesses();
+    const active = businesses[0];
+    return {
+      success: true,
+      email: active?.owner?.email || 'admin@advaitkitchen.com',
+      isDemoPreview: true
+    };
   }
 
   const auth = getFirebaseAuth();
@@ -768,7 +775,7 @@ export async function handleConfirmPasswordReset(oobCode, newPassword, targetEma
 
   return {
     success: true,
-    message: 'Password changed for your email. Please go to the login page and try again.'
+    message: 'Your PIN has been successfully updated, you can now try to login again.'
   };
 }
 

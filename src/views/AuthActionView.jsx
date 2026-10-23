@@ -92,12 +92,17 @@ export default function AuthActionView({
     setErrorMessage('');
 
     if (!/^\d{6}$/.test(newPassword)) {
-      setErrorMessage('Master PIN must be exactly 6 numeric digits.');
+      setErrorMessage('Master PIN must be exactly 6 numeric digits (0–9).');
+      return;
+    }
+
+    if (!/^\d{6}$/.test(confirmPassword)) {
+      setErrorMessage('Confirm PIN must be exactly 6 numeric digits (0–9).');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setErrorMessage('PINs do not match. Please re-enter.');
+      setErrorMessage('PINs do not match. Please ensure both fields are identical.');
       return;
     }
 
@@ -108,10 +113,10 @@ export default function AuthActionView({
     if (res.success) {
       playSuccessChime();
       setStatus('resetSuccess');
-      setSuccessMessage('Password changed for your email. Please go to the login page and try again.');
+      setSuccessMessage('Your PIN has been successfully updated, you can now try to login again.');
     } else {
       playAlertChime();
-      setErrorMessage(res.error || 'Failed to change password. Please try again or request a new reset link.');
+      setErrorMessage(res.error || 'Failed to update Master PIN. Please try again or request a new reset link.');
     }
   };
 
@@ -525,7 +530,7 @@ export default function AuthActionView({
             </div>
 
             <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 10px', color: '#F8FAFC' }}>
-              Password Changed Successfully!
+              Master PIN Updated Successfully!
             </h2>
 
             {/* Requested exact phrase highlight box */}
@@ -533,18 +538,18 @@ export default function AuthActionView({
               background: 'rgba(16, 185, 129, 0.12)',
               border: '1px solid rgba(16, 185, 129, 0.35)',
               borderRadius: 14,
-              padding: '14px 18px',
-              fontSize: 14,
-              fontWeight: 600,
+              padding: '16px 20px',
+              fontSize: 15,
+              fontWeight: 700,
               color: '#34D399',
-              marginBottom: 24,
+              marginBottom: 20,
               lineHeight: 1.5
             }}>
-              {successMessage || 'Password changed for your email, please go to the login page and try again.'}
+              {successMessage || 'Your PIN has been successfully updated, you can now try to login again.'}
             </div>
 
-            <p style={{ fontSize: 12, color: '#94A3B8', margin: '0 0 24px', lineHeight: 1.5 }}>
-              Your account password has been updated. You can now use your new password to sign into the Owner Back-Office.
+            <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 24px', lineHeight: 1.5 }}>
+              Your new 6-digit Master PIN is now active and synchronized across all dashboards. You can now use your updated PIN to sign into the Owner Back-Office.
             </p>
 
             <button
