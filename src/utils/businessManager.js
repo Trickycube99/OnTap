@@ -196,9 +196,9 @@ export function createBusiness(data) {
   const trimmedOwnerPin = (data.ownerPin || '').toString().trim();
   let trimmedCounterPin = (data.counterPin || '').toString().trim();
 
-  // Validate exactly 6-digit numeric PINs
-  if (!/^\d{6}$/.test(trimmedOwnerPin)) {
-    return { success: false, error: 'Owner Admin PIN must be exactly 6 digits.' };
+  // Validate owner password: min 6 chars (characters, numbers, or both)
+  if (!trimmedOwnerPin || trimmedOwnerPin.length < 6) {
+    return { success: false, error: 'Owner Password must be at least 6 characters (characters, digits, or both).' };
   }
   // Safe default for Counter PIN if omitted by internal provisioners
   if (!/^\d{6}$/.test(trimmedCounterPin)) {
@@ -280,8 +280,8 @@ export function updateBusiness(id, updates) {
     }
     if (updates.owner.pin !== undefined) {
       const cleanPin = String(updates.owner.pin).trim();
-      if (!/^\d{6}$/.test(cleanPin)) {
-        return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits.' };
+      if (!cleanPin || cleanPin.length < 6) {
+        return { success: false, error: 'Owner password must be at least 6 characters long.' };
       }
       updates.owner.pin = cleanPin;
     }
@@ -482,8 +482,8 @@ export function authenticateBusinessOwner(email, pin) {
     return { success: false, error: 'Please enter a valid owner email address.' };
   }
 
-  if (!/^\d{6}$/.test(cleanPin)) {
-    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits.' };
+  if (!cleanPin || cleanPin.length < 6) {
+    return { success: false, error: 'Password must be at least 6 characters long.' };
   }
 
   const business = businesses.find(

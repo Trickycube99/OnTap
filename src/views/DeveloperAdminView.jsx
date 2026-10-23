@@ -271,8 +271,8 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     const trimmedOwnerPin = newBiz.ownerPin.trim();
     const trimmedCounterPin = newBiz.counterPin.trim();
 
-    if (!/^\d{6}$/.test(trimmedOwnerPin)) {
-      setFormError('Owner Admin PIN must be exactly 6 numeric digits.');
+    if (!trimmedOwnerPin || trimmedOwnerPin.length < 6) {
+      setFormError('Owner Password must be at least 6 characters long (letters, digits, or both).');
       return;
     }
     if (!/^\d{6}$/.test(trimmedCounterPin)) {
@@ -478,9 +478,9 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       return;
     }
 
-    // Owner Master PIN is strictly 6 numeric digits
-    if (!/^\d{6}$/.test(cleanPin)) {
-      setEditOverrideError('Owner Master PIN must be exactly 6 numeric digits.');
+    // Owner password min 6 chars (characters, numbers, or both)
+    if (!cleanPin || cleanPin.length < 6) {
+      setEditOverrideError('Owner password must be at least 6 characters long (letters, digits, or both).');
       playAlertChime();
       return;
     }
@@ -2200,16 +2200,13 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     </div>
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, color: '#CBD5E1', marginBottom: 2 }}>Owner Master PIN (6 Digits) *</label>
+                    <label style={{ display: 'block', fontSize: 11, color: '#CBD5E1', marginBottom: 2 }}>Owner Password (min 6 chars) *</label>
                     <input
                       type="text"
                       required
-                      maxLength={6}
-                      pattern="[0-9]*"
-                      inputMode="numeric"
-                      placeholder="Enter 6-digit PIN"
+                      placeholder="Enter password (letters, digits, or both)"
                       value={newBiz.ownerPin}
-                      onChange={(e) => setNewBiz({ ...newBiz, ownerPin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                      onChange={(e) => setNewBiz({ ...newBiz, ownerPin: e.target.value })}
                       style={{
                         width: '100%',
                         padding: '8px 10px',
@@ -2219,12 +2216,12 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         color: '#F59E0B',
                         fontWeight: 700,
                         fontSize: 14,
-                        letterSpacing: '0.15em',
+                        letterSpacing: '0.05em',
                         boxSizing: 'border-box'
                       }}
                     />
                     <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 4 }}>
-                      Exactly 6 numeric digits. Synchronized with Firebase Auth and active across all dashboards immediately.
+                      Letters, digits, or combination (minimum 6 characters). Synchronized with Firebase Auth.
                     </div>
                   </div>
                 </div>
@@ -2418,32 +2415,16 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                     <label style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8' }}>
-                      OWNER MASTER PIN / PASSWORD (6 DIGITS) *
+                      OWNER PASSWORD (MIN 6 CHARS) *
                     </label>
-                    <span style={{ fontSize: 10, color: '#F59E0B' }}>6-Digit Native PIN</span>
+                    <span style={{ fontSize: 10, color: '#F59E0B' }}>Letters / Digits / Combination</span>
                   </div>
                   <input
                     type="text"
                     required
-                    maxLength={6}
-                    pattern="[0-9]*"
-                    inputMode="numeric"
                     value={editOwnerPin}
-                    onKeyDown={(e) => {
-                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
-                        e.preventDefault();
-                      }
-                    }}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const val = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
-                      setEditOwnerPin(val);
-                    }}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '');
-                      if (val.length <= 6) setEditOwnerPin(val);
-                    }}
-                    placeholder="Enter 6-digit PIN"
+                    onChange={(e) => setEditOwnerPin(e.target.value)}
+                    placeholder="Enter password (letters, digits, or both)"
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -2454,13 +2435,13 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       fontFamily: 'monospace',
                       fontSize: 15,
                       fontWeight: 700,
-                      letterSpacing: 2,
+                      letterSpacing: 1,
                       outline: 'none',
                       boxSizing: 'border-box'
                     }}
                   />
                   <span style={{ fontSize: 10, color: '#64748B', display: 'block', marginTop: 4 }}>
-                    Strictly 6 numeric digits. Synchronized with Firebase Auth (${editOwnerPin || '******'}).
+                    Minimum 6 characters (characters, digits, or both). Synchronized with Firebase Auth.
                   </span>
                 </div>
 

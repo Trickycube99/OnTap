@@ -81,12 +81,12 @@ export async function provisionOwnerAccountWithVerification({ email, password, o
     return { success: false, error: 'A valid owner email address is required.' };
   }
 
-  // App requirement: Owner Master PIN is strictly 6 numeric digits
-  if (!/^\d{6}$/.test(cleanPin)) {
-    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits.' };
+  // Owner password requirement: minimum 6 characters (letters, numbers, or both)
+  if (!cleanPin || cleanPin.length < 6) {
+    return { success: false, error: 'Owner password must be at least 6 characters long.' };
   }
 
-  // Firebase Auth minimum password requirement is 6 chars, satisfied directly by 6-digit PIN
+  // Firebase Auth minimum password requirement is 6 chars, satisfied directly
   const cleanPassword = cleanPin;
 
   const config = getFirebaseConfig();
@@ -154,9 +154,9 @@ export async function logInUserWithVerification({ email, password }) {
     return { success: false, error: 'Please enter a valid owner email address.' };
   }
 
-  // App requirement: Owner Master PIN is strictly 6 numeric digits
-  if (!/^\d{6}$/.test(cleanPassword)) {
-    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits.' };
+  // Owner password requirement: minimum 6 characters (letters, numbers, or both)
+  if (!cleanPassword || cleanPassword.length < 6) {
+    return { success: false, error: 'Password must be at least 6 characters long.' };
   }
 
   const auth = getFirebaseAuth();
@@ -675,9 +675,9 @@ export async function handleVerifyPasswordResetCode(oobCode) {
 export async function handleConfirmPasswordReset(oobCode, newPassword, targetEmail) {
   const cleanPin = (newPassword || '').trim();
 
-  // App requirement: Master PIN must be exactly 6 numeric digits
-  if (!/^\d{6}$/.test(cleanPin)) {
-    return { success: false, error: 'Master PIN must be exactly 6 numeric digits.' };
+  // Password requirement: minimum 6 characters
+  if (!cleanPin || cleanPin.length < 6) {
+    return { success: false, error: 'Password must be at least 6 characters long.' };
   }
 
   const auth = getFirebaseAuth();
@@ -857,9 +857,9 @@ export async function updateOwnerCredentialsManually({
     return { success: false, error: 'A valid owner email address is required.' };
   }
 
-  // App requirement: Owner Master PIN is strictly 6 numeric digits
-  if (!/^\d{6}$/.test(cleanNewPin)) {
-    return { success: false, error: 'Owner Master PIN must be exactly 6 numeric digits.' };
+  // Owner password requirement: minimum 6 characters (letters, numbers, or both)
+  if (!cleanNewPin || cleanNewPin.length < 6) {
+    return { success: false, error: 'Owner password must be at least 6 characters long.' };
   }
 
   const config = getFirebaseConfig();

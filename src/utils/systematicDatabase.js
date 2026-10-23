@@ -46,8 +46,8 @@ export function validateBusinessAccount(biz) {
     return { valid: false, error: 'Valid business owner email is required.' };
   }
   const cleanPin = String(biz.owner?.pin || '').trim();
-  if (!/^\d{6}$/.test(cleanPin)) {
-    return { valid: false, error: 'Owner Master PIN must be exactly 6 numeric digits.' };
+  if (!cleanPin || cleanPin.length < 6) {
+    return { valid: false, error: 'Owner password must be at least 6 characters long.' };
   }
   return { valid: true };
 }

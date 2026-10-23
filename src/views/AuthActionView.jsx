@@ -3,21 +3,11 @@ import {
   CheckCircle2,
   AlertCircle,
   KeyRound,
-  Mail,
   ArrowRight,
-  Eye,
-  EyeOff,
   RefreshCw,
-  Lock,
-  Building2,
-  ShieldCheck,
   Sparkles
 } from 'lucide-react';
-import {
-  handleVerifyEmailAction,
-  handleVerifyPasswordResetCode,
-  handleConfirmPasswordReset
-} from '../utils/firebaseAuth';
+import { handleVerifyEmailAction } from '../utils/firebaseAuth';
 import { playSuccessChime, playAlertChime, playTapSound } from '../utils/audio';
 
 export default function AuthActionView({
@@ -27,14 +17,9 @@ export default function AuthActionView({
 }) {
   const { mode = 'verifyEmail', oobCode = '' } = actionState || {};
 
-  const [status, setStatus] = useState(mode === 'verifyEmail' ? 'verifying' : 'loading');
-  const [targetEmail, setTargetEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [status, setStatus] = useState(mode === 'verifyEmail' ? 'verifying' : 'resetSuccess');
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Initialize Action Handler
   useEffect(() => {
@@ -58,20 +43,12 @@ export default function AuthActionView({
         }
       }
 
-      // 2. PASSWORD RESET FLOW
+      // 2. PASSWORD RESET FLOW: Google's native Firebase action handles password reset.
+      // When redirected back or landed here, display confirmation and direct user to login.
       else if (mode === 'resetPassword') {
-        setStatus('loading');
-        const res = await handleVerifyPasswordResetCode(oobCode);
-        if (!isMounted) return;
-
-        if (res.success) {
-          setTargetEmail(res.email || 'your account');
-          setStatus('resetForm');
-        } else {
-          playAlertChime();
-          setStatus('error');
-          setErrorMessage(res.error || 'This password reset link is invalid or has already expired.');
-        }
+        playSuccessChime();
+        setStatus('resetSuccess');
+        setSuccessMessage('Your password has been updated, you can now try to login again.');
       } else {
         setStatus('error');
         setErrorMessage('Unknown authentication action code.');
@@ -84,41 +61,6 @@ export default function AuthActionView({
       isMounted = false;
     };
   }, [mode, oobCode]);
-
-  // Handle Password Reset Form Submission
-  const handleResetSubmit = async (e) => {
-    e.preventDefault();
-    playTapSound();
-    setErrorMessage('');
-
-    if (!/^\d{6}$/.test(newPassword)) {
-      setErrorMessage('Master PIN must be exactly 6 numeric digits (0–9).');
-      return;
-    }
-
-    if (!/^\d{6}$/.test(confirmPassword)) {
-      setErrorMessage('Confirm PIN must be exactly 6 numeric digits (0–9).');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setErrorMessage('PINs do not match. Please ensure both fields are identical.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    const res = await handleConfirmPasswordReset(oobCode, newPassword, targetEmail);
-    setIsSubmitting(false);
-
-    if (res.success) {
-      playSuccessChime();
-      setStatus('resetSuccess');
-      setSuccessMessage('Your PIN has been successfully updated, you can now try to login again.');
-    } else {
-      playAlertChime();
-      setErrorMessage(res.error || 'Failed to update Master PIN. Please try again or request a new reset link.');
-    }
-  };
 
   return (
     <div style={{
@@ -235,7 +177,6 @@ export default function AuthActionView({
               Email Verified Successfully!
             </h2>
 
-            {/* Requested exact phrase highlight box */}
             <div style={{
               background: 'rgba(16, 185, 129, 0.12)',
               border: '1px solid rgba(16, 185, 129, 0.35)',
@@ -285,232 +226,7 @@ export default function AuthActionView({
         )}
 
         {/* ============================================================== */}
-        {/* 3. RESET PASSWORD FORM STATE                                  */}
-        {/* ============================================================== */}
-        {status === 'resetForm' && (
-          <div>
-            <div style={{
-              width: 68,
-              height: 68,
-              borderRadius: '50%',
-              background: 'rgba(139, 92, 246, 0.15)',
-              border: '1.5px solid rgba(139, 92, 246, 0.4)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px',
-              boxShadow: '0 0 30px rgba(139, 92, 246, 0.25)'
-            }}>
-              <KeyRound size={32} color="#A78BFA" />
-            </div>
-
-            <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 6px', color: '#F8FAFC' }}>
-              Create New Master PIN
-            </h2>
-
-            {targetEmail && (
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                background: 'rgba(255, 255, 255, 0.06)',
-                borderRadius: 8,
-                padding: '4px 10px',
-                fontSize: 12,
-                color: '#93C5FD',
-                fontFamily: 'monospace',
-                marginBottom: 16
-              }}>
-                <Mail size={12} />
-                <span>{targetEmail}</span>
-              </div>
-            )}
-
-            <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 20px', lineHeight: 1.45 }}>
-              Enter an authorized 6-digit numeric Master PIN to restore access to your owner dashboard.
-            </p>
-
-            {errorMessage && (
-              <div style={{
-                background: 'rgba(239, 68, 68, 0.12)',
-                border: '1px solid rgba(239, 68, 68, 0.35)',
-                borderRadius: 12,
-                padding: '10px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 12,
-                color: '#F87171',
-                marginBottom: 16,
-                textAlign: 'left'
-              }}>
-                <AlertCircle size={16} style={{ flexShrink: 0 }} />
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleResetSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: '#CBD5E1' }}>
-                    New 6-Digit Master PIN *
-                  </label>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: newPassword.length === 6 ? '#10B981' : '#94A3B8' }}>
-                    {newPassword.length}/6 digits
-                  </span>
-                </div>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    autoFocus
-                    maxLength={6}
-                    pattern="[0-9]*"
-                    inputMode="numeric"
-                    placeholder="Enter 6-digit numeric PIN"
-                    value={newPassword}
-                    onKeyDown={(e) => {
-                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
-                        e.preventDefault();
-                      }
-                    }}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const cleaned = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
-                      setNewPassword(cleaned);
-                      setErrorMessage('');
-                    }}
-                    onChange={(e) => setNewPassword(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    style={{
-                      width: '100%',
-                      padding: '11px 40px 11px 14px',
-                      borderRadius: 12,
-                      background: 'rgba(15, 23, 42, 0.8)',
-                      border: `1.5px solid ${newPassword.length === 6 ? 'rgba(16, 185, 129, 0.5)' : 'rgba(255, 255, 255, 0.15)'}`,
-                      color: '#F59E0B',
-                      fontSize: 16,
-                      fontWeight: 700,
-                      letterSpacing: showPassword ? 'normal' : '0.25em',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: 12,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: '#94A3B8',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: '#CBD5E1' }}>
-                    Confirm 6-Digit Master PIN *
-                  </label>
-                  {confirmPassword.length > 0 && (
-                    <span style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: (newPassword === confirmPassword && confirmPassword.length === 6) ? '#10B981' : '#F87171'
-                    }}>
-                      {(newPassword === confirmPassword && confirmPassword.length === 6)
-                        ? '✓ PINs Match'
-                        : (confirmPassword.length === 6 ? '✕ PINs Do Not Match' : `${confirmPassword.length}/6 digits`)}
-                    </span>
-                  )}
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  maxLength={6}
-                  pattern="[0-9]*"
-                  inputMode="numeric"
-                  placeholder="Re-enter 6-digit numeric PIN"
-                  value={confirmPassword}
-                  onKeyDown={(e) => {
-                    if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
-                      e.preventDefault();
-                    }
-                  }}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    const cleaned = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
-                    setConfirmPassword(cleaned);
-                    setErrorMessage('');
-                  }}
-                  onChange={(e) => setConfirmPassword(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  style={{
-                    width: '100%',
-                    padding: '11px 14px',
-                    borderRadius: 12,
-                    background: 'rgba(15, 23, 42, 0.8)',
-                    border: `1.5px solid ${(newPassword && confirmPassword && newPassword === confirmPassword && confirmPassword.length === 6) ? 'rgba(16, 185, 129, 0.5)' : 'rgba(255, 255, 255, 0.15)'}`,
-                    color: '#F59E0B',
-                    fontSize: 16,
-                    fontWeight: 700,
-                    letterSpacing: showPassword ? 'normal' : '0.25em',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 11, color: '#94A3B8' }}>
-                  <ShieldCheck size={13} color="#10B981" />
-                  <span>Only 6 numeric digits (0–9). Automatically updated in database upon saving.</span>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                style={{
-                  width: '100%',
-                  marginTop: 6,
-                  padding: '13px 20px',
-                  borderRadius: 12,
-                  background: 'linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)',
-                  border: 'none',
-                  color: '#FFFFFF',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  boxShadow: '0 4px 18px rgba(139, 92, 246, 0.35)',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw size={14} className="spinning" />
-                    <span>Updating Master PIN...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Save New Master PIN</span>
-                    <ArrowRight size={16} />
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* ============================================================== */}
-        {/* 4. PASSWORD RESET: SUCCESS STATE                               */}
+        {/* 3. PASSWORD RESET: SUCCESS COMPLETION STATE                     */}
         {/* ============================================================== */}
         {status === 'resetSuccess' && (
           <div>
@@ -530,10 +246,9 @@ export default function AuthActionView({
             </div>
 
             <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 10px', color: '#F8FAFC' }}>
-              Master PIN Updated Successfully!
+              Password Reset Complete!
             </h2>
 
-            {/* Requested exact phrase highlight box */}
             <div style={{
               background: 'rgba(16, 185, 129, 0.12)',
               border: '1px solid rgba(16, 185, 129, 0.35)',
@@ -545,11 +260,11 @@ export default function AuthActionView({
               marginBottom: 20,
               lineHeight: 1.5
             }}>
-              {successMessage || 'Your PIN has been successfully updated, you can now try to login again.'}
+              {successMessage || 'Your password has been updated, you can now try to login again.'}
             </div>
 
             <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 24px', lineHeight: 1.5 }}>
-              Your new 6-digit Master PIN is now active and synchronized across all dashboards. You can now use your updated PIN to sign into the Owner Back-Office.
+              Your password has been synchronized with Firebase Auth. You can now use your updated password (letters, digits, or combination) to sign into the Owner Back-Office.
             </p>
 
             <button
@@ -583,7 +298,7 @@ export default function AuthActionView({
         )}
 
         {/* ============================================================== */}
-        {/* 5. ERROR STATE (INVALID CODE / EXPIRED LINK)                   */}
+        {/* 4. ERROR STATE (INVALID CODE / EXPIRED LINK)                   */}
         {/* ============================================================== */}
         {status === 'error' && (
           <div>

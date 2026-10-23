@@ -145,10 +145,10 @@ export default function AuthModal({
       }
 
       // Flow B: User Log In with Strict Verification Check (blocks unverified accounts)
-      if (!/^\d{6}$/.test(pin.trim())) {
+      if (!pin || pin.trim().length < 6) {
         playAlertChime();
         setIsSubmitting(false);
-        setErrorMessage('Owner Master PIN must be exactly 6 numeric digits.');
+        setErrorMessage('Password must be at least 6 characters long.');
         return;
       }
 
@@ -181,7 +181,7 @@ export default function AuthModal({
       return;
     }
     if (!pin) {
-      setErrorMessage('Please enter your password / Master PIN to resend the verification email.');
+      setErrorMessage('Please enter your owner password to resend the verification email.');
       return;
     }
     setIsResending(true);
@@ -511,7 +511,7 @@ export default function AuthModal({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                   <label className="auth-label" style={{ margin: 0 }}>
                     <KeyRound size={13} />
-                    <span>Owner 6-Digit PIN *</span>
+                    <span>Owner Password *</span>
                   </label>
                   <button
                     type="button"
@@ -539,29 +539,18 @@ export default function AuthModal({
                   <input
                     type={showPin ? 'text' : 'password'}
                     required
-                    maxLength={6}
-                    pattern="[0-9]*"
-                    inputMode="numeric"
-                    placeholder="Enter 6-digit PIN"
+                    placeholder="Enter password (min 6 characters)"
                     className="auth-input"
                     value={pin}
-                    onKeyDown={(e) => {
-                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
-                        e.preventDefault();
-                      }
-                    }}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const cleaned = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
-                      setPin(cleaned);
+                    onChange={(e) => {
+                      setPin(e.target.value);
                       setErrorMessage('');
                     }}
-                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     style={{
                       width: '100%',
                       paddingRight: 40,
-                      letterSpacing: showPin ? 'normal' : '0.25em',
-                      fontWeight: 700
+                      letterSpacing: showPin ? 'normal' : '0.15em',
+                      fontWeight: 600
                     }}
                   />
                   <button
