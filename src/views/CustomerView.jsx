@@ -100,19 +100,37 @@ export default function CustomerView({
   });
   const [nameError, setNameError] = useState('');
 
-  // Scoped key to track the exact order placed by this diner in this session
-  const dinerOrderKey = `ontap_${activeBusinessId}_last_order_id`;
-  const [lastPlacedOrderId, setLastPlacedOrderId] = useState(() => {
+  // Scoped keys to track all tickets ordered by this diner session on this table
+  const dinerOrderIdsKey = `ontap_${activeBusinessId}_customer_order_ids`;
+  const dinerLegacyOrderKey = `ontap_${activeBusinessId}_last_order_id`;
+  const [placedOrderIds, setPlacedOrderIds] = useState(() => {
     if (typeof window !== 'undefined') {
-      return (
-        sessionStorage.getItem(dinerOrderKey) ||
+      try {
+        const raw = sessionStorage.getItem(dinerOrderIdsKey) || localStorage.getItem(dinerOrderIdsKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {
+        // fallback
+      }
+      const legacy =
+        sessionStorage.getItem(dinerLegacyOrderKey) ||
         sessionStorage.getItem('ontap_customer_last_order_id') ||
-        localStorage.getItem(dinerOrderKey) ||
-        ''
-      );
+        localStorage.getItem(dinerLegacyOrderKey) ||
+        '';
+      return legacy ? [legacy] : [];
     }
-    return '';
+    return [];
   });
+  const lastPlacedOrderId = placedOrderIds[0] || '';
+  const setLastPlacedOrderId = (newId) => {
+    if (!newId) {
+      setPlacedOrderIds([]);
+    } else {
+      setPlacedOrderIds((prev) => [newId, ...prev.filter((id) => id !== newId)]);
+    }
+  };
 
   const [orderNote, setOrderNote] = useState('');
   const [paymentMode, setPaymentMode] = useState('counter'); // 'counter' | 'upi'
@@ -205,54 +223,94 @@ export default function CustomerView({
     return safeMenu.find((item) => item.id === 3) || null;
   }, [upsellPairingId, safeMenu]);
 
-  // Find latest active customer order for this diner:
-  // 1. Strictly prioritize the exact order placed by this diner in this session/device
-  // 2. Otherwise fall back to the most recent active in-progress order strictly on this verified table
-  const activeCustomerOrder = useMemo(() => {
-    if (lastPlacedOrderId) {
-      const placed = orders.find((o) => o.id === lastPlacedOrderId && o.table === activeTable);
-      if (placed) return placed;
+  // Find all orders placed by this diner across rounds on this table:
+  // 1. Match all order IDs explicitly placed by this diner session on this table
+  // 2. Supplement with any active in-progress table orders
+  const customerOrders = useMemo(() => {
+    let matched = [];
+    if (placedOrderIds.length > 0) {
+      matched = orders.filter((o) => placedOrderIds.includes(o.id) && o.table === activeTable);
     }
-    const activeTableOrders = orders.filter(
-      (o) => o.table === activeTable && (o.status === 'received' || o.status === 'cooking' || o.status === 'ready' || o.status === 'in-progress')
-    );
-    return activeTableOrders.length > 0 ? activeTableOrders[0] : null;
-  }, [orders, activeTable, lastPlacedOrderId]);
+    if (matched.length === 0) {
+      matched = orders.filter(
+        (o) => o.table === activeTable && (o.status === 'received' || o.status === 'cooking' || o.status === 'ready' || o.status === 'in-progress')
+      );
+    } else {
+      // If there are other active orders on this table not in placedOrderIds (e.g. concurrent ordering on same table)
+      const extra = orders.filter(
+        (o) => o.table === activeTable &&
+        (o.status === 'received' || o.status === 'cooking' || o.status === 'ready' || o.status === 'in-progress') &&
+        !matched.some((m) => m.id === o.id)
+      );
+      matched = [...matched, ...extra];
+    }
+    // Sort latest ticket first
+    return matched.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  }, [orders, activeTable, placedOrderIds]);
 
-  // Sound and visual feedback when live status updates in real time (Accept -> Cooking, Ready -> Ready, Done -> Served, Rejected -> Alert)
-  const prevStatusRef = useRef(activeCustomerOrder?.status);
+  // Keep single activeCustomerOrder reference for backward compatibility
+  const activeCustomerOrder = customerOrders[0] || null;
+
+  // Sound and visual feedback when live status updates in real time for ANY ticket in customer stack
+  const prevStatusesRef = useRef({});
   useEffect(() => {
-    if (activeCustomerOrder && prevStatusRef.current && prevStatusRef.current !== activeCustomerOrder.status) {
-      if (activeCustomerOrder.status === 'cooking' || activeCustomerOrder.status === 'in-progress') {
-        playAlertChime();
-      } else if (activeCustomerOrder.status === 'ready' || activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done') {
-        playSuccessChime();
-      } else if (activeCustomerOrder.status === 'rejected') {
-        playAlertChime();
+    customerOrders.forEach((order) => {
+      const prevStatus = prevStatusesRef.current[order.id];
+      if (prevStatus && prevStatus !== order.status) {
+        if (order.status === 'cooking' || order.status === 'in-progress') {
+          playAlertChime();
+        } else if (order.status === 'ready' || order.status === 'served' || order.status === 'done') {
+          playSuccessChime();
+        } else if (order.status === 'rejected') {
+          playAlertChime();
+        }
       }
-    }
-    prevStatusRef.current = activeCustomerOrder?.status;
-  }, [activeCustomerOrder]);
+      prevStatusesRef.current[order.id] = order.status;
+    });
+  }, [customerOrders]);
 
-  const handleReorderItems = () => {
+  const handleReorderItems = (orderToReorder) => {
     playTapSound();
-    if (activeCustomerOrder?.items && activeCustomerOrder.items.length > 0) {
-      setCart([...activeCustomerOrder.items]);
+    const targetOrder = orderToReorder || activeCustomerOrder;
+    if (targetOrder?.items && targetOrder.items.length > 0) {
+      setCart([...targetOrder.items]);
       if (setActiveTab) setActiveTab('cart');
     } else {
       if (setActiveTab) setActiveTab('menu');
     }
   };
 
-  const handleDismissOrder = () => {
+  const handleDismissOrder = (orderIdToDismiss) => {
     playTapSound();
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem(dinerOrderKey);
-      sessionStorage.removeItem('ontap_customer_last_order_id');
-      localStorage.removeItem(dinerOrderKey);
+    if (orderIdToDismiss) {
+      setPlacedOrderIds((prev) => {
+        const next = prev.filter((id) => id !== orderIdToDismiss);
+        if (typeof window !== 'undefined') {
+          if (next.length > 0) {
+            sessionStorage.setItem(dinerOrderIdsKey, JSON.stringify(next));
+            localStorage.setItem(dinerOrderIdsKey, JSON.stringify(next));
+            sessionStorage.setItem(dinerLegacyOrderKey, next[0]);
+          } else {
+            sessionStorage.removeItem(dinerOrderIdsKey);
+            localStorage.removeItem(dinerOrderIdsKey);
+            sessionStorage.removeItem(dinerLegacyOrderKey);
+            sessionStorage.removeItem('ontap_customer_last_order_id');
+            localStorage.removeItem(dinerLegacyOrderKey);
+          }
+        }
+        return next;
+      });
+    } else {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(dinerOrderIdsKey);
+        localStorage.removeItem(dinerOrderIdsKey);
+        sessionStorage.removeItem(dinerLegacyOrderKey);
+        sessionStorage.removeItem('ontap_customer_last_order_id');
+        localStorage.removeItem(dinerLegacyOrderKey);
+      }
+      setPlacedOrderIds([]);
+      if (setActiveTab) setActiveTab('menu');
     }
-    setLastPlacedOrderId('');
-    if (setActiveTab) setActiveTab('menu');
   };
 
   const handleDecreaseItemQty = (itemId) => {
@@ -460,11 +518,20 @@ export default function CustomerView({
 
     // Save this customer's exact order ID to session and local storage
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem(dinerOrderKey, newOrderId);
+      try {
+        const existingRaw = sessionStorage.getItem(dinerOrderIdsKey) || localStorage.getItem(dinerOrderIdsKey);
+        const existingList = existingRaw ? JSON.parse(existingRaw) : [];
+        const nextList = [newOrderId, ...(Array.isArray(existingList) ? existingList.filter((id) => id !== newOrderId) : [])];
+        sessionStorage.setItem(dinerOrderIdsKey, JSON.stringify(nextList));
+        localStorage.setItem(dinerOrderIdsKey, JSON.stringify(nextList));
+      } catch (e) {
+        // ignore
+      }
+      sessionStorage.setItem(dinerLegacyOrderKey, newOrderId);
       sessionStorage.setItem('ontap_customer_last_order_id', newOrderId);
-      localStorage.setItem(dinerOrderKey, newOrderId);
+      localStorage.setItem(dinerLegacyOrderKey, newOrderId);
     }
-    setLastPlacedOrderId(newOrderId);
+    setPlacedOrderIds((prev) => [newOrderId, ...prev.filter((id) => id !== newOrderId)]);
 
     // 2. Broadcast cross-tab instant sync to Counter POS & Admin!
     broadcastSyncEvent(SYNC_EVENTS.NEW_ORDER, newOrder, activeBusinessId);
@@ -709,26 +776,92 @@ export default function CustomerView({
 
   // VIEW 1: LIVE ORDER TRACKING TAB (FR-C6)
   if (activeTab === 'track') {
+    const totalDishesCount = customerOrders.reduce(
+      (sum, ord) => sum + (ord.items || []).reduce((itemSum, item) => itemSum + item.quantity, 0),
+      0
+    );
+    const grandTotal = customerOrders.reduce((sum, ord) => sum + (Number(ord.total) || 0), 0);
+    const activeTicketsCount = customerOrders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length;
+
     return (
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 95 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 110 }}>
         {renderNameModal()}
-        <div style={{ marginBottom: 14 }}>
-          <div className="screen-title">{t('liveOrderTracking')}</div>
-          <div className="screen-subtitle">
-            {(() => {
-              const isStall = (activeTable || '').toLowerCase().includes('stand') ||
-                              (activeTable || '').toLowerCase().includes('stall') ||
-                              theme?.serviceType === 'stall';
-              if (isStall) {
+
+        {/* Screen Title & Live Pulse Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+          <div>
+            <div className="screen-title" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span>{t('liveOrderTracking')}</span>
+              {customerOrders.length > 0 && (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    color: activeTicketsCount > 0 ? '#1D4ED8' : '#15803D',
+                    background: activeTicketsCount > 0 ? '#EFF6FF' : '#DCFCE7',
+                    border: activeTicketsCount > 0 ? '1px solid #BFDBFE' : '1px solid #86EFAC',
+                    borderRadius: 20,
+                    padding: '3px 9px',
+                    letterSpacing: '0.02em'
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: activeTicketsCount > 0 ? '#2563EB' : '#16A34A',
+                      boxShadow: activeTicketsCount > 0 ? '0 0 0 2px rgba(37, 99, 235, 0.25)' : 'none'
+                    }}
+                  />
+                  {customerOrders.length > 1
+                    ? `${customerOrders.length} Tickets Ordered`
+                    : '1 Ticket Ordered'}
+                </span>
+              )}
+            </div>
+            <div className="screen-subtitle" style={{ marginTop: 3 }}>
+              {(() => {
+                const isStall = (activeTable || '').toLowerCase().includes('stand') ||
+                                (activeTable || '').toLowerCase().includes('stall') ||
+                                theme?.serviceType === 'stall';
+                if (isStall) {
+                  return language === 'hi'
+                    ? `काउंटर ऑर्डर की लाइव स्थिति (${customerOrders.length} टिकट)`
+                    : `Real-time kitchen ticket progress for your counter order (${customerOrders.length} ticket${customerOrders.length > 1 ? 's' : ''})`;
+                }
                 return language === 'hi'
-                  ? 'काउंटर ऑर्डर की लाइव रसोई प्रगति'
-                  : 'Real-time kitchen ticket progress for your counter order';
-              }
-              return language === 'hi'
-                ? `${activeTable} के लिए लाइव रसोई प्रगति`
-                : `Real-time kitchen ticket progress for ${activeTable}`;
-            })()}
+                  ? `${activeTable} के लिए लाइव रसोई प्रगति (${customerOrders.length} टिकट)`
+                  : `Real-time kitchen ticket progress for ${activeTable} (${customerOrders.length} ticket${customerOrders.length > 1 ? 's' : ''})`;
+              })()}
+            </div>
           </div>
+
+          {/* Quick "+ Add More Dishes" CTA button in header */}
+          {customerOrders.length > 0 && (
+            <button
+              className="btn-primary-pill"
+              style={{
+                padding: '7px 12px',
+                fontSize: 12,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                boxShadow: '0 2px 8px rgba(0, 122, 255, 0.25)',
+                flexShrink: 0
+              }}
+              onClick={() => {
+                playTapSound();
+                if (setActiveTab) setActiveTab('menu');
+              }}
+            >
+              <Plus size={14} />
+              <span>{language === 'hi' ? 'और व्यंजन जोड़ें' : 'Add Dishes'}</span>
+            </button>
+          )}
         </div>
 
         {serverCalledAlert && (
@@ -752,479 +885,616 @@ export default function CustomerView({
           </div>
         )}
 
-        {activeCustomerOrder ? (
-          <div
-            className={`ios-card ${activeCustomerOrder.status === 'rejected' ? '' : 'active-gradient'}`}
-            style={{
-              padding: '16px',
-              marginBottom: 16,
-              border: activeCustomerOrder.status === 'rejected' ? '1.5px solid #FCA5A5' : undefined,
-              background: activeCustomerOrder.status === 'rejected' ? '#FFF5F5' : undefined
-            }}
-          >
-            {/* Header row */}
-            <div className="card-top-row" style={{ marginBottom: 10 }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span className="card-heading" style={{ fontSize: 18 }}>
-                    {activeCustomerOrder.id}
-                  </span>
-                  {(activeCustomerOrder.orderNumber || (activeCustomerOrder.id && activeCustomerOrder.id.replace(/\D/g, ''))) && (
-                    <span style={{
-                      background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
-                      color: '#FFFFFF',
-                      fontSize: 12,
-                      fontWeight: 800,
-                      padding: '3px 8px',
-                      borderRadius: 6,
-                      letterSpacing: '0.04em',
-                      boxShadow: '0 2px 6px rgba(2, 132, 199, 0.25)'
-                    }}>
-                      Order #{activeCustomerOrder.orderNumber || activeCustomerOrder.id.replace(/\D/g, '').slice(-4)}
-                    </span>
-                  )}
-                  <span className="status-pill tag" style={{ fontSize: 11 }}>{activeCustomerOrder.table}</span>
-                </div>
-                <div className="card-meta-text" style={{ marginTop: 2 }}>
-                  Diner: <strong>{activeCustomerOrder.customerName}</strong> • {new Date(activeCustomerOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              </div>
+        {/* Live Status Stack */}
+        {customerOrders && customerOrders.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {customerOrders.map((order, orderIdx) => {
+              const ticketNum = customerOrders.length - orderIdx;
+              const isLatestAddition = orderIdx === 0 && customerOrders.length > 1;
+              const isStallOrder = (order.table || '').toLowerCase().includes('stand') ||
+                                   (order.table || '').toLowerCase().includes('stall') ||
+                                   (order.table || '').toLowerCase().includes('counter') ||
+                                   (order.table || '').toLowerCase().includes('takeaway') ||
+                                   theme?.serviceType === 'stall';
+              const orderNumBadge = order.orderNumber || (order.id && order.id.replace(/\D/g, '').slice(-4)) || '---';
 
-              <div style={{ textAlign: 'right' }}>
-                <span
-                  className="status-pill"
-                  style={{
-                    fontSize: 12,
-                    padding: '4px 12px',
-                    fontWeight: 700,
-                    background:
-                      activeCustomerOrder.status === 'received'
-                        ? '#EFF6FF'
-                        : (activeCustomerOrder.status === 'cooking' || activeCustomerOrder.status === 'in-progress')
-                        ? '#FFFBEB'
-                        : activeCustomerOrder.status === 'ready'
-                        ? '#FEF08A'
-                        : (activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done')
-                        ? '#DCFCE7'
-                        : '#FEE2E2',
-                    color:
-                      activeCustomerOrder.status === 'received'
-                        ? '#1D4ED8'
-                        : (activeCustomerOrder.status === 'cooking' || activeCustomerOrder.status === 'in-progress')
-                        ? '#B45309'
-                        : activeCustomerOrder.status === 'ready'
-                        ? '#A16207'
-                        : (activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done')
-                        ? '#15803D'
-                        : '#DC2626',
-                    border:
-                      activeCustomerOrder.status === 'received'
-                        ? '1.5px solid #60A5FA'
-                        : (activeCustomerOrder.status === 'cooking' || activeCustomerOrder.status === 'in-progress')
-                        ? '1.5px solid #F59E0B'
-                        : activeCustomerOrder.status === 'ready'
-                        ? '1.5px solid #EAB308'
-                        : (activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done')
-                        ? '1.5px solid #16A34A'
-                        : '1.5px solid #EF4444'
-                  }}
-                >
-                  {activeCustomerOrder.status === 'received'
-                    ? (language === 'hi' ? 'प्राप्त (Received)' : 'Received')
-                    : (activeCustomerOrder.status === 'cooking' || activeCustomerOrder.status === 'in-progress')
-                    ? (language === 'hi' ? 'पक रहा है (Cooking)' : 'Cooking')
-                    : activeCustomerOrder.status === 'ready'
-                    ? (language === 'hi' ? 'तैयार (Ready)' : 'Ready')
-                    : (activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done')
-                    ? (language === 'hi' ? 'परोसा गया (Served)' : 'Served')
-                    : (language === 'hi' ? 'ऑर्डर अस्वीकृत (Rejected)' : 'Order Rejected')}
-                </span>
+              return (
                 <div
+                  key={order.id}
+                  className={`ios-card ${order.status === 'rejected' ? '' : 'active-gradient'}`}
                   style={{
-                    fontSize: 15,
-                    fontWeight: 700,
-                    color: activeCustomerOrder.status === 'rejected' ? '#DC2626' : 'var(--primary-blue)',
-                    marginTop: 4
+                    padding: '16px',
+                    border: order.status === 'rejected'
+                      ? '1.5px solid #FCA5A5'
+                      : isLatestAddition
+                      ? '1.5px solid #60A5FA'
+                      : undefined,
+                    background: order.status === 'rejected' ? '#FFF5F5' : undefined,
+                    position: 'relative',
+                    boxShadow: isLatestAddition ? '0 4px 16px rgba(37, 99, 235, 0.12)' : undefined
                   }}
                 >
-                  ₹{activeCustomerOrder.total.toFixed(0)}
-                </div>
-              </div>
-            </div>
-
-            {/* If Order is Rejected: Display prominent Rejection Details Card */}
-            {activeCustomerOrder.status === 'rejected' ? (
-              <div
-                style={{
-                  background: 'linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%)',
-                  border: '1.5px solid #F87171',
-                  borderRadius: 16,
-                  padding: '16px 18px',
-                  margin: '16px 0 16px',
-                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.08)'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div
-                    style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: '50%',
-                      background: '#FFFFFF',
-                      border: '2px solid #EF4444',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#DC2626',
-                      flexShrink: 0,
-                      boxShadow: '0 2px 6px rgba(220, 38, 38, 0.15)'
-                    }}
-                  >
-                    <XCircle size={24} color="#DC2626" />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: '#991B1B', marginBottom: 6 }}>
-                      {language === 'hi' ? 'ऑर्डर अस्वीकृत (Order Rejected)' : 'Order Not Accepted by Kitchen'}
-                    </div>
-                    <div
-                      style={{
-                        background: '#FFFFFF',
-                        border: '1.5px solid #FCA5A5',
-                        borderRadius: 10,
-                        padding: '10px 12px',
-                        marginBottom: 10
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: '#991B1B',
-                          textTransform: 'uppercase',
-                          letterSpacing: 0.5,
-                          marginBottom: 3
-                        }}
-                      >
-                        {language === 'hi' ? 'अस्वीकृति का कारण:' : 'Reason for rejection:'}
-                      </div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#B91C1C' }}>
-                        {activeCustomerOrder.rejectReason ||
-                          (activeCustomerOrder.statusLabel
-                            ? activeCustomerOrder.statusLabel.replace(/^Rejected:\s*/i, '')
-                            : (language === 'hi' ? 'रसोई इस समय ऑर्डर स्वीकार नहीं कर सकी' : 'Kitchen unable to fulfill ticket'))}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.45 }}>
-                      {language === 'hi'
-                        ? 'कृपया दिए गए कारण की समीक्षा करें। आप अपने व्यंजन बदलकर दोबारा ऑर्डर कर सकते हैं या टेबल पर सर्वर को बुला सकते हैं।'
-                        : 'Please review the reason above. You can easily adjust items in your cart to order again, or ring for server assistance.'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* 4-Step Status Progress Tracker: Received -> Cooking -> Ready -> Served */}
-                <div style={{ margin: '18px 0 14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', marginBottom: 8 }}>
-                    {/* Connecting track line */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 12,
-                        left: 20,
-                        right: 20,
-                        height: 3,
-                        background: '#E5E7EB',
-                        zIndex: 1
-                      }}
-                    >
-                      <div
-                        style={{
-                          height: '100%',
-                          background:
-                            (activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done')
-                              ? '#10B981'
-                              : '#007AFF',
-                          width:
-                            activeCustomerOrder.status === 'received'
-                              ? '12%'
-                              : (activeCustomerOrder.status === 'cooking' || activeCustomerOrder.status === 'in-progress')
-                              ? '42%'
-                              : activeCustomerOrder.status === 'ready'
-                              ? '75%'
-                              : '100%',
-                          transition: 'width 0.4s ease'
-                        }}
-                      />
-                    </div>
-
-                    {[
-                      { step: 'received', label: language === 'hi' ? 'प्राप्त' : 'Received' },
-                      { step: 'cooking', label: language === 'hi' ? 'पक रहा है' : 'Cooking' },
-                      { step: 'ready', label: language === 'hi' ? 'तैयार' : 'Ready' },
-                      { step: 'served', label: language === 'hi' ? 'परोसा गया' : 'Served' }
-                    ].map((s, idx) => {
-                      const statusOrder = ['received', 'cooking', 'ready', 'served'];
-                      const normalizedStatus =
-                        activeCustomerOrder.status === 'in-progress'
-                          ? 'cooking'
-                          : activeCustomerOrder.status === 'done'
-                          ? 'served'
-                          : activeCustomerOrder.status;
-                      const currentIndex = statusOrder.indexOf(normalizedStatus);
-                      const isPassed = currentIndex >= idx;
-                      const isCurrent = currentIndex === idx;
-
-                      return (
-                        <div
-                          key={s.step}
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            zIndex: 2,
-                            width: 70
-                          }}
-                        >
-                          <div
+                  {/* Header row: Ticket badge, Order #, Table, Diner, Status & Total */}
+                  <div className="card-top-row" style={{ marginBottom: 10, alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        {customerOrders.length > 1 && (
+                          <span
                             style={{
-                              width: 26,
-                              height: 26,
-                              borderRadius: '50%',
-                              background: isPassed ? '#007AFF' : '#FFFFFF',
-                              border: isPassed ? '2px solid #007AFF' : '2px solid #D1D5DB',
-                              color: isPassed ? '#FFFFFF' : '#9CA3AF',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
+                              background: isLatestAddition
+                                ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)'
+                                : '#4B5563',
+                              color: '#FFFFFF',
                               fontSize: 11,
-                              fontWeight: 700,
-                              marginBottom: 4,
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                              transform: isCurrent ? 'scale(1.18)' : 'none',
-                              transition: 'transform 0.2s ease'
+                              fontWeight: 800,
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              letterSpacing: '0.04em',
+                              boxShadow: isLatestAddition ? '0 2px 6px rgba(37, 99, 235, 0.3)' : 'none'
                             }}
                           >
-                            {isPassed ? '✓' : idx + 1}
-                          </div>
-                          <span style={{ fontSize: 11, fontWeight: isPassed ? 700 : 500, color: isPassed ? 'var(--text-primary)' : '#9CA3AF' }}>
-                            {s.label}
+                            {isLatestAddition
+                              ? (language === 'hi' ? `टिकट #${ticketNum} (नवीनतम)` : `Ticket #${ticketNum} (Latest)`)
+                              : (language === 'hi' ? `टिकट #${ticketNum}` : `Ticket #${ticketNum}`)}
                           </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                        )}
 
-                {/* Dynamic Real-Time Live Status Banner for Each Stage */}
-                {activeCustomerOrder.status === 'received' && (
-                  <div
-                    style={{
-                      background: '#EFF6FF',
-                      border: '1.5px solid #60A5FA',
-                      borderRadius: 12,
-                      padding: '10px 14px',
-                      color: '#1E40AF',
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      marginBottom: 12
-                    }}
-                  >
-                    <Clock size={17} color="#2563EB" />
-                    <span>
-                      {language === 'hi'
-                        ? 'ऑर्डर रसोई में प्राप्त हुआ! काउंटर स्वीकार करते ही पकना शुरू होगा।'
-                        : 'Order Received by Kitchen! Counter acceptance will transition this to Cooking.'}
-                    </span>
-                  </div>
-                )}
+                        <span
+                          style={{
+                            background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
+                            color: '#FFFFFF',
+                            fontSize: 12,
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            letterSpacing: '0.04em',
+                            boxShadow: '0 2px 6px rgba(2, 132, 199, 0.25)'
+                          }}
+                        >
+                          Order #{orderNumBadge}
+                        </span>
 
-                {(activeCustomerOrder.status === 'cooking' || activeCustomerOrder.status === 'in-progress') && (
-                  <div
-                    style={{
-                      background: '#FFFBEB',
-                      border: '1.5px solid #F59E0B',
-                      borderRadius: 12,
-                      padding: '10px 14px',
-                      color: '#92400E',
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      marginBottom: 12
-                    }}
-                  >
-                    <Flame size={17} color="#D97706" />
-                    <span>
-                      {language === 'hi'
-                        ? 'रसोई में व्यंजन पक रहे हैं! शेफ ब्रिगेड ताजगी से तैयार कर रही है।'
-                        : 'Dishes are Cooking! Executive chef brigade is actively preparing your order fresh.'}
-                    </span>
-                  </div>
-                )}
+                        <span className="status-pill tag" style={{ fontSize: 11 }}>{order.table}</span>
+                      </div>
 
-                {activeCustomerOrder.status === 'ready' && (() => {
-                  const isStallOrder = (activeCustomerOrder.table || '').toLowerCase().includes('stand') ||
-                                       (activeCustomerOrder.table || '').toLowerCase().includes('stall') ||
-                                       (activeCustomerOrder.table || '').toLowerCase().includes('counter') ||
-                                       (activeCustomerOrder.table || '').toLowerCase().includes('takeaway') ||
-                                       theme?.serviceType === 'stall';
-                  const orderNumBadge = activeCustomerOrder.orderNumber || activeCustomerOrder.id.replace(/\D/g, '').slice(-4);
-                  return (
+                      <div className="card-meta-text" style={{ marginTop: 4 }}>
+                        {order.customerName && <span>Diner: <strong>{order.customerName}</strong> • </span>}
+                        {order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <span
+                        className="status-pill"
+                        style={{
+                          fontSize: 12,
+                          padding: '4px 12px',
+                          fontWeight: 700,
+                          background:
+                            order.status === 'received'
+                              ? '#EFF6FF'
+                              : (order.status === 'cooking' || order.status === 'in-progress')
+                              ? '#FFFBEB'
+                              : order.status === 'ready'
+                              ? '#FEF08A'
+                              : (order.status === 'served' || order.status === 'done')
+                              ? '#DCFCE7'
+                              : '#FEE2E2',
+                          color:
+                            order.status === 'received'
+                              ? '#1D4ED8'
+                              : (order.status === 'cooking' || order.status === 'in-progress')
+                              ? '#B45309'
+                              : order.status === 'ready'
+                              ? '#A16207'
+                              : (order.status === 'served' || order.status === 'done')
+                              ? '#15803D'
+                              : '#DC2626',
+                          border:
+                            order.status === 'received'
+                              ? '1.5px solid #60A5FA'
+                              : (order.status === 'cooking' || order.status === 'in-progress')
+                              ? '1.5px solid #F59E0B'
+                              : order.status === 'ready'
+                              ? '1.5px solid #EAB308'
+                              : (order.status === 'served' || order.status === 'done')
+                              ? '1.5px solid #16A34A'
+                              : '1.5px solid #EF4444'
+                        }}
+                      >
+                        {order.status === 'received'
+                          ? (language === 'hi' ? 'प्राप्त (Received)' : 'Received')
+                          : (order.status === 'cooking' || order.status === 'in-progress')
+                          ? (language === 'hi' ? 'पक रहा है (Cooking)' : 'Cooking')
+                          : order.status === 'ready'
+                          ? (language === 'hi' ? 'तैयार (Ready)' : 'Ready')
+                          : (order.status === 'served' || order.status === 'done')
+                          ? (language === 'hi' ? 'परोसा गया (Served)' : 'Served')
+                          : (language === 'hi' ? 'ऑर्डर अस्वीकृत (Rejected)' : 'Order Rejected')}
+                      </span>
+
+                      <div
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 700,
+                          color: order.status === 'rejected' ? '#DC2626' : 'var(--primary-blue)',
+                          marginTop: 4
+                        }}
+                      >
+                        ₹{(Number(order.total) || 0).toFixed(0)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* If Ticket is Rejected: Display prominent Rejection Details Card */}
+                  {order.status === 'rejected' ? (
                     <div
                       style={{
-                        background: '#FEF08A',
-                        border: '1.5px solid #EAB308',
-                        borderRadius: 12,
-                        padding: '12px 14px',
-                        color: '#854D0E',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        marginBottom: 12
+                        background: 'linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%)',
+                        border: '1.5px solid #F87171',
+                        borderRadius: 16,
+                        padding: '16px 18px',
+                        margin: '16px 0 16px',
+                        boxShadow: '0 4px 14px rgba(239, 68, 68, 0.08)'
                       }}
                     >
-                      <Sparkles size={18} color="#CA8A04" style={{ flexShrink: 0 }} />
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                        <div
+                          style={{
+                            width: 42,
+                            height: 42,
+                            borderRadius: '50%',
+                            background: '#FFFFFF',
+                            border: '2px solid #EF4444',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#DC2626',
+                            flexShrink: 0,
+                            boxShadow: '0 2px 6px rgba(220, 38, 38, 0.15)'
+                          }}
+                        >
+                          <XCircle size={24} color="#DC2626" />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#991B1B', marginBottom: 6 }}>
+                            {language === 'hi' ? 'ऑर्डर अस्वीकृत (Order Rejected)' : 'Order Not Accepted by Kitchen'}
+                          </div>
+                          <div
+                            style={{
+                              background: '#FFFFFF',
+                              border: '1.5px solid #FCA5A5',
+                              borderRadius: 10,
+                              padding: '10px 12px',
+                              marginBottom: 10
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: '#991B1B',
+                                textTransform: 'uppercase',
+                                letterSpacing: 0.5,
+                                marginBottom: 3
+                              }}
+                            >
+                              {language === 'hi' ? 'अस्वीकृति का कारण:' : 'Reason for rejection:'}
+                            </div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: '#B91C1C' }}>
+                              {order.rejectReason ||
+                                (order.statusLabel
+                                  ? order.statusLabel.replace(/^Rejected:\s*/i, '')
+                                  : (language === 'hi' ? 'रसोई इस समय ऑर्डर स्वीकार नहीं कर सकी' : 'Kitchen unable to fulfill ticket'))}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.45, marginBottom: 12 }}>
+                            {language === 'hi'
+                              ? 'कृपया दिए गए कारण की समीक्षा करें। आप अपने व्यंजन बदलकर दोबारा ऑर्डर कर सकते हैं।'
+                              : 'Please review the reason above. You can easily adjust items in your cart to order again.'}
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button
+                              className="btn-primary-pill"
+                              style={{ padding: '7px 12px', fontSize: 12 }}
+                              onClick={() => handleReorderItems(order)}
+                            >
+                              <RotateCcw size={13} />
+                              <span>{language === 'hi' ? 'व्यंजन बदलें व दोबारा ऑर्डर' : 'Modify & Re-order'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#991B1B',
+                                fontSize: 12,
+                                textDecoration: 'underline',
+                                cursor: 'pointer',
+                                padding: '4px 8px'
+                              }}
+                              onClick={() => handleDismissOrder(order.id)}
+                            >
+                              {language === 'hi' ? 'यह टिकट हटाएं' : 'Dismiss ticket'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* 4-Step Status Progress Tracker: Received -> Cooking -> Ready -> Served */}
+                      <div style={{ margin: '18px 0 14px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', marginBottom: 8 }}>
+                          {/* Connecting track line */}
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: 12,
+                              left: 20,
+                              right: 20,
+                              height: 3,
+                              background: '#E5E7EB',
+                              zIndex: 1
+                            }}
+                          >
+                            <div
+                              style={{
+                                height: '100%',
+                                background:
+                                  (order.status === 'served' || order.status === 'done')
+                                    ? '#10B981'
+                                    : '#007AFF',
+                                width:
+                                  order.status === 'received'
+                                    ? '12%'
+                                    : (order.status === 'cooking' || order.status === 'in-progress')
+                                    ? '42%'
+                                    : order.status === 'ready'
+                                    ? '75%'
+                                    : '100%',
+                                transition: 'width 0.4s ease'
+                              }}
+                            />
+                          </div>
+
+                          {[
+                            { step: 'received', label: language === 'hi' ? 'प्राप्त' : 'Received' },
+                            { step: 'cooking', label: language === 'hi' ? 'पक रहा है' : 'Cooking' },
+                            { step: 'ready', label: language === 'hi' ? 'तैयार' : 'Ready' },
+                            { step: 'served', label: language === 'hi' ? 'परोसा गया' : 'Served' }
+                          ].map((s, idx) => {
+                            const statusOrder = ['received', 'cooking', 'ready', 'served'];
+                            const normalizedStatus =
+                              order.status === 'in-progress'
+                                ? 'cooking'
+                                : order.status === 'done'
+                                ? 'served'
+                                : order.status;
+                            const currentIndex = statusOrder.indexOf(normalizedStatus);
+                            const isPassed = currentIndex >= idx;
+                            const isCurrent = currentIndex === idx;
+
+                            return (
+                              <div
+                                key={s.step}
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  zIndex: 2,
+                                  width: 70
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: 26,
+                                    height: 26,
+                                    borderRadius: '50%',
+                                    background: isPassed ? '#007AFF' : '#FFFFFF',
+                                    border: isPassed ? '2px solid #007AFF' : '2px solid #D1D5DB',
+                                    color: isPassed ? '#FFFFFF' : '#9CA3AF',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    marginBottom: 4,
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                                    transform: isCurrent ? 'scale(1.18)' : 'none',
+                                    transition: 'transform 0.2s ease'
+                                  }}
+                                >
+                                  {isPassed ? '✓' : idx + 1}
+                                </div>
+                                <span style={{ fontSize: 11, fontWeight: isPassed ? 700 : 500, color: isPassed ? 'var(--text-primary)' : '#9CA3AF' }}>
+                                  {s.label}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Dynamic Real-Time Live Status Banner for this Ticket */}
+                      {order.status === 'received' && (
+                        <div
+                          style={{
+                            background: '#EFF6FF',
+                            border: '1.5px solid #60A5FA',
+                            borderRadius: 12,
+                            padding: '10px 14px',
+                            color: '#1E40AF',
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            marginBottom: 12
+                          }}
+                        >
+                          <Clock size={17} color="#2563EB" style={{ flexShrink: 0 }} />
+                          <span>
+                            {language === 'hi'
+                              ? 'ऑर्डर रसोई में प्राप्त हुआ! काउंटर स्वीकार करते ही पकना शुरू होगा।'
+                              : 'Order Received by Kitchen! Counter acceptance will transition this to Cooking.'}
+                          </span>
+                        </div>
+                      )}
+
+                      {(order.status === 'cooking' || order.status === 'in-progress') && (
+                        <div
+                          style={{
+                            background: '#FFFBEB',
+                            border: '1.5px solid #F59E0B',
+                            borderRadius: 12,
+                            padding: '10px 14px',
+                            color: '#92400E',
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            marginBottom: 12
+                          }}
+                        >
+                          <Flame size={17} color="#D97706" style={{ flexShrink: 0 }} />
+                          <span>
+                            {language === 'hi'
+                              ? 'रसोई में व्यंजन पक रहे हैं! शेफ ब्रिगेड ताजगी से तैयार कर रही है।'
+                              : 'Dishes are Cooking! Executive chef brigade is actively preparing your order fresh.'}
+                          </span>
+                        </div>
+                      )}
+
+                      {order.status === 'ready' && (() => {
+                        return (
+                          <div
+                            style={{
+                              background: '#FEF08A',
+                              border: '1.5px solid #EAB308',
+                              borderRadius: 12,
+                              padding: '12px 14px',
+                              color: '#854D0E',
+                              fontSize: 13,
+                              fontWeight: 600,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              marginBottom: 12
+                            }}
+                          >
+                            <Sparkles size={18} color="#CA8A04" style={{ flexShrink: 0 }} />
+                            <span>
+                              {isStallOrder ? (
+                                language === 'hi'
+                                  ? `ऑर्डर #${orderNumBadge} तैयार है! कृपया काउंटर से अपना ऑर्डर प्राप्त करें।`
+                                  : `Order #${orderNumBadge} is Ready! Please collect your order from the counter.`
+                              ) : (
+                                language === 'hi'
+                                  ? `टिकट #${ticketNum} के व्यंजन तैयार हैं! सर्विस टीम आपकी टेबल पर ला रही है।`
+                                  : `Order #${orderNumBadge} is Ready! Plated hot and on the way to your table right now.`
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })()}
+
+                      {(order.status === 'served' || order.status === 'done') && (
+                        <div
+                          style={{
+                            background: '#ECFDF5',
+                            border: '1.5px solid #10B981',
+                            borderRadius: 12,
+                            padding: '10px 14px',
+                            color: '#065F46',
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            marginBottom: 12
+                          }}
+                        >
+                          <CheckCircle2 size={18} color="#10B981" style={{ flexShrink: 0 }} />
+                          <span>
+                            {language === 'hi'
+                              ? `टिकट #${ticketNum} के व्यंजन आपकी टेबल पर परोस दिए गए हैं! स्वादिष्ट भोजन का आनंद लें।`
+                              : `Ticket #${ticketNum} (Order #${orderNumBadge}) Served to your table! Enjoy your artisanal meal.`}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Ordered Items List for this specific ticket */}
+                  <div style={{ background: '#FFFFFF', borderRadius: 12, padding: '12px', marginBottom: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                      {language === 'hi' ? 'इस टिकट के व्यंजन:' : 'Items on this Ticket:'}
+                    </div>
+                    <ul className="body-subtask">
+                      {(order.items || []).map((item, idx) => (
+                        <li key={idx}>
+                          <strong>{item.quantity}x</strong> {item.name}
+                          {item.note && (
+                            <span style={{ color: '#D97706', fontStyle: 'italic', marginLeft: 6 }}>
+                              [{item.note}]
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {order.orderNote && (
+                      <div style={{ fontSize: 11, color: '#D97706', fontStyle: 'italic', marginTop: 6, borderTop: '1px dashed #E5E7EB', paddingTop: 6 }}>
+                        📝 Note: "{order.orderNote}"
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Payment badge row & ticket dismissal */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="status-pill tag">{order.paymentMode}</span>
+                      <span className="card-meta-text">{order.paymentStatus}</span>
+                    </div>
+
+                    {(order.status === 'served' || order.status === 'done') && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          type="button"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            fontSize: 11,
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                            padding: '2px 4px'
+                          }}
+                          onClick={() => handleDismissOrder(order.id)}
+                        >
+                          {language === 'hi' ? 'यह टिकट हटाएं' : 'Dismiss ticket'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Combined Table Summary Card when multiple tickets are ordered */}
+            {customerOrders.length > 1 && (
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%)',
+                  border: '1.5px solid #BFDBFE',
+                  borderRadius: 16,
+                  padding: '16px',
+                  boxShadow: '0 4px 14px rgba(0, 122, 255, 0.08)'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {language === 'hi' ? 'टेबल कुल सारांश (सभी टिकट)' : 'Table Orders Summary'}
+                  </div>
+                  <span
+                    style={{
+                      background: '#DBEAFE',
+                      color: '#1E40AF',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      borderRadius: 12
+                    }}
+                  >
+                    {customerOrders.length} {language === 'hi' ? 'टिकट' : 'Tickets'} • {totalDishesCount} {language === 'hi' ? 'व्यंजन' : 'Dishes'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                  {customerOrders.map((ord, idx) => (
+                    <div
+                      key={ord.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: 12.5,
+                        color: 'var(--text-secondary)'
+                      }}
+                    >
                       <span>
-                        {isStallOrder ? (
-                          language === 'hi'
-                            ? `ऑर्डर #${orderNumBadge} तैयार है! कृपया काउंटर से अपना ऑर्डर प्राप्त करें।`
-                            : `Order #${orderNumBadge} is Ready! Please collect your order from the counter.`
-                        ) : (
-                          language === 'hi'
-                            ? 'व्यंजन तैयार हैं! सर्विस टीम आपकी टेबल पर ला रही है।'
-                            : 'Order is Ready! Plated hot and on the way to your table right now.'
-                        )}
+                        Ticket #{customerOrders.length - idx} (Order #{ord.orderNumber || ord.id.replace(/\D/g, '').slice(-4)})
+                        <span style={{ fontSize: 11, marginLeft: 6, color: ord.status === 'ready' ? '#A16207' : ord.status === 'cooking' ? '#B45309' : ord.status === 'served' ? '#15803D' : ord.status === 'received' ? '#1D4ED8' : '#DC2626' }}>
+                          • {ord.status === 'ready' ? 'Ready' : ord.status === 'cooking' ? 'Cooking' : ord.status === 'served' ? 'Served' : ord.status === 'received' ? 'Received' : 'Rejected'}
+                        </span>
+                      </span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                        ₹{(Number(ord.total) || 0).toFixed(0)}
                       </span>
                     </div>
-                  );
-                })()}
-
-                {(activeCustomerOrder.status === 'served' || activeCustomerOrder.status === 'done') && (
-                  <div
-                    style={{
-                      background: '#ECFDF5',
-                      border: '1.5px solid #10B981',
-                      borderRadius: 12,
-                      padding: '10px 14px',
-                      color: '#065F46',
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      marginBottom: 12
-                    }}
-                  >
-                    <CheckCircle2 size={18} color="#10B981" />
-                    <span>
-                      {language === 'hi'
-                        ? 'व्यंजन आपकी टेबल पर परोस दिए गए हैं! स्वादिष्ट भोजन का आनंद लें।'
-                        : 'All dishes Served to your table! Enjoy your artisanal meal.'}
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Ordered Items List */}
-            <div style={{ background: '#FFFFFF', borderRadius: 12, padding: '12px', marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                {language === 'hi' ? 'ऑर्डर किए गए व्यंजन:' : 'Items on this Ticket:'}
-              </div>
-              <ul className="body-subtask">
-                {activeCustomerOrder.items.map((item, idx) => (
-                  <li key={idx}>
-                    <strong>{item.quantity}x</strong> {item.name}
-                    {item.note && (
-                      <span style={{ color: '#D97706', fontStyle: 'italic', marginLeft: 6 }}>
-                        [{item.note}]
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              {activeCustomerOrder.orderNote && (
-                <div style={{ fontSize: 11, color: '#D97706', fontStyle: 'italic', marginTop: 6, borderTop: '1px dashed #E5E7EB', paddingTop: 6 }}>
-                  📝 Note: "{activeCustomerOrder.orderNote}"
+                  ))}
                 </div>
-              )}
-            </div>
 
-            {/* Payment badge row */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <span className="status-pill tag">{activeCustomerOrder.paymentMode}</span>
-              <span className="card-meta-text">{activeCustomerOrder.paymentStatus}</span>
-            </div>
-
-            {/* Action buttons */}
-            {activeCustomerOrder.status === 'rejected' ? (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                  <button
-                    className="btn-secondary-pill"
-                    style={{ padding: '9px 12px', fontSize: 12 }}
-                    onClick={handleCallServer}
-                  >
-                    <Bell size={13} color="#D97706" />
-                    <span>{t('callServer')}</span>
-                  </button>
-
-                  <button
-                    className="btn-primary-pill"
-                    style={{ padding: '9px 12px', fontSize: 12 }}
-                    onClick={handleReorderItems}
-                  >
-                    <RotateCcw size={13} />
-                    <span>{language === 'hi' ? 'व्यंजन बदलें व दोबारा ऑर्डर' : 'Modify & Re-order'}</span>
-                  </button>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <button
-                    type="button"
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      fontSize: 11.5,
-                      textDecoration: 'underline',
-                      cursor: 'pointer',
-                      padding: '4px 8px'
-                    }}
-                    onClick={handleDismissOrder}
-                  >
-                    {language === 'hi' ? 'नया ऑर्डर शुरू करें (Start New Order)' : 'Dismiss ticket & start new order'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <button
-                  className="btn-secondary-pill"
-                  style={{ padding: '8px 12px', fontSize: 12 }}
-                  onClick={handleCallServer}
-                >
-                  <Bell size={13} color="#D97706" />
-                  <span>{t('callServer')}</span>
-                </button>
-
-                <button
-                  className="btn-primary-pill"
-                  style={{ padding: '8px 12px', fontSize: 12 }}
-                  onClick={() => {
-                    playTapSound();
-                    if (setActiveTab) setActiveTab('menu');
+                <div
+                  style={{
+                    borderTop: '1.5px dashed #93C5FD',
+                    paddingTop: 10,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
                   }}
                 >
-                  <Plus size={14} />
-                  <span>{t('orderMoreItems')}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {language === 'hi' ? 'टेबल का कुल बिल:' : 'Total Table Bill:'}
+                  </span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--primary-blue)' }}>
+                    ₹{grandTotal.toFixed(0)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Global Actions */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <button
+                className="btn-secondary-pill"
+                style={{ padding: '10px 14px', fontSize: 12.5 }}
+                onClick={handleCallServer}
+              >
+                <Bell size={14} color="#D97706" />
+                <span>{t('callServer')}</span>
+              </button>
+
+              <button
+                className="btn-primary-pill"
+                style={{ padding: '10px 14px', fontSize: 12.5 }}
+                onClick={() => {
+                  playTapSound();
+                  if (setActiveTab) setActiveTab('menu');
+                }}
+              >
+                <Plus size={15} />
+                <span>{language === 'hi' ? 'और व्यंजन जोड़ें' : 'Add More Dishes'}</span>
+              </button>
+            </div>
+
+            {/* If all tickets are served or rejected, option to clear all */}
+            {customerOrders.every((o) => o.status === 'served' || o.status === 'done' || o.status === 'rejected') && (
+              <div style={{ textAlign: 'center', marginTop: 4 }}>
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    fontSize: 11.5,
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    padding: '4px 8px'
+                  }}
+                  onClick={() => handleDismissOrder()}
+                >
+                  {language === 'hi' ? 'नया ऑर्डर शुरू करें (Start New Order)' : 'Dismiss all tickets & start new order'}
                 </button>
               </div>
             )}
@@ -1959,42 +2229,95 @@ export default function CustomerView({
         </button>
       </div>
 
-      {/* Active Live Tracking Notification Card (if table has an order in kitchen) */}
-      {activeCustomerOrder && activeCustomerOrder.status !== 'done' && activeCustomerOrder.status !== 'served' && (
-        <div style={{ padding: '0 16px', marginBottom: 12 }}>
-          <div
-            className="ios-card active-gradient"
-            style={{ padding: '12px 14px', cursor: 'pointer' }}
-            onClick={() => {
-              playTapSound();
-              if (setActiveTab) setActiveTab('track');
-            }}
-          >
-            <div className="card-top-row" style={{ marginBottom: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span className="status-pill progress" style={{ fontSize: 11 }}>
-                  {activeCustomerOrder.statusLabel}
-                </span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {activeCustomerOrder.id}
-                </span>
+      {/* Active Live Tracking Notification Card (if table has order(s) in kitchen) */}
+      {customerOrders && customerOrders.length > 0 && customerOrders.some((o) => o.status !== 'done' && o.status !== 'served') && (() => {
+        const activeTickets = customerOrders.filter((o) => o.status !== 'done' && o.status !== 'served');
+        const latestActive = activeTickets[0] || customerOrders[0];
+        const isMulti = activeTickets.length > 1;
+
+        return (
+          <div style={{ padding: '0 16px', marginBottom: 12 }}>
+            <div
+              className="ios-card active-gradient"
+              style={{
+                padding: '12px 14px',
+                cursor: 'pointer',
+                border: isMulti ? '1.5px solid #60A5FA' : undefined,
+                boxShadow: isMulti ? '0 4px 14px rgba(37, 99, 235, 0.12)' : undefined
+              }}
+              onClick={() => {
+                playTapSound();
+                if (setActiveTab) setActiveTab('track');
+              }}
+            >
+              <div className="card-top-row" style={{ marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span
+                    className="status-pill progress"
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      background: isMulti ? '#EFF6FF' : undefined,
+                      color: isMulti ? '#1D4ED8' : undefined,
+                      border: isMulti ? '1px solid #BFDBFE' : undefined
+                    }}
+                  >
+                    {isMulti
+                      ? `${activeTickets.length} Active Tickets Ordered`
+                      : latestActive.statusLabel}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {isMulti ? `Live Orders Stack` : latestActive.id}
+                  </span>
+                </div>
+                <span className="card-meta-text">{latestActive.table} • Tap to Track</span>
               </div>
-              <span className="card-meta-text">{activeCustomerOrder.table} • Tap to Track</span>
-            </div>
 
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-              • {activeCustomerOrder.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
-            </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                {isMulti ? (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {activeTickets.map((t, idx) => (
+                      <span
+                        key={t.id}
+                        style={{
+                          background: '#F1F5F9',
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: t.status === 'ready' ? '#A16207' : t.status === 'cooking' ? '#B45309' : '#1D4ED8'
+                        }}
+                      >
+                        Ticket #{activeTickets.length - idx}: {t.status === 'ready' ? 'Ready' : t.status === 'cooking' ? 'Cooking' : 'Received'}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  `• ${latestActive.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}`
+                )}
+              </div>
 
-            <div className="card-bottom-progress">
-              <div
-                className="card-bottom-progress-fill progress"
-                style={{ width: `${activeCustomerOrder.progressPercent || 40}%` }}
-              />
+              <div className="card-bottom-progress">
+                <div
+                  className="card-bottom-progress-fill progress"
+                  style={{
+                    width: `${
+                      isMulti
+                        ? Math.round(
+                            activeTickets.reduce((acc, t) => {
+                              const pct = t.status === 'ready' ? 75 : (t.status === 'cooking' || t.status === 'in-progress') ? 42 : 20;
+                              return acc + pct;
+                            }, 0) / activeTickets.length
+                          )
+                        : (latestActive.progressPercent || 40)
+                    }%`
+                  }}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Menu Item Cards Feed (Responsive Grid) */}
       <div className="menu-items-grid">

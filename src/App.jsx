@@ -806,8 +806,10 @@ export default function App() {
     };
   }, [currentRole, showAboutChef, canReturnToAdmin, activeBusinessId]);
 
-  // Active in-progress orders count
-  const activeOrdersCount = orders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length;
+  // Active in-progress orders count (table-scoped for customer view)
+  const activeOrdersCount = currentRole === 'customer'
+    ? orders.filter((o) => o.table === activeTable && o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length
+    : orders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length;
 
   // Handle Order Placement from Customer
   const handlePlaceOrder = (newOrder) => {
