@@ -183,42 +183,16 @@ export async function logInUserWithVerification({ email, password }) {
   // ─── 1. PRIMARY VALIDATOR: FIREBASE AUTHENTICATION ───
   if (auth) {
     let userCredential = null;
-    let syncedFromLegacy = false;
 
     try {
       // Primary: authenticate directly with entered email & 6-digit PIN
       userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
     } catch (err) {
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        // Check candidate legacy PINs if account in Firebase has an earlier/desynced PIN:
-        const candidatePins = [];
-        if (cleanPassword.length === 4) {
-          candidatePins.push(`${cleanPassword}00`);
-        }
-        if (matchingBiz?.owner?.pin && matchingBiz.owner.pin !== cleanPassword) {
-          candidatePins.push(matchingBiz.owner.pin);
-          if (matchingBiz.owner.pin.length === 4) {
-            candidatePins.push(`${matchingBiz.owner.pin}00`);
-          }
-        }
-
-        for (const candidate of candidatePins) {
-          try {
-            userCredential = await signInWithEmailAndPassword(auth, cleanEmail, candidate);
-            if (userCredential && userCredential.user) {
-              syncedFromLegacy = true;
-              break;
-            }
-          } catch {}
-        }
-
-        // If credentials could not be authenticated via Firebase Auth
-        if (!userCredential) {
-          return {
-            success: false,
-            error: 'Invalid email or password. Please check your credentials or reset your password.'
-          };
-        }
+        return {
+          success: false,
+          error: 'Invalid email or password. Please check your credentials or reset your password.'
+        };
       } else if (err.code === 'auth/too-many-requests') {
         return {
           success: false,
@@ -247,16 +221,6 @@ export async function logInUserWithVerification({ email, password }) {
       try {
         await reload(user);
       } catch {}
-
-      // AUTO-HEALING PASSWORD SYNC: If signed in via legacy/candidate PIN, sync Firebase Auth to cleanPassword
-      if (syncedFromLegacy) {
-        try {
-          await updatePassword(user, cleanPassword);
-          console.info(`[Auth] Credentials systematically synchronized for ${cleanEmail}.`);
-        } catch (syncErr) {
-          console.warn('[Auth] Background password auto-sync notice:', syncErr);
-        }
-      }
 
       // STRICT VERIFICATION CHECK: BLOCK ACCESS IF EMAIL NOT VERIFIED
       if (!user.emailVerified) {
