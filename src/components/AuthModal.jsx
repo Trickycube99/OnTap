@@ -461,6 +461,17 @@ export default function AuthModal({
                     pattern="[0-9]*"
                     inputMode="numeric"
                     value={pin}
+                    onKeyDown={(e) => {
+                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                      }
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const cleaned = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+                      setPin(cleaned);
+                      setErrorMessage('');
+                    }}
                     onChange={(e) => {
                       setPin(e.target.value.replace(/\D/g, '').slice(0, 6));
                       setErrorMessage('');
@@ -534,6 +545,17 @@ export default function AuthModal({
                     placeholder="Enter 6-digit PIN"
                     className="auth-input"
                     value={pin}
+                    onKeyDown={(e) => {
+                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                      }
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const cleaned = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+                      setPin(cleaned);
+                      setErrorMessage('');
+                    }}
                     onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     style={{
                       width: '100%',

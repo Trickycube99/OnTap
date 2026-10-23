@@ -2426,7 +2426,19 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     type="text"
                     required
                     maxLength={6}
+                    pattern="[0-9]*"
+                    inputMode="numeric"
                     value={editOwnerPin}
+                    onKeyDown={(e) => {
+                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                      }
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const val = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+                      setEditOwnerPin(val);
+                    }}
                     onChange={(e) => {
                       const val = e.target.value.replace(/\D/g, '');
                       if (val.length <= 6) setEditOwnerPin(val);
@@ -2459,7 +2471,19 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   <input
                     type="text"
                     maxLength={6}
+                    pattern="[0-9]*"
+                    inputMode="numeric"
                     value={editCounterPin}
+                    onKeyDown={(e) => {
+                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                      }
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const val = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+                      setEditCounterPin(val);
+                    }}
                     onChange={(e) => {
                       const val = e.target.value.replace(/\D/g, '');
                       if (val.length <= 6) setEditCounterPin(val);

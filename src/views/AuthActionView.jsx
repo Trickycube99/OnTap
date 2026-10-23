@@ -365,9 +365,15 @@ export default function AuthActionView({
                     placeholder="Enter 6-digit numeric PIN"
                     value={newPassword}
                     onKeyDown={(e) => {
-                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key)) {
+                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
                         e.preventDefault();
                       }
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const cleaned = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+                      setNewPassword(cleaned);
+                      setErrorMessage('');
                     }}
                     onChange={(e) => setNewPassword(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     style={{
@@ -429,9 +435,15 @@ export default function AuthActionView({
                   placeholder="Re-enter 6-digit numeric PIN"
                   value={confirmPassword}
                   onKeyDown={(e) => {
-                    if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key)) {
+                    if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
                       e.preventDefault();
                     }
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const cleaned = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+                    setConfirmPassword(cleaned);
+                    setErrorMessage('');
                   }}
                   onChange={(e) => setConfirmPassword(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   style={{
