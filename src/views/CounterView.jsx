@@ -192,8 +192,8 @@ export default function CounterView({
     setIsVerifyingSwitch(true);
 
     const pin = (switchStaffPin || '').trim();
-    if (!pin || !/^\d{6}$/.test(pin)) {
-      setSwitchPinError('Please enter a valid 6-digit staff PIN.');
+    if (!pin || (targetSwitchStaffId !== '__owner_admin__' && !/^\d{6}$/.test(pin))) {
+      setSwitchPinError(targetSwitchStaffId === '__owner_admin__' ? 'Please enter your owner password.' : 'Please enter a valid 6-digit staff PIN.');
       setIsVerifyingSwitch(false);
       return;
     }
@@ -219,7 +219,7 @@ export default function CounterView({
         return;
       } else {
         playAlertChime();
-        setSwitchPinError('Incorrect Master Owner PIN. Enter the authorized 6-digit owner PIN.');
+        setSwitchPinError('Incorrect Owner Password. Enter the authorized owner password.');
         setIsVerifyingSwitch(false);
         return;
       }

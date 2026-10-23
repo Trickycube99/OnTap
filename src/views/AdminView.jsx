@@ -107,7 +107,7 @@ export default function AdminView({
     }
     const cleanPin = String(deleteConfirmPin || '').trim();
     if (cleanPin !== String(activeBiz?.owner?.pin || '').trim()) {
-      setDeleteAccountError('Incorrect Owner Master PIN. Please enter your valid 6-digit PIN.');
+      setDeleteAccountError('Incorrect Owner Password. Please enter your valid owner password.');
       playAlertChime();
       return;
     }
@@ -3041,7 +3041,7 @@ export default function AdminView({
                 <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: 14, padding: '12px 14px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Owner Master PIN (6 Digits)
+                      Owner Password
                     </div>
                     <button
                       type="button"
@@ -3053,14 +3053,14 @@ export default function AdminView({
                     </button>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                    <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 800, color: '#FBBF24', letterSpacing: showOwnerPin ? '0.15em' : '0.3em' }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 800, color: '#FBBF24', letterSpacing: showOwnerPin ? '0.1em' : '0.2em' }}>
                       {showOwnerPin ? activeBiz?.owner?.pin : '••••••'}
                     </span>
                     <button
                       type="button"
                       onClick={() => handleCopyOwnerCredential(activeBiz?.owner?.pin, 'owner_pin')}
                       style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
-                      title="Copy Master PIN"
+                      title="Copy Owner Password"
                     >
                       {copiedOwnerKey === 'owner_pin' ? <Check size={16} color="#34D399" /> : <Copy size={16} />}
                     </button>
@@ -5828,7 +5828,7 @@ export default function AdminView({
               <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    OWNER 6-DIGIT PIN
+                    OWNER PASSWORD
                   </div>
                   <button
                     type="button"
@@ -6088,14 +6088,13 @@ export default function AdminView({
 
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0', display: 'block', marginBottom: 6 }}>
-                  Enter your 6-digit Owner Master PIN:
+                  Enter your Owner Password:
                 </label>
                 <input
                   type="password"
-                  maxLength={6}
                   value={deleteConfirmPin}
-                  onChange={(e) => setDeleteConfirmPin(e.target.value.replace(/\D/g, ''))}
-                  placeholder="••••••"
+                  onChange={(e) => setDeleteConfirmPin(e.target.value)}
+                  placeholder="Enter your owner password"
                   disabled={isDeletingAccount}
                   style={{
                     width: '100%',

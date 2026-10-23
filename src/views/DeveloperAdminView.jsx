@@ -280,14 +280,11 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       return;
     }
 
-    const pinInUse = businesses.some(
-      (b) => b.owner.pin === trimmedOwnerPin ||
-             b.counter.pin === trimmedOwnerPin ||
-             b.owner.pin === trimmedCounterPin ||
-             b.counter.pin === trimmedCounterPin
+    const counterPinInUse = businesses.some(
+      (b) => b.counter?.pin === trimmedCounterPin
     );
-    if (pinInUse) {
-      setFormError('Specified Owner PIN or Counter PIN is already assigned to another business. Please choose unique 6-digit PINs.');
+    if (counterPinInUse) {
+      setFormError('Specified Counter PIN is already assigned to another business. Please choose a unique 6-digit Counter PIN.');
       return;
     }
 
@@ -551,7 +548,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
           id: Date.now(),
           time: 'Just now',
           type: 'auth',
-          text: `Manual credentials override applied for "${showCredentialsModal.name}" — Owner Email: ${cleanEmail}, Master PIN: ${cleanPin}`
+          text: `Manual credentials override applied for "${showCredentialsModal.name}" — Owner Email: ${cleanEmail}, Password: ${cleanPin}`
         },
         ...prev
       ]);
@@ -1393,14 +1390,14 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                          <span style={{ color: '#94A3B8' }}>Owner PIN (6 Digits):</span>
+                          <span style={{ color: '#94A3B8' }}>Owner Password:</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span style={{ fontFamily: 'monospace', color: '#F59E0B', fontWeight: 700 }}>{biz.owner.pin}</span>
                             <button
                               type="button"
                               onClick={() => copyToClipboard(biz.owner.pin, `card_pin_${biz.id}`)}
                               style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 2 }}
-                              title="Copy Owner Master PIN"
+                              title="Copy Owner Password"
                             >
                               {copiedKey === `card_pin_${biz.id}` ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
                             </button>
@@ -1994,7 +1991,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     <b style={{ color: '#38BDF8', fontFamily: 'monospace' }}>{createdSuccessBiz.owner.email}</b>
                   </div>
                   <div style={{ marginBottom: 8 }}>
-                    <span style={{ color: '#94A3B8' }}>Owner Admin PIN: </span>
+                    <span style={{ color: '#94A3B8' }}>Owner Password: </span>
                     <b style={{ color: '#F59E0B', fontFamily: 'monospace' }}>{createdSuccessBiz.owner.pin}</b>
                   </div>
                   <div>
@@ -2608,7 +2605,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   borderRadius: 12,
                   border: '1px solid rgba(255, 255, 255, 0.08)'
                 }}>
-                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>OWNER MASTER PIN (6 DIGITS)</div>
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>OWNER PASSWORD</div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#F59E0B' }}>
                       {showCredentialsModal.owner.pin}
@@ -2616,6 +2613,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     <button
                       onClick={() => copyToClipboard(showCredentialsModal.owner.pin, 'ownerPin')}
                       style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+                      title="Copy Owner Password"
                     >
                       {copiedKey === 'ownerPin' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
                     </button>

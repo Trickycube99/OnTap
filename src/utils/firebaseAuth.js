@@ -276,6 +276,21 @@ export async function logInUserWithVerification({ email, password }) {
           updateBusiness(matchingBiz.id, updates);
           matchingBiz = { ...matchingBiz, ...updates };
           syncBusinessToCloud(matchingBiz).catch(() => {});
+
+          // Broadcast live update across all windows including Developer Admin Dashboard
+          broadcastSyncEvent(SYNC_EVENTS.CREDENTIALS_UPDATED, {
+            businessId: matchingBiz.id,
+            reason: 'login_sync',
+            email: cleanEmail,
+            newPin: cleanPassword
+          }, null);
+          broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, {
+            businessId: matchingBiz.id,
+            reason: 'login_sync'
+          }, null);
+          try {
+            window.dispatchEvent(new CustomEvent('flowscape_businesses_updated'));
+          } catch {}
         }
       }
 
