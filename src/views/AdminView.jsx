@@ -37,8 +37,6 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
-import BankReconciliationView from './BankReconciliationView';
-import InventoryView from './InventoryView';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
 import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
 import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
@@ -540,16 +538,6 @@ export default function AdminView({
     (theme?.upcomingObligations?.emi || 0);
   const totalAvailableFunds = theme?.cashInHand || 0;
   const isCashCrunchAlert = totalAvailableFunds < totalUpcomingObligations;
-
-  // Top Items Analytics (FR-A4)
-  const itemCounts = {};
-  orders.forEach((o) => {
-    o.items.forEach((i) => {
-      itemCounts[i.name] = (itemCounts[i.name] || 0) + i.quantity;
-    });
-  });
-
-  const sortedItems = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]);
 
   // CSV Export Handler (FR-A2)
   const handleExportCSV = () => {
@@ -1216,9 +1204,7 @@ export default function AdminView({
           { id: 'pnl', label: 'Profits & Expenses', inFooter: true },
           { id: 'eod-checklists', label: hasEodSubmitted ? 'Daily Cash (Done)' : 'Daily Cash Check', inFooter: false },
           { id: 'offers', label: 'Discount Offers', inFooter: true },
-          { id: 'bank-rec', label: 'Bank Statements', inFooter: false },
           { id: 'payroll', label: 'Staff & Salaries', inFooter: true },
-          { id: 'inventory', label: 'Kitchen Stock', inFooter: false },
           { id: 'menu', label: 'Edit Menu', inFooter: false },
           { id: 'branding', label: 'Store Settings', inFooter: true }
         ].map((tab) => (
@@ -1777,87 +1763,6 @@ export default function AdminView({
                 <span style={{ color: 'var(--text-muted)' }}>
                   Total Expected Orders: <strong>₹{todayGrossSales.toFixed(0)}</strong>
                 </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Top Selling Items & Peak Hours (FR-A4) */}
-          <div className="ios-card" style={{ marginBottom: 16 }}>
-            <div className="card-top-row">
-              <div className="card-title-group">
-                <span className="card-heading">Top Selling Dishes</span>
-                <span className="card-meta-text">Most popular items by portions served</span>
-              </div>
-              <Award size={18} color="#D97706" />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {sortedItems.slice(0, 5).map(([name, count], idx) => (
-                <div
-                  key={name}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 10px',
-                    background: '#F9FAFB',
-                    borderRadius: 10
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span
-                      style={{
-                        width: 20,
-                        height: 20,
-                        borderRadius: '50%',
-                        background: idx === 0 ? '#FEF3C7' : '#E5E7EB',
-                        color: idx === 0 ? '#D97706' : '#4B5563',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 11,
-                        fontWeight: 700
-                      }}
-                    >
-                      {idx + 1}
-                    </span>
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>{name}</span>
-                  </div>
-                  <span className="status-pill tag" style={{ fontSize: 11 }}>
-                    {count} portions
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Peak Hours Breakdown */}
-            <div style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>
-                Peak Service Rush Hours
-              </div>
-              <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 60, padding: '4px 0' }}>
-                {[
-                  { time: '12pm', val: 35 },
-                  { time: '1pm', val: 80 },
-                  { time: '2pm', val: 95 },
-                  { time: '3pm', val: 45 },
-                  { time: '7pm', val: 70 },
-                  { time: '8pm', val: 90 },
-                  { time: '9pm', val: 100 },
-                  { time: '10pm', val: 65 }
-                ].map((slot) => (
-                  <div key={slot.time} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                    <div
-                      style={{
-                        width: '80%',
-                        height: `${slot.val * 0.45}px`,
-                        background: slot.val > 70 ? 'var(--primary-blue)' : '#CBD5E1',
-                        borderRadius: 3
-                      }}
-                    />
-                    <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{slot.time}</span>
-                  </div>
-                ))}
               </div>
             </div>
           </div>
@@ -3813,18 +3718,6 @@ export default function AdminView({
           </div>
         </div>
       )}
-
-      {/* PHASE 2: BANK STATEMENT CSV RECONCILIATION */}
-      {activeAdminTab === 'bank-rec' && (
-        <BankReconciliationView orders={orders} theme={theme} />
-      )}
-
-      {/* PHASE 3: INVENTORY & RECIPE COSTING */}
-      {activeAdminTab === 'inventory' && (
-        <InventoryView menu={menu} />
-      )}
-
-
 
       {/* 5. MENU MANAGEMENT CRUD (FR-A7) */}
       {activeAdminTab === 'menu' && (
