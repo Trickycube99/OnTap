@@ -185,7 +185,25 @@ export default function CustomerView({
   const totalItemCount = cart.reduce((acc, i) => acc + i.quantity, 0);
 
   // Suggestable item for upsell (FR-C8)
-  const suggestableItem = safeMenu.find((item) => item.id === 3) || safeMenu[0];
+  const upsellPairingId = theme?.upsellPairingId;
+  const suggestableItem = useMemo(() => {
+    // If explicitly set to none, empty, null, 0, or false -> show NOTHING on the upsell column
+    if (
+      upsellPairingId === 'none' ||
+      upsellPairingId === null ||
+      upsellPairingId === 0 ||
+      upsellPairingId === '' ||
+      upsellPairingId === false
+    ) {
+      return null;
+    }
+    // If a specific pairing dish ID is configured, find that dish
+    if (upsellPairingId !== undefined) {
+      return safeMenu.find((item) => String(item.id) === String(upsellPairingId)) || null;
+    }
+    // If no preference configured at all, check if dish id 3 exists; otherwise return null (do not force safeMenu[0])
+    return safeMenu.find((item) => item.id === 3) || null;
+  }, [upsellPairingId, safeMenu]);
 
   // Find latest active customer order for this diner:
   // 1. Strictly prioritize the exact order placed by this diner in this session/device

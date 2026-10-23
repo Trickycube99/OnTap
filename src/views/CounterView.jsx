@@ -29,7 +29,9 @@ import PrinterModal from '../components/PrinterModal';
 import WhatsAppAlertModal from '../components/WhatsAppAlertModal';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
 import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
-import { getActiveBusiness } from '../utils/businessManager';
+import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
+import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
+import { syncBusinessToCloud } from '../utils/systematicDatabase';
 
 function checkUnacceptedOverdue(order) {
   if (!order || !order.createdAt) return { elapsedMins: 0, isUnacceptedOverdue: false };
@@ -114,7 +116,35 @@ export default function CounterView({
   const [newOfferDesc, setNewOfferDesc] = useState('');
 
   // Suggestables Configuration (FR-P6)
-  const [selectedPairingId, setSelectedPairingId] = useState(3);
+  const [selectedPairingId, setSelectedPairingId] = useState(() => {
+    return theme?.upsellPairingId !== undefined ? theme?.upsellPairingId : 'none';
+  });
+
+  useEffect(() => {
+    if (theme?.upsellPairingId !== undefined) {
+      setSelectedPairingId(theme.upsellPairingId);
+    }
+  }, [theme?.upsellPairingId]);
+
+  const handlePairingChange = (val) => {
+    const finalVal = val === 'none' ? 'none' : (isNaN(Number(val)) ? val : Number(val));
+    setSelectedPairingId(finalVal);
+    if (typeof _setTheme === 'function') {
+      _setTheme((prev) => {
+        const updated = { ...prev, upsellPairingId: finalVal };
+        const activeBiz = getActiveBusiness();
+        const bizId = activeBiz?.id || activeBusinessId || '';
+        if (bizId) {
+          saveData(getScopedKey(STORAGE_KEYS.THEME, bizId), updated);
+          updateBusiness(bizId, { theme: updated });
+          const freshBiz = getBusinesses().find((b) => b.id === bizId);
+          if (freshBiz) syncBusinessToCloud(freshBiz).catch(() => {});
+        }
+        broadcastSyncEvent(SYNC_EVENTS.THEME_UPDATED, updated, bizId);
+        return updated;
+      });
+    }
+  };
 
   // Server Call Alerts Banner
   const [serverAlert, setServerAlert] = useState(null);
@@ -1228,23 +1258,30 @@ export default function CounterView({
 
             <div style={{ marginBottom: 10 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                Featured Pairing Dish:
+                Featured Pairing Dish (Upsell):
               </label>
               <select
                 className="ios-select"
-                value={selectedPairingId}
-                onChange={(e) => setSelectedPairingId(Number(e.target.value))}
+                value={selectedPairingId ?? 'none'}
+                onChange={(e) => handlePairingChange(e.target.value)}
               >
-                {menu.map((m) => (
+                <option value="none">-- None / Nothing (Disable Upselling) --</option>
+                {(menu || []).map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name} (₹{m.price})
                   </option>
                 ))}
               </select>
             </div>
-            <div style={{ fontSize: 11, color: '#16A34A', fontWeight: 600 }}>
-              ✓ Selected item will be presented to all table diners as a recommended pairing!
-            </div>
+            {selectedPairingId === 'none' || !selectedPairingId ? (
+              <div style={{ fontSize: 11, color: '#64748B', fontWeight: 600 }}>
+                ✕ Upselling is turned off. Nothing will be shown on the customer upselling banner.
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: '#16A34A', fontWeight: 600 }}>
+                ✓ Selected item will be presented to all table diners as a recommended pairing!
+              </div>
+            )}
           </div>
 
           {/* Stock & Price Control */}

@@ -277,6 +277,7 @@ export default function AdminView({
   const [newDishTags, setNewDishTags] = useState("Chef's Special");
   const [newDishImage, setNewDishImage] = useState(null);
   const [imageUploadLoading, setImageUploadLoading] = useState(false);
+  const [newDishPairing, setNewDishPairing] = useState('');
 
   // App Customizer Draft State & Handlers (FR-A5)
   const [customizerDraft, setCustomizerDraft] = useState(() => ({
@@ -649,6 +650,25 @@ export default function AdminView({
     reader.readAsDataURL(file);
   };
 
+  // Suggestables & Upsell Pairing Handler (Owner control)
+  const handleUpsellPairingChange = (val) => {
+    playTapSound();
+    const finalVal = val === 'none' ? 'none' : (isNaN(Number(val)) ? val : Number(val));
+    const updatedTheme = { ...theme, upsellPairingId: finalVal };
+    if (typeof setTheme === 'function') {
+      setTheme(updatedTheme);
+    }
+    const activeBiz = getActiveBusiness();
+    const bizId = activeBiz?.id || activeBusinessId || '';
+    if (bizId) {
+      saveData(getScopedKey(STORAGE_KEYS.THEME, bizId), updatedTheme);
+      updateBusiness(bizId, { theme: updatedTheme });
+      const freshBiz = getBusinesses().find((b) => b.id === bizId);
+      if (freshBiz) syncBusinessToCloud(freshBiz).catch(() => {});
+    }
+    broadcastSyncEvent(SYNC_EVENTS.THEME_UPDATED, updatedTheme, bizId);
+  };
+
   // Menu Management CRUD (FR-A7)
   const handleAddDishSubmit = (e) => {
     e.preventDefault();
@@ -671,7 +691,8 @@ export default function AdminView({
       isAvailable: true,
       tags: tagsArray,
       bullets: bulletsArray,
-      prepTime: '10-12 mins'
+      prepTime: '10-12 mins',
+      pairingDishId: newDishPairing ? (isNaN(Number(newDishPairing)) ? newDishPairing : Number(newDishPairing)) : null
     };
 
     const activeBiz = getActiveBusiness();
@@ -693,6 +714,7 @@ export default function AdminView({
     setNewDishPrice('');
     setNewDishBullets('');
     setNewDishImage(null);
+    setNewDishPairing('');
     playSuccessChime();
   };
 
@@ -3743,6 +3765,44 @@ export default function AdminView({
       {/* 5. MENU MANAGEMENT CRUD (FR-A7) */}
       {activeAdminTab === 'menu' && (
         <div>
+          {/* Suggestables & Upsell Pairing Configuration */}
+          <div className="ios-card" style={{ marginBottom: 16 }}>
+            <div className="card-top-row">
+              <div className="card-title-group">
+                <span className="card-heading">Suggestables & Upsell Pairing</span>
+                <span className="card-meta-text">Configure add-on featured pairing on customer menus</span>
+              </div>
+              <Sparkles size={18} color="#007AFF" />
+            </div>
+
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
+                Featured Pairing Dish (Upsell):
+              </label>
+              <select
+                className="ios-select"
+                value={theme?.upsellPairingId ?? 'none'}
+                onChange={(e) => handleUpsellPairingChange(e.target.value)}
+              >
+                <option value="none">-- None / Nothing (Disable Upselling) --</option>
+                {(menu || []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} (₹{m.price})
+                  </option>
+                ))}
+              </select>
+            </div>
+            {theme?.upsellPairingId === 'none' || !theme?.upsellPairingId ? (
+              <div style={{ fontSize: 11, color: '#64748B', fontWeight: 600 }}>
+                ✕ Upselling is turned off. Nothing will be shown on the customer upselling banner.
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: '#16A34A', fontWeight: 600 }}>
+                ✓ Selected item will be presented to all table diners as a recommended pairing!
+              </div>
+            )}
+          </div>
+
           <div className="ios-card" style={{ marginBottom: 16 }}>
             <div className="card-top-row">
               <div className="card-title-group">
@@ -5008,6 +5068,25 @@ export default function AdminView({
                   value={newDishBullets}
                   onChange={(e) => setNewDishBullets(e.target.value)}
                 />
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Suggested Pairing / Upsell Dish (Optional)</label>
+                <select
+                  className="ios-select"
+                  value={newDishPairing}
+                  onChange={(e) => setNewDishPairing(e.target.value)}
+                >
+                  <option value="">None / Nothing (Do not pair)</option>
+                  {(menu || []).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} (₹{m.price})
+                    </option>
+                  ))}
+                </select>
+                <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>
+                  Select "None / Nothing" if you do not want an upselling add-on attached to this dish.
+                </div>
               </div>
 
               <button type="submit" className="btn-primary-pill full-width">
