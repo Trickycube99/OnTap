@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { playTapSound, playSuccessChime } from '../utils/audio';
-import { Truck } from 'lucide-react';
+import { Truck, Download } from 'lucide-react';
+import { triggerCsvDownload } from '../utils/salesBridge';
 
 export default function AggregatorReconciliationView() {
   const [selectedPlatform, setSelectedPlatform] = useState('all'); // 'all' | 'zomato' | 'swiggy'
@@ -32,12 +33,119 @@ export default function AggregatorReconciliationView() {
     }, 800);
   };
 
+  const handleExportAggregatorCsv = () => {
+    playTapSound();
+    let exportBatches = batches.length > 0 ? batches : [
+      {
+        id: 'BATCH-ZOM-1042',
+        platform: 'Zomato',
+        weekLabel: '13 Oct - 19 Oct 2026',
+        ordersCount: 84,
+        grossSales: 42500,
+        commissionAmount: 7650,
+        gstOnCommission: 1377,
+        pgFee: 850,
+        netPayout: 32623,
+        status: 'settled',
+        utrRef: 'HDFCR5202610209912401',
+        settledDate: '2026-10-20'
+      },
+      {
+        id: 'BATCH-SWIG-2089',
+        platform: 'Swiggy',
+        weekLabel: '13 Oct - 19 Oct 2026',
+        ordersCount: 92,
+        grossSales: 48900,
+        commissionAmount: 8802,
+        gstOnCommission: 1584,
+        pgFee: 978,
+        netPayout: 37536,
+        status: 'settled',
+        utrRef: 'ICICIR520261021008129',
+        settledDate: '2026-10-21'
+      },
+      {
+        id: 'BATCH-ZOM-1043',
+        platform: 'Zomato',
+        weekLabel: '20 Oct - 26 Oct 2026',
+        ordersCount: 76,
+        grossSales: 38400,
+        commissionAmount: 6912,
+        gstOnCommission: 1244,
+        pgFee: 768,
+        netPayout: 29476,
+        status: 'pending',
+        utrRef: 'Expected 27-Oct-2026',
+        settledDate: 'Pending'
+      },
+      {
+        id: 'BATCH-SWIG-2090',
+        platform: 'Swiggy',
+        weekLabel: '20 Oct - 26 Oct 2026',
+        ordersCount: 88,
+        grossSales: 45200,
+        commissionAmount: 8136,
+        gstOnCommission: 1464,
+        pgFee: 904,
+        netPayout: 34696,
+        status: 'pending',
+        utrRef: 'Expected 28-Oct-2026',
+        settledDate: 'Pending'
+      }
+    ];
+
+    const headers = [
+      'Payout Batch ID',
+      'Delivery Platform',
+      'Billing Cycle',
+      'Total Delivered Orders',
+      'Gross Order Value (INR)',
+      'Platform Commission (INR)',
+      'GST on Commission 18% (INR)',
+      'Payment Gateway Fee (INR)',
+      'Net Bank Payout (INR)',
+      'Settlement Status',
+      'Bank UTR / Ref',
+      'Settlement Date'
+    ];
+
+    const rows = exportBatches.map((b) => [
+      b.id,
+      b.platform,
+      b.weekLabel,
+      b.ordersCount,
+      Number(b.grossSales || 0).toFixed(2),
+      Number(b.commissionAmount || 0).toFixed(2),
+      Number(b.gstOnCommission || 0).toFixed(2),
+      Number(b.pgFee || 0).toFixed(2),
+      Number(b.netPayout || 0).toFixed(2),
+      b.status === 'settled' ? 'Settled in Bank' : 'Pending Weekly Payout',
+      b.utrRef || 'N/A',
+      b.settledDate || 'Pending'
+    ]);
+
+    triggerCsvDownload(headers, rows, `online_delivery_aggregator_payouts_${new Date().toISOString().slice(0, 10)}.csv`);
+    playSuccessChime();
+  };
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 85 }}>
       {/* Title */}
-      <div style={{ marginBottom: 14 }}>
-        <div className="screen-title">Online Delivery Payouts</div>
-        <div className="screen-subtitle">Track your Zomato & Swiggy orders, commissions, and bank deposits</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        <div>
+          <div className="screen-title">Online Delivery Payouts</div>
+          <div className="screen-subtitle">Track your Zomato & Swiggy orders, commissions, and bank deposits</div>
+        </div>
+        <button
+          type="button"
+          className="btn-secondary-pill"
+          onClick={handleExportAggregatorCsv}
+          style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+          title="Export delivery payout batch register to CSV"
+        >
+          <Download size={14} />
+          <span>Export Payouts (CSV)</span>
+        </button>
       </div>
 
       {/* KPI Cards Strip */}

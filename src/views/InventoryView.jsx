@@ -3,9 +3,11 @@ import {
   Boxes,
   TrendingDown,
   Plus,
-  PackageOpen
+  PackageOpen,
+  Download
 } from 'lucide-react';
 import { playTapSound, playSuccessChime } from '../utils/audio';
+import { triggerCsvDownload } from '../utils/salesBridge';
 
 export default function InventoryView({ menu: _menu }) {
   const [ingredients, setIngredients] = useState([]);
@@ -24,6 +26,55 @@ export default function InventoryView({ menu: _menu }) {
   const [selectedIng, setSelectedIng] = useState('');
   const [wasteQty, setWasteQty] = useState('');
   const [wasteReason, setWasteReason] = useState('');
+
+  const handleExportInventoryCsv = () => {
+    playTapSound();
+    let exportItems = ingredients.length > 0 ? ingredients : [
+      { id: 'ING-01', name: 'Amul Fresh Malai Paneer', category: 'Dairy & Fats', inStock: 18.5, unit: 'kg', costPerUnit: 340, reorderLevel: 5 },
+      { id: 'ING-02', name: 'Daawat Rozana Basmati Rice', category: 'Grains & Staples', inStock: 45.0, unit: 'kg', costPerUnit: 95, reorderLevel: 10 },
+      { id: 'ING-03', name: 'Fresh Farm Chicken Breast', category: 'Meat & Poultry', inStock: 22.0, unit: 'kg', costPerUnit: 240, reorderLevel: 8 },
+      { id: 'ING-04', name: 'Fortune Refined Sunflower Oil', category: 'Oils & Fats', inStock: 30.0, unit: 'litres', costPerUnit: 135, reorderLevel: 10 },
+      { id: 'ING-05', name: 'Fresh Red Onions (Nashik)', category: 'Produce & Veg', inStock: 50.0, unit: 'kg', costPerUnit: 35, reorderLevel: 15 },
+      { id: 'ING-06', name: 'Fresh Vine Tomatoes (Bengaluru)', category: 'Produce & Veg', inStock: 35.0, unit: 'kg', costPerUnit: 40, reorderLevel: 10 },
+      { id: 'ING-07', name: 'Everest Shahi Garam Masala', category: 'Spices & Seasoning', inStock: 4.5, unit: 'kg', costPerUnit: 480, reorderLevel: 1.5 },
+      { id: 'ING-08', name: 'Amul Butter Salted (100g blocks)', category: 'Dairy & Fats', inStock: 14.0, unit: 'kg', costPerUnit: 520, reorderLevel: 4 }
+    ];
+
+    const headers = [
+      'Item Code',
+      'Ingredient / Raw Material',
+      'Inventory Category',
+      'Current Stock in Store',
+      'Unit of Measure',
+      'Unit Purchase Cost (INR)',
+      'Total Stock Value (INR)',
+      'Minimum Reorder Threshold',
+      'Stock Health Status'
+    ];
+
+    const rows = exportItems.map((ing) => {
+      const stock = Number(ing.inStock || 0);
+      const cost = Number(ing.costPerUnit || 0);
+      const val = stock * cost;
+      const reorder = Number(ing.reorderLevel || 0);
+      const status = stock <= reorder ? 'CRITICAL LOW STOCK' : 'Healthy Stock';
+
+      return [
+        ing.id || 'ING-01',
+        ing.name,
+        ing.category,
+        stock.toFixed(2),
+        ing.unit,
+        cost.toFixed(2),
+        val.toFixed(2),
+        reorder.toFixed(2),
+        status
+      ];
+    });
+
+    triggerCsvDownload(headers, rows, `kitchen_inventory_stock_register_${new Date().toISOString().slice(0, 10)}.csv`);
+    playSuccessChime();
+  };
 
   const handleAddIngredient = (e) => {
     e.preventDefault();
@@ -85,9 +136,21 @@ export default function InventoryView({ menu: _menu }) {
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 85 }}>
       {/* Title */}
-      <div style={{ marginBottom: 14 }}>
-        <div className="screen-title">Kitchen Stock & Wastage</div>
-        <div className="screen-subtitle">Real-time raw ingredient tracking, low supplies, and waste recording</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        <div>
+          <div className="screen-title">Kitchen Stock & Wastage</div>
+          <div className="screen-subtitle">Real-time raw ingredient tracking, low supplies, and waste recording</div>
+        </div>
+        <button
+          type="button"
+          className="btn-secondary-pill"
+          onClick={handleExportInventoryCsv}
+          style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+          title="Export kitchen ingredient stock register to CSV"
+        >
+          <Download size={14} />
+          <span>Export Stock (CSV)</span>
+        </button>
       </div>
 
       {/* Top Inventory Metrics */}
