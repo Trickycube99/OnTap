@@ -56,6 +56,7 @@ import {
   markQrScanConsumed,
   getCustomerStorageKeys
 } from './utils/customerSessionManager';
+import { sanitizeTenantParameter, validateTenantOwnership } from './utils/authorizationGuard';
 
 export { sanitizeTableFromParam };
 
@@ -115,7 +116,8 @@ export const getInitialBusinessId = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
     const hashParams = new URLSearchParams(hashQuery);
-    const bizParam = urlParams.get('biz') || hashParams.get('biz') || urlParams.get('b') || hashParams.get('b');
+    const rawBizParam = urlParams.get('biz') || hashParams.get('biz') || urlParams.get('b') || hashParams.get('b');
+    const bizParam = sanitizeTenantParameter(rawBizParam);
     if (bizParam) {
       const cleanBizId = bizParam.trim();
       const businesses = getBusinesses();
@@ -569,12 +571,30 @@ export default function App() {
     }
 
     // Default / Admin Owner
-    if (isAuthenticated('admin') || isDeveloperAuthenticated()) {
+    if (isAuthenticated('admin', activeBusinessId) || isDeveloperAuthenticated()) {
       document.title = `${theme?.restaurantName || 'OnTap'} • Owner Back-Office`;
     } else {
       document.title = 'OnTap • Local Food and drinks | Your community';
     }
-  }, [currentRole, authSessions, theme?.restaurantName, canReturnToAdmin]);
+  }, [currentRole, authSessions, theme?.restaurantName, canReturnToAdmin, activeBusinessId]);
+
+  // BFCache (Back-Forward Cache) Invalidation:
+  // Immediately re-validate authentication when navigating back/forward via browser cache
+  useEffect(() => {
+    const handlePageShow = (event) => {
+      if (event.persisted) {
+        const stored = getStoredSessions();
+        setAuthSessions(stored);
+        if (currentRole === 'admin' && !(stored.admin?.token && stored.admin.businessId === activeBusinessId) && !isDeveloperAuthenticated()) {
+          window.location.reload();
+        } else if (currentRole === 'counter' && !(stored.counter?.token && stored.counter.businessId === activeBusinessId) && !isDeveloperAuthenticated()) {
+          window.location.reload();
+        }
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, [currentRole, activeBusinessId]);
 
   // Real-Time Cross-Tab / Cross-Device Synchronization Listener (Tenant-Scoped)
   useEffect(() => {
@@ -1425,7 +1445,7 @@ export default function App() {
           )}
 
           {currentRole === 'counter' && (
-            !(isAuthenticated('counter') || isDeveloperAuthenticated()) ? (
+            !(isAuthenticated('counter', activeBusinessId) || isDeveloperAuthenticated()) ? (
               <CounterLoginGate
                 onOpenLogin={() => setAuthModal({ isOpen: true, targetRole: 'counter' })}
                 onReturnToAdmin={() => handleRoleSwitch('admin')}
@@ -1455,7 +1475,7 @@ export default function App() {
           )}
 
           {currentRole === 'admin' && (
-            !(isAuthenticated('admin') || isDeveloperAuthenticated()) ? (
+            !(isAuthenticated('admin', activeBusinessId) || isDeveloperAuthenticated()) ? (
               <AdminOwnerLoginGate
                 onOpenLogin={() => setAuthModal({ isOpen: true, targetRole: 'admin' })}
                 onSwitchRole={handleRoleSwitch}
@@ -1507,7 +1527,7 @@ export default function App() {
       {/* Mobile-Only Bottom Navigation Dock (Role-Aware and Cleanly Isolated) */}
       {(currentRole === 'customer' || currentRole === 'chef'
         ? (checkGuestQrAccess() || canReturnToAdmin || isDeveloperAuthenticated())
-        : (isAuthenticated(currentRole) || isDeveloperAuthenticated())) && (
+        : (isAuthenticated(currentRole, activeBusinessId) || isDeveloperAuthenticated())) && (
         <BottomNav
           currentRole={currentRole}
           activeTab={

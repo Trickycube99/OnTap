@@ -445,6 +445,15 @@ export async function purgeBusinessAccountComplete({
     return { success: false, error: `Business account "${cleanId}" not found.` };
   }
 
+  // IDOR & Object-Level Ownership Protection
+  if (actorRole !== 'developer_superadmin' && !isDeveloperAuthenticated()) {
+    const sessions = getStoredSessions();
+    if (sessions?.admin?.businessId !== cleanId) {
+      console.error(`🚨 [IDOR Violation Blocked] Unauthorized purge attempt on business "${cleanId}" by actor role "${actorRole}"`);
+      return { success: false, error: 'Unauthorized: IDOR violation. You cannot purge a business account you do not own.' };
+    }
+  }
+
   console.log(`🚨 [Purge Engine] Initiating complete data erasure for business: ${targetBiz.name} (${cleanId})`);
 
   // --- STEP 1: LOAD METRICS & GENERATE LEGAL COMPLIANCE RECORD ---

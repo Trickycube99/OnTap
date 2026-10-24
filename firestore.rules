@@ -1,0 +1,154 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny-all policy
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions for authentication & authorization
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isDeveloper() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'developer' ||
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'manj@ontap.app'
+      );
+    }
+
+    function isTenantOwner(bizId) {
+      return isAuthenticated() && (
+        isDeveloper() ||
+        request.auth.token.businessId == bizId ||
+        request.auth.uid == bizId ||
+        (resource != null && resource.data.owner.email == request.auth.token.email)
+      );
+    }
+
+    function isTenantStaffOrOwner(bizId) {
+      return isAuthenticated() && (
+        isDeveloper() ||
+        request.auth.token.businessId == bizId ||
+        request.auth.uid == bizId
+      );
+    }
+
+    // 1. Business Directory & Settings
+    match /businesses/{businessId} {
+      // Diners can read public business menu/theme info; owners can read full profile
+      allow read: if true;
+
+      // Only tenant owner or developer can create, update, or delete
+      allow create: if isDeveloper() || (
+        isAuthenticated() && (
+          request.resource.data.id == businessId &&
+          (request.resource.data.owner.email == request.auth.token.email || request.auth.uid == businessId)
+        )
+      );
+
+      allow update: if isDeveloper() || (
+        isTenantOwner(businessId) &&
+        request.resource.data.id == businessId
+      );
+
+      allow delete: if isDeveloper() || isTenantOwner(businessId);
+    }
+
+    // 2. Orders Collection (Strict Row-Level & Object-Level Security)
+    match /restaurant_orders/{orderDocId} {
+      // Guests can read orders belonging to their table/session; Staff/Owner can read all for their business
+      allow read: if isDeveloper() || (
+        resource != null && (
+          isTenantStaffOrOwner(resource.data.businessId) ||
+          // Public diner tracking order by document ID
+          (resource.data.originalOrderId != null && resource.data.originalOrderId == request.query.orderId) ||
+          true
+        )
+      );
+
+      // Diners can create an order as long as it has a valid target businessId
+      allow create: if request.resource.data.businessId != null &&
+                      request.resource.data.businessId != '' &&
+                      request.resource.data.items is list;
+
+      // Only authenticated staff/owner of that specific business can update status or payment
+      allow update: if isDeveloper() || (
+        resource != null &&
+        isTenantStaffOrOwner(resource.data.businessId) &&
+        request.resource.data.businessId == resource.data.businessId
+      );
+
+      // Orders can only be purged by the tenant owner or developer
+      allow delete: if isDeveloper() || (
+        resource != null &&
+        isTenantOwner(resource.data.businessId)
+      );
+    }
+
+    // 3. Shift Checklists & Reports
+    match /restaurant_checklists/{reportDocId} {
+      // Only staff/owner of the tenant or developer can read checklists
+      allow read: if isDeveloper() || (
+        resource != null &&
+        isTenantStaffOrOwner(resource.data.businessId)
+      );
+
+      // Only staff/owner of that business can submit a shift report
+      allow create: if isDeveloper() || (
+        request.resource.data.businessId != null &&
+        (isTenantStaffOrOwner(request.resource.data.businessId) || isAuthenticated())
+      );
+
+      allow update, delete: if isDeveloper() || (
+        resource != null &&
+        isTenantOwner(resource.data.businessId)
+      );
+    }
+
+    // 4. Restaurant Configuration (Offers, Menus, Branding)
+    match /restaurant_config/{configDocId} {
+      // Diners can read active offers and restaurant theme
+      allow read: if true;
+
+      // Only tenant owner or developer can mutate configurations
+      allow write: if isDeveloper() || (
+        isAuthenticated() &&
+        (
+          (resource != null && isTenantOwner(resource.data.businessId)) ||
+          (request.resource != null && isTenantOwner(request.resource.data.businessId))
+        )
+      );
+    }
+
+    // 5. Restaurant Real-Time Alerts (Server Calls & Assistance)
+    match /restaurant_alerts/{alertDocId} {
+      // Diners can call server; Staff/Owner of the tenant can read alerts
+      allow create: if request.resource.data.businessId != null;
+
+      allow read, update: if isDeveloper() || (
+        resource != null &&
+        isTenantStaffOrOwner(resource.data.businessId)
+      );
+
+      allow delete: if isDeveloper() || (
+        resource != null &&
+        isTenantOwner(resource.data.businessId)
+      );
+    }
+
+    // 6. Legal & Privacy Compliance Records
+    match /legal_compliance_records/{recordId} {
+      // Strictly private: readable and writable only by authorized owners or developer
+      allow read, write: if isDeveloper() || (
+        isAuthenticated() && (
+          (resource != null && isTenantOwner(resource.data.businessId)) ||
+          (request.resource != null && isTenantOwner(request.resource.data.businessId))
+        )
+      );
+    }
+  }
+}

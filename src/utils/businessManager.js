@@ -226,6 +226,26 @@ export function createBusiness(data) {
  * Update an existing business
  */
 export function updateBusiness(id, updates) {
+  // IDOR & Object-Level Ownership Validation:
+  if (!isDeveloperAuthenticated()) {
+    let authorized = false;
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        const raw = sessionStorage.getItem('flowscape_auth_sessions_v3');
+        if (raw) {
+          const sessions = JSON.parse(raw);
+          if (sessions?.admin?.businessId === id) {
+            authorized = true;
+          }
+        }
+      }
+    } catch {}
+    if (!authorized) {
+      console.error(`🚨 [IDOR Attempt Blocked] Unauthorized update attempt on business "${id}"`);
+      return { success: false, error: 'Unauthorized: IDOR violation. You do not possess ownership authorization for this business account.' };
+    }
+  }
+
   const businesses = getBusinesses();
   const index = businesses.findIndex((b) => b.id === id);
   if (index === -1) return { success: false, error: 'Business account not found' };
@@ -280,6 +300,26 @@ export function updateBusiness(id, updates) {
  * menu items, staff, checklists, and local database partitions.
  */
 export function deleteBusiness(id) {
+  // IDOR & Object-Level Ownership Validation:
+  if (!isDeveloperAuthenticated()) {
+    let authorized = false;
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        const raw = sessionStorage.getItem('flowscape_auth_sessions_v3');
+        if (raw) {
+          const sessions = JSON.parse(raw);
+          if (sessions?.admin?.businessId === id) {
+            authorized = true;
+          }
+        }
+      }
+    } catch {}
+    if (!authorized) {
+      console.error(`🚨 [IDOR Attempt Blocked] Unauthorized deletion attempt on business "${id}"`);
+      return { success: false, error: 'Unauthorized: IDOR violation. You do not possess ownership authorization to delete this business account.' };
+    }
+  }
+
   const businesses = getBusinesses();
   const targetBiz = businesses.find((b) => b.id === id);
   if (!targetBiz) {

@@ -273,9 +273,35 @@ export function saveStoredSessions(sessions) {
 }
 
 /**
- * Check if a specific role is currently authenticated in this browser tab session
+ * Cookie Management for Server-Side Route Middleware Synchronization
  */
-export function isAuthenticated(role, activeSessionRole = null) {
+export function setAuthCookie(token, role, businessId = '') {
+  if (typeof document === 'undefined') return;
+  const isSecure = window.location.protocol === 'https:';
+  const secureFlag = isSecure ? '; Secure' : '';
+  const maxAge = 86400; // 24 hours
+  document.cookie = `ontap_session_token=${encodeURIComponent(token)}; path=/; max-age=${maxAge}; SameSite=Strict${secureFlag}`;
+  document.cookie = `ontap_session_role=${encodeURIComponent(role)}; path=/; max-age=${maxAge}; SameSite=Strict${secureFlag}`;
+  if (businessId) {
+    document.cookie = `ontap_tenant_id=${encodeURIComponent(businessId)}; path=/; max-age=${maxAge}; SameSite=Strict${secureFlag}`;
+  }
+}
+
+export function clearAuthCookies() {
+  if (typeof document === 'undefined') return;
+  const isSecure = window.location.protocol === 'https:';
+  const secureFlag = isSecure ? '; Secure' : '';
+  document.cookie = `ontap_session_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict${secureFlag}`;
+  document.cookie = `ontap_session_role=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict${secureFlag}`;
+  document.cookie = `ontap_tenant_id=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict${secureFlag}`;
+}
+
+/**
+ * Check if a specific role is currently authenticated in this browser tab session.
+ * STRICT IDOR PROTECTION: If targetBusinessId is provided, validates that the user's
+ * session businessId matches the requested record before granting access.
+ */
+export function isAuthenticated(role, targetBusinessId = null) {
   if (role === ROLES.CUSTOMER || role === ROLES.CHEF) {
     return true;
   }
@@ -291,30 +317,51 @@ export function isAuthenticated(role, activeSessionRole = null) {
   const sessions = getStoredSessions();
   if (!sessions) return false;
 
-  // Admin Master session can access both Admin and Counter
+  const cleanTargetBizId = targetBusinessId ? String(targetBusinessId).trim() : null;
+
+  // 1. Admin Master session check:
   if (sessions[ROLES.ADMIN] && sessions[ROLES.ADMIN].token) {
+    const adminBizId = sessions[ROLES.ADMIN].businessId;
+    // If targetBusinessId is specified, STRICTLY reject IDOR cross-tenant access!
+    if (cleanTargetBizId && adminBizId && adminBizId !== cleanTargetBizId) {
+      console.warn(`🛡️ [IDOR Defense] Blocked Admin access: Session biz "${adminBizId}" does not own target "${cleanTargetBizId}"`);
+      return false;
+    }
     if (role === ROLES.ADMIN || role === ROLES.COUNTER) {
       return true;
     }
   }
 
-  // If session switched from Admin, allow access to Admin and Counter
+  // 2. Switched from Admin state:
   if (
     (role === ROLES.ADMIN || role === ROLES.COUNTER) &&
     typeof sessionStorage !== 'undefined' &&
     sessionStorage.getItem('flowscape_switched_from_admin') === 'true' &&
     Boolean(sessions[ROLES.ADMIN]?.token)
   ) {
+    const adminBizId = sessions[ROLES.ADMIN]?.businessId;
+    if (cleanTargetBizId && adminBizId && adminBizId !== cleanTargetBizId) {
+      return false;
+    }
     return true;
   }
 
-  // Counter staff session can access Counter POS
+  // 3. Counter staff session check:
   if (role === ROLES.COUNTER && sessions[ROLES.COUNTER] && sessions[ROLES.COUNTER].token) {
+    const counterBizId = sessions[ROLES.COUNTER].businessId;
+    // Strict IDOR ownership check for Counter staff
+    if (cleanTargetBizId && counterBizId && counterBizId !== cleanTargetBizId) {
+      console.warn(`🛡️ [IDOR Defense] Blocked Counter access: Staff terminal biz "${counterBizId}" does not match target "${cleanTargetBizId}"`);
+      return false;
+    }
     return true;
   }
 
-  // Check direct session token for the requested role
+  // 4. Direct session token check for requested role:
   if (sessions[role] && sessions[role].token) {
+    if (cleanTargetBizId && sessions[role].businessId && sessions[role].businessId !== cleanTargetBizId) {
+      return false;
+    }
     return true;
   }
 
@@ -358,11 +405,18 @@ export function authenticateRole(role, credentials) {
 
   saveStoredSessions(currentSessions);
 
+  // Sync auth state to HTTP cookies for server-side route middleware
+  setAuthCookie(session.token || `auth_${Date.now()}`, role, session.businessId || '');
+
   return { success: true, session, business: validation.business };
 }
 
 /**
- * Logout and clear session for a specific role
+ * Complete Session Invalidation & Logout:
+ * 1. Revokes session/token in memory and sessionStorage
+ * 2. Revokes session on Firebase backend auth provider (signOut)
+ * 3. Clears all auth cookies (SameSite=Strict, Secure)
+ * 4. Wipes local tokens and BFCache keys
  */
 export function logoutRole(role) {
   const currentSessions = getStoredSessions();
@@ -370,6 +424,10 @@ export function logoutRole(role) {
     currentSessions[role] = null;
     saveStoredSessions(currentSessions);
   }
+
+  // Clear HTTP cookies so server-side route middleware immediately rejects protected requests
+  clearAuthCookies();
+
   if (role === ROLES.DEVELOPER) {
     logoutDeveloper();
   }
@@ -383,20 +441,63 @@ export function logoutRole(role) {
       }
     } catch {}
   }
+
+  // Complete Backend Invalidation: Sign out from Firebase Auth
+  try {
+    import('./firebaseAuth.js').then(({ getFirebaseAuth }) => {
+      const auth = getFirebaseAuth();
+      if (auth && auth.currentUser) {
+        import('firebase/auth').then(({ signOut }) => {
+          signOut(auth).catch((err) => console.debug('[Auth Logout] Firebase signOut notice:', err));
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+  } catch {}
+
+  // Server-Side Edge Session Revocation
+  if (typeof fetch !== 'undefined') {
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  }
+
+  // Broadcast logout event so all other tabs drop cached state immediately
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('flowscape_auth_logout', { detail: { role } }));
+    } catch {}
+  }
+
   return true;
 }
 
 /**
- * Reset all role sessions to defaults
+ * Reset all role sessions to defaults and invalidate backend credentials completely
  */
 export function resetAllSessions() {
   saveStoredSessions(INITIAL_DEFAULT_SESSIONS);
+  clearAuthCookies();
+
   try {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem('counter_active_staff_id');
+      sessionStorage.removeItem('flowscape_switched_from_admin');
     }
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('counter_active_staff_id');
     }
   } catch {}
+
+  try {
+    import('./firebaseAuth.js').then(({ getFirebaseAuth }) => {
+      const auth = getFirebaseAuth();
+      if (auth && auth.currentUser) {
+        import('firebase/auth').then(({ signOut }) => {
+          signOut(auth).catch(() => {});
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+  } catch {}
+
+  if (typeof fetch !== 'undefined') {
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  }
 }
