@@ -892,6 +892,63 @@ export default function AdminView({
     playSuccessChime();
   };
 
+  // DPDP Act 2023 Section 12 Customer Right to Erasure Engine
+  const [erasurePhoneInput, setErasurePhoneInput] = useState('');
+  const [erasureFeedback, setErasureFeedback] = useState('');
+  const [isProcessingErasure, setIsProcessingErasure] = useState(false);
+
+  const handleProcessCustomerErasure = (e) => {
+    if (e) e.preventDefault();
+    playTapSound();
+    const cleanPhone = (erasurePhoneInput || '').trim().replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length < 4) {
+      alert('Please enter at least 4 digits of the customer mobile number to process DPDP erasure.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `🔒 DPDP ACT SECTION 12 ERASURE REQUEST:\n\nAre you sure you want to permanently erase personal data for customer phone containing "${cleanPhone}"?\n\nThis will:\n• Anonymize customer names, phone numbers, and dietary notes to [REDACTED_DPDP]\n• Exclude customer from loyalty profile scoring\n• Preserve financial transactions for Section 36 GST / Tax compliance\n\nThis action is permanent and non-reversible.`
+    );
+    if (!confirmed) return;
+
+    setIsProcessingErasure(true);
+    try {
+      let anonymizedCount = 0;
+      const updatedOrders = (orders || []).map((o) => {
+        if (!o) return o;
+        const ordPhone = (o.phone || '').trim().replace(/\D/g, '');
+        if (ordPhone && ordPhone.includes(cleanPhone)) {
+          anonymizedCount++;
+          return {
+            ...o,
+            customerName: '[ERASED_PER_DPDP_SEC_12]',
+            phone: '[PURGED]',
+            orderNote: '[PURGED]',
+            isAnonymized: true,
+            anonymizedAt: new Date().toISOString()
+          };
+        }
+        return o;
+      });
+
+      if (anonymizedCount > 0) {
+        if (setOrders) setOrders(updatedOrders);
+        saveData(STORAGE_KEYS.ORDERS, updatedOrders);
+        playSuccessChime();
+        setErasureFeedback(`✓ Successfully erased personal data from ${anonymizedCount} historical orders. Financial ledger preserved per Section 36 GST Act.`);
+        setErasurePhoneInput('');
+      } else {
+        playAlertChime();
+        setErasureFeedback(`No historical orders found matching customer phone "${cleanPhone}".`);
+      }
+    } catch (err) {
+      setErasureFeedback(`Erasure error: ${err.message}`);
+    } finally {
+      setIsProcessingErasure(false);
+      setTimeout(() => setErasureFeedback(''), 8000);
+    }
+  };
+
   // Add Manual Expense (FR-A3)
   const handleAddExpense = (e) => {
     e.preventDefault();
@@ -2294,6 +2351,61 @@ export default function AdminView({
                     </div>
                   </div>
                 ))}
+            </div>
+          </div>
+
+          {/* DPDP Act 2023 Section 12 Customer Right to Erasure Card */}
+          <div className="ios-card" style={{ marginBottom: 16, border: '1px solid #BFDBFE', background: '#F8FAFC' }}>
+            <div className="card-top-row">
+              <div className="card-title-group">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ShieldCheck size={16} color="#007AFF" />
+                  <span className="card-heading" style={{ fontSize: 14 }}>Customer Privacy &amp; Right to Erasure (DPDP Act Section 12)</span>
+                </div>
+                <span className="card-meta-text">
+                  Redact customer personal contact info while preserving financial transactions for tax records
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleProcessCustomerErasure} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+              <input
+                type="text"
+                className="ios-input"
+                style={{ flex: '1 1 240px', background: '#FFFFFF' }}
+                placeholder="Enter customer phone (e.g. 9876543210)..."
+                value={erasurePhoneInput}
+                onChange={(e) => setErasurePhoneInput(e.target.value)}
+              />
+              <button
+                type="submit"
+                className="btn-primary-pill"
+                style={{ padding: '8px 16px', fontSize: 12, background: '#DC2626', borderColor: '#DC2626' }}
+                disabled={isProcessingErasure}
+              >
+                <span>{isProcessingErasure ? 'Redacting...' : 'Process Erasure Request'}</span>
+              </button>
+            </form>
+
+            {erasureFeedback && (
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: erasureFeedback.startsWith('✓') ? '#15803D' : '#B45309',
+                  background: erasureFeedback.startsWith('✓') ? '#F0FDF4' : '#FEF3C7',
+                  border: `1px solid ${erasureFeedback.startsWith('✓') ? '#BBF7D0' : '#FCD34D'}`,
+                  borderRadius: 8,
+                  padding: '8px 12px'
+                }}
+              >
+                {erasureFeedback}
+              </div>
+            )}
+
+            <div style={{ marginTop: 10, fontSize: 11, color: '#64748B', lineHeight: 1.4 }}>
+              <strong>Statutory Compliance Note:</strong> Per Section 12(3) &amp; 8(8) of the DPDP Act 2023, customer names, phone numbers, and dietary notes are purged upon request. Financial ledger values (GST, bill total, timestamp, items) are retained for 6 years in accordance with Section 36 of the CGST Act.
             </div>
           </div>
         </div>

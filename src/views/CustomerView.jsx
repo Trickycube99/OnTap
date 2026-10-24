@@ -92,13 +92,7 @@ export default function CustomerView({
     }
     return '';
   });
-  const [showNameModal, setShowNameModal] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedInSession = sessionStorage.getItem(dinerNameKey) || sessionStorage.getItem('ontap_diner_name');
-      return !savedInSession;
-    }
-    return true;
-  });
+  const [showNameModal, setShowNameModal] = useState(false);
   const [customerNameInput, setCustomerNameInput] = useState(() => {
     if (typeof window !== 'undefined') {
       return sessionStorage.getItem(dinerNameKey) || sessionStorage.getItem('ontap_diner_name') || '';
@@ -394,12 +388,7 @@ export default function CustomerView({
 
   const handleSaveDinerName = (e) => {
     if (e) e.preventDefault();
-    const cleanName = customerNameInput.trim();
-    if (!cleanName || cleanName.length < 2) {
-      setNameError(language === 'hi' ? 'कृपया आगे बढ़ने के लिए अपना नाम दर्ज करें।' : 'Please enter your name to proceed.');
-      playAlertChime();
-      return;
-    }
+    const cleanName = customerNameInput.trim() || `${activeTable} Guest`;
 
     setCustomerName(cleanName);
     if (typeof window !== 'undefined') {
@@ -559,13 +548,9 @@ export default function CustomerView({
   };
 
   const completeOrderPlacement = (finalPaymentStatus) => {
-    if (!customerName.trim()) {
-      setShowNameModal(true);
-      return;
-    }
+    const finalCustomerName = (customerName || '').trim() || `${activeTable} Guest`;
     const orderNum = Math.floor(1000 + Math.random() * 9000);
     const newOrderId = `ORD-${Date.now().toString(36).toUpperCase()}-${orderNum}`;
-    const finalCustomerName = customerName.trim();
     const newOrder = {
       id: newOrderId,
       orderNumber: orderNum,
@@ -849,12 +834,12 @@ export default function CustomerView({
             </div>
 
             <h2 style={{ fontSize: 19, fontWeight: 800, color: '#111827', margin: 0, letterSpacing: -0.5 }}>
-              {language === 'hi' ? 'स्वागत है! अपना नाम दर्ज करें' : 'Welcome! Enter Your Name'}
+              {language === 'hi' ? 'स्वागत है! नाम दर्ज करें (वैकल्पिक)' : 'Welcome! Enter Name (Optional)'}
             </h2>
             <p style={{ fontSize: 12, color: '#6B7280', marginTop: 4, marginBottom: 0 }}>
               {language === 'hi'
-                ? 'टेबल से सीधे ऑर्डर करने और किचन टिकट के लिए नाम अनिवार्य है।'
-                : 'Please enter your name to browse dishes and place orders for your table.'}
+                ? 'टेबल ऑर्डर के लिए नाम दर्ज करें अथवा सीधे अतिथि के रूप में जारी रखें।'
+                : 'Enter your name (optional) or continue directly as Guest Diner.'}
             </p>
           </div>
 
@@ -862,7 +847,7 @@ export default function CustomerView({
           <form onSubmit={handleSaveDinerName}>
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 6 }}>
-                {language === 'hi' ? 'आपका नाम (अनिवार्य) *' : 'Your Name (Required) *'}
+                {language === 'hi' ? 'आपका नाम (वैकल्पिक)' : 'Your Name (Optional)'}
               </label>
               <input
                 type="text"
@@ -873,7 +858,7 @@ export default function CustomerView({
                   padding: '12px 14px',
                   borderColor: nameError ? '#EF4444' : '#D1D5DB'
                 }}
-                placeholder={language === 'hi' ? 'उदा. आरव शर्मा / राहुल' : 'e.g. Aarav Sharma'}
+                placeholder={language === 'hi' ? 'उदा. आरव शर्मा (वैकल्पिक)' : 'e.g. Aarav Sharma (Optional)'}
                 value={customerNameInput}
                 onChange={(e) => {
                   setCustomerNameInput(e.target.value);
@@ -901,14 +886,29 @@ export default function CustomerView({
               />
             </div>
 
-            <button
-              type="submit"
-              className="btn-primary-pill full-width"
-              style={{ padding: '12px 16px', fontSize: 14, fontWeight: 700 }}
-            >
-              <span>{language === 'hi' ? 'मेनू देखें व ऑर्डर शुरू करें' : 'Continue to Menu & Order'}</span>
-              <ArrowRight size={16} />
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button
+                type="submit"
+                className="btn-primary-pill full-width"
+                style={{ padding: '12px 16px', fontSize: 14, fontWeight: 700 }}
+              >
+                <span>{language === 'hi' ? 'नाम सहेजें व आगे बढ़ें' : 'Save Name & Continue'}</span>
+                <ArrowRight size={16} />
+              </button>
+
+              <button
+                type="button"
+                className="btn-secondary-pill full-width"
+                style={{ padding: '10px 16px', fontSize: 13, fontWeight: 600, border: '1px solid #D1D5DB', background: '#F9FAFB' }}
+                onClick={() => {
+                  playTapSound();
+                  setCustomerName(`${activeTable} Guest`);
+                  setShowNameModal(false);
+                }}
+              >
+                <span>{language === 'hi' ? 'अतिथि के रूप में जारी रखें' : 'Continue as Guest Diner'}</span>
+              </button>
+            </div>
           </form>
         </div>
       </div>
@@ -2004,15 +2004,14 @@ export default function CustomerView({
               )}
             </div>
 
-            {/* Diner Name (FR-C5: Customer enters name or table number, phone optional) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+            {/* Diner Name (DPDP Act Compliant: strictly optional, non-blocking) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                  {t('yourName')} *
+                  {t('yourName')} (Optional)
                 </label>
                 <input
                   type="text"
-                  required
                   className="ios-input"
                   placeholder={t('namePlaceholder')}
                   value={customerName}
@@ -2044,6 +2043,30 @@ export default function CustomerView({
                     }
                   }}
                 />
+              </div>
+            </div>
+
+            {/* DPDP Statutory Privacy Micro-Notice & Age Guidance */}
+            <div
+              style={{
+                fontSize: 10,
+                color: '#64748B',
+                lineHeight: 1.4,
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                borderRadius: 10,
+                padding: '8px 10px',
+                marginBottom: 14,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 6
+              }}
+            >
+              <ShieldCheck size={13} color="#007AFF" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                {language === 'hi'
+                  ? '🔒 डेटा संरक्षण सूचना: नाम व मोबाइल नंबर केवल ऑर्डर व डिजिटल रसीद हेतु हैं (वैकल्पिक)। १८ वर्ष से कम आयु के ग्राहक अभिभावक की देखरेख में ऑर्डर करें।'
+                  : '🔒 DPDP Notice: Contact info is collected solely for order status & digital receipts (optional). Diners under 18 must order under adult supervision.'}
               </div>
             </div>
 

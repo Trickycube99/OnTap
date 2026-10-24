@@ -77,6 +77,16 @@ function isOfferExpired(offer) {
   return offer.expiryDate < today;
 }
 
+function formatMaskedPhone(phone, isOwner) {
+  if (!phone || phone === 'Walk-in' || phone === 'null' || phone === '[PURGED]') return 'Walk-in';
+  if (isOwner) return phone;
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length >= 4) {
+    return `•••• ${digits.slice(-4)}`;
+  }
+  return '••••';
+}
+
 function createClosingChecklistReport({ expected, actual, variance, varianceReason, submittedBy, staffRole }) {
   const now = new Date();
   return {
@@ -1342,7 +1352,7 @@ export default function CounterView({
                           </span>
                         </div>
                         <span className="card-meta-text">
-                          Diner: {order.customerName} • {order.phone} • {elapsedMins < 1 ? 'Just now' : `${elapsedMins}m ago`}
+                          Diner: {order.customerName} • {formatMaskedPhone(order.phone, isOwnerOverride)} • {elapsedMins < 1 ? 'Just now' : `${elapsedMins}m ago`}
                         </span>
                       </div>
 

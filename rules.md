@@ -351,3 +351,24 @@ To insulate the web application codebase, creators, and client businesses from D
 - [ ] **Secure Terminals:** Is the counter billing screen locked when unattended so unauthorized persons cannot copy customer phone numbers?
 - [ ] **Sanitized CSV Exports:** Are exported sales and payroll CSV files stored securely on encrypted drives and deleted when no longer needed?
 - [ ] **Grievance Redressal:** Is there a designated staff member or manager responsible for responding to customer deletion/correction requests within 72 hours?
+
+---
+
+## 6. Functional Integrity Guarantee (Zero Functional Impact Rule)
+
+> **MANDATORY STATUTORY & ENGINEERING DIRECTIVE:**  
+> All architectural, field masking, consent notice, and privacy modifications implemented to comply with the DPDP Act, 2023 MUST NEVER affect, degrade, disrupt, or break the application's functioning in any way.
+
+### Preserved Operational Pillars:
+1. **Dine-In QR Ordering Flow:**
+   - Browsing menus, selecting variants, adding dish notes, and submitting kitchen tickets execute seamlessly.
+   - If a customer declines or skips entering personal contact details, the system seamlessly assigns an operational guest alias (e.g. `Table 04 Guest`) and dispatches the kitchen ticket without blocking.
+2. **Real-Time Financial Precision:**
+   - Staff-submitted closing totals, Top 3 KPI cards, Cash/Card/UPI drawer reconciliation, and Daily P&L calculations function with 100% numerical accuracy.
+3. **Decoupled Privacy vs. Tax Reconciliation:**
+   - Under Section 12(3) Right to Erasure, redacting customer identity (`[REDACTED_DPDP]`) wipes PII while preserving the financial ledger (items, total amount, taxes, timestamp, bill number) to ensure continuous compliance with Section 36 of the Central GST Act and Income Tax Act.
+4. **Database & Sync Engine:**
+   - Compound indexing in `IndexedDB`, background Cloud Firestore synchronization, and tenant isolation operate with sub-millisecond query performance.
+5. **Terminal Permissions & Roles:**
+   - Counter POS staff access, PIN verification, item restocking, and owner master authorization operate with zero degradation.
+

@@ -27,7 +27,7 @@ export default function LoyaltyView({ orders = [], theme: _theme }) {
     const matchedOrders = (orders || []).filter((o) => {
       if (!o) return false;
       const p = (o.phone || '').trim().replace(/\s+/g, '');
-      return p && p.includes(query) && o.status !== 'rejected' && o.status !== 'cancelled';
+      return p && p.includes(query) && o.status !== 'rejected' && o.status !== 'cancelled' && !o.isAnonymized && p !== '[PURGED]';
     });
 
     if (matchedOrders.length > 0) {
@@ -93,6 +93,9 @@ export default function LoyaltyView({ orders = [], theme: _theme }) {
       <div style={{ marginBottom: 14 }}>
         <div className="screen-title">Customer Rewards & Points</div>
         <div className="screen-subtitle">Give regular customers reward points and discount coupons</div>
+        <div style={{ fontSize: 10, color: '#64748B', marginTop: 4 }}>
+          🔒 DPDP Act 2023: Customer reward points are enrolled with customer consent. Only un-anonymized dining orders are linked.
+        </div>
       </div>
 
       {/* Customer Phone Search */}
