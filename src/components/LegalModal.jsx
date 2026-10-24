@@ -16,6 +16,8 @@ import {
 import { COMPANY_LEGAL_INFO } from '../utils/privacyCompliance';
 import { playTapSound } from '../utils/audio';
 
+import SlideModal from './SlideModal';
+
 export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) {
   const [activeTab, setActiveTab] = useState(initialTab);
 
@@ -24,19 +26,6 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
       setActiveTab(initialTab);
     }
   }, [initialTab]);
-
-  // Escape key handler
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
 
   const tabs = [
     { id: 'privacy', label: 'Privacy Policy', icon: Shield },
@@ -51,43 +40,24 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="legal-modal-title"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 100000,
-        background: 'rgba(15, 23, 42, 0.82)',
-        backdropFilter: 'blur(10px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '16px',
-        fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
-      }}
-      onClick={() => {
-        playTapSound();
-        onClose();
-      }}
+    <SlideModal
+      isOpen={isOpen}
+      onClose={onClose}
+      isDark={true}
+      maxWidth={820}
+      ariaLabel="Legal & Privacy Policy Documents"
+      contentStyle={{ padding: 0, overflow: 'hidden' }}
     >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 820,
-          maxHeight: '92vh',
-          display: 'flex',
-          flexDirection: 'column',
-          background: '#0F172A',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
-          borderRadius: 22,
-          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.8)',
-          color: '#F8FAFC',
-          overflow: 'hidden'
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      {({ dismiss }) => (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            width: '100%',
+            height: '100%',
+            color: '#F8FAFC'
+          }}
+        >
         {/* Modal Header */}
         <div
           style={{
@@ -150,7 +120,7 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
               type="button"
               onClick={() => {
                 playTapSound();
-                onClose();
+                dismiss();
               }}
               style={{
                 background: 'transparent',
@@ -431,7 +401,7 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
             type="button"
             onClick={() => {
               playTapSound();
-              onClose();
+              dismiss();
             }}
             style={{
               padding: '8px 18px',
@@ -448,6 +418,7 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
           </button>
         </div>
       </div>
-    </div>
+      )}
+    </SlideModal>
   );
 }

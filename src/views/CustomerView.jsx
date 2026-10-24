@@ -42,6 +42,7 @@ import {
 import DmcaModal from '../components/DmcaModal';
 import LegalModal from '../components/LegalModal';
 import CookieBanner from '../components/CookieBanner';
+import SlideModal from '../components/SlideModal';
 import { COMPANY_LEGAL_INFO } from '../utils/privacyCompliance';
 
 export default function CustomerView({
@@ -741,40 +742,23 @@ export default function CustomerView({
 
   // Diner Name Pop-up Modal Component (Customer table ordering only)
   const renderNameModal = () => {
-    if (!showNameModal) return null;
     return (
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 1200,
-          background: 'rgba(15, 23, 42, 0.75)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 16
-        }}
+      <SlideModal
+        isOpen={showNameModal}
+        onClose={() => setShowNameModal(false)}
+        maxWidth={400}
+        ariaLabel="Diner Welcome & Name"
+        contentStyle={{ padding: '24px 20px' }}
       >
-        <div
-          className="ios-card"
-          style={{
-            width: '100%',
-            maxWidth: 400,
-            background: '#FFFFFF',
-            borderRadius: 24,
-            padding: '24px 20px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
-            position: 'relative'
-          }}
-        >
-          {/* Dismiss button */}
-          <button
-            type="button"
-            onClick={() => {
-              playTapSound();
-              setShowNameModal(false);
-            }}
+        {({ dismiss }) => (
+          <div style={{ position: 'relative', width: '100%' }}>
+            {/* Dismiss button */}
+            <button
+              type="button"
+              onClick={() => {
+                playTapSound();
+                dismiss();
+              }}
             style={{
               position: 'absolute',
               top: 14,
@@ -961,7 +945,7 @@ export default function CustomerView({
                 onClick={() => {
                   playTapSound();
                   setCustomerName(`${activeTable} Guest`);
-                  setShowNameModal(false);
+                  dismiss();
                 }}
               >
                 <span>{language === 'hi' ? 'अतिथि के रूप में जारी रखें' : 'Continue as Guest Diner'}</span>
@@ -969,7 +953,8 @@ export default function CustomerView({
             </div>
           </form>
         </div>
-      </div>
+        )}
+      </SlideModal>
     );
   };
 

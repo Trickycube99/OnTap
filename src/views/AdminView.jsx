@@ -51,6 +51,7 @@ import VerificationBridgeCard from '../components/VerificationBridgeCard';
 import DmcaModal from '../components/DmcaModal';
 import LegalModal from '../components/LegalModal';
 import LegalFooter from '../components/LegalFooter';
+import SlideModal from '../components/SlideModal';
 import { submitDataErasureRequest } from '../utils/privacyCompliance';
 import {
   calculateVerificationBridge,
@@ -6816,34 +6817,16 @@ export default function AdminView({
         </div>
       )}
       {/* EXECUTIVE OWNER CREDENTIALS MODAL */}
-      {showOwnerCredentialsModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: 16
-          }}
-          onClick={() => setShowOwnerCredentialsModal(false)}
-        >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: 480,
-              background: '#0F172A',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: 20,
-              padding: 24,
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
-              color: '#F8FAFC'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
+      <SlideModal
+        isOpen={showOwnerCredentialsModal}
+        onClose={() => setShowOwnerCredentialsModal(false)}
+        isDark={true}
+        maxWidth={480}
+        ariaLabel="Your Logins & PINs"
+        contentStyle={{ padding: '20px 24px' }}
+      >
+        {({ dismiss }) => (
+          <div>
             {/* Modal Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -6872,8 +6855,12 @@ export default function AdminView({
               </div>
               <button
                 type="button"
-                onClick={() => setShowOwnerCredentialsModal(false)}
+                onClick={() => {
+                  playTapSound();
+                  dismiss();
+                }}
                 style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+                aria-label="Close credentials modal"
               >
                 <X size={20} />
               </button>
@@ -7132,42 +7119,29 @@ export default function AdminView({
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </SlideModal>
+
       {/* OWNER BUSINESS ACCOUNT DELETION MODAL */}
-      {showDeleteAccountModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.82)',
-            backdropFilter: 'blur(10px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10000,
-            padding: 16
-          }}
-          onClick={() => {
-            if (!isDeletingAccount) setShowDeleteAccountModal(false);
-          }}
-        >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: 500,
-              background: '#0F172A',
-              border: '1px solid rgba(239, 68, 68, 0.35)',
-              borderRadius: 22,
-              padding: 26,
-              boxShadow: '0 25px 60px -15px rgba(239, 68, 68, 0.25)',
-              color: '#F8FAFC'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
+      <SlideModal
+        isOpen={showDeleteAccountModal}
+        onClose={() => {
+          if (!isDeletingAccount) setShowDeleteAccountModal(false);
+        }}
+        isDark={true}
+        maxWidth={500}
+        ariaLabel="Permanently Delete Business Account"
+        contentStyle={{
+          padding: '24px 26px',
+          border: '1px solid rgba(239, 68, 68, 0.35)',
+          boxShadow: '0 25px 60px -15px rgba(239, 68, 68, 0.25)'
+        }}
+      >
+        {({ dismiss }) => (
+          <div>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div
                   style={{
                     width: 40,
@@ -7194,8 +7168,12 @@ export default function AdminView({
               {!isDeletingAccount && (
                 <button
                   type="button"
-                  onClick={() => setShowDeleteAccountModal(false)}
+                  onClick={() => {
+                    playTapSound();
+                    dismiss();
+                  }}
                   style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+                  aria-label="Close delete account modal"
                 >
                   <X size={20} />
                 </button>
@@ -7305,7 +7283,10 @@ export default function AdminView({
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 type="button"
-                onClick={() => setShowDeleteAccountModal(false)}
+                onClick={() => {
+                  playTapSound();
+                  dismiss();
+                }}
                 disabled={isDeletingAccount}
                 style={{
                   flex: 1,
@@ -7373,8 +7354,8 @@ export default function AdminView({
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </SlideModal>
 
       {/* Visible Dashboard Footer with Privacy Policy & All Compliance Links */}
       <LegalFooter

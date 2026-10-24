@@ -1189,31 +1189,35 @@ html, body {
   justify-content: center;
 }
 
-/* Responsive Modals */
+/* Responsive Modals & Native Slide Bottom Sheets */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   z-index: 999;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   padding: 0;
-  animation: fadeIn 0.2s ease;
+  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
-@media (min-width: 640px) {
-  .modal-overlay {
-    align-items: center;
-    padding: 24px;
-  }
+.modal-overlay.overlay-closing {
+  animation: fadeOut 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }
 
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 .modal-content-sheet {
@@ -1222,20 +1226,28 @@ html, body {
   max-height: 90vh;
   background: #FFFFFF;
   border-radius: 24px 24px 0 0;
-  padding: 22px 20px 30px;
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2);
+  padding: 16px 20px max(24px, env(safe-area-inset-bottom));
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.28);
   display: flex;
   flex-direction: column;
   position: relative;
   overflow-y: auto;
-  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  animation: slideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  touch-action: pan-y;
+  transform-origin: bottom center;
 }
 
-@media (min-width: 640px) {
-  .modal-content-sheet {
-    border-radius: 24px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
-  }
+.modal-content-sheet.dark-sheet {
+  background: #0F172A;
+  color: #F8FAFC;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 -10px 50px rgba(0, 0, 0, 0.7);
+}
+
+.modal-content-sheet.sheet-closing {
+  animation: slideDown 0.22s cubic-bezier(0.4, 0, 1, 1) forwards !important;
 }
 
 @keyframes slideUp {
@@ -1243,18 +1255,47 @@ html, body {
   to { transform: translateY(0); }
 }
 
+@keyframes slideDown {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
 .modal-drag-pill {
-  width: 36px;
+  width: 40px;
   height: 5px;
-  border-radius: 3px;
+  border-radius: 999px;
   background: #CBD5E1;
   margin: 0 auto 14px;
+  flex-shrink: 0;
+  cursor: grab;
+}
+
+.modal-drag-pill.dark-drag-pill {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 @media (min-width: 640px) {
+  .modal-overlay {
+    align-items: center;
+    padding: 24px;
+  }
+  .modal-content-sheet {
+    border-radius: 24px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+    animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: center center;
+  }
+  .modal-content-sheet.sheet-closing {
+    animation: scaleDown 0.2s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+  }
   .modal-drag-pill {
     display: none;
   }
+}
+
+@keyframes scaleDown {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.95) translateY(12px); }
 }
 
 /* Veg / Non-Veg Symbols */
@@ -1599,15 +1640,34 @@ html, body {
     text-align: left;
     white-space: normal;
   }
+  .auth-modal-overlay,
+  .table-qr-modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
   .auth-modal-card {
-    padding: 16px 14px;
-    border-radius: 20px;
+    padding: 18px 16px max(24px, env(safe-area-inset-bottom));
+    border-radius: 24px 24px 0 0 !important;
     max-height: 92vh;
+    animation: slideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
   .table-qr-modal-card {
-    padding: 16px 14px;
-    border-radius: 20px;
+    padding: 18px 16px max(24px, env(safe-area-inset-bottom));
+    border-radius: 24px 24px 0 0 !important;
     max-height: 92vh;
+    animation: slideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .auth-modal-card.sheet-closing,
+  .table-qr-modal-card.sheet-closing {
+    animation: slideDown 0.22s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+  }
+  .auth-modal-overlay.overlay-closing,
+  .table-qr-modal-overlay.overlay-closing {
+    animation: fadeOut 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
   }
 }
 

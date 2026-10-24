@@ -1,43 +1,20 @@
 import React from 'react';
 import { Shield, X, Mail, Phone, MapPin, ExternalLink, FileText, CheckCircle2 } from 'lucide-react';
 import { playTapSound } from '../utils/audio';
+import SlideModal from './SlideModal';
 
 export default function DmcaModal({ isOpen, onClose }) {
-  if (!isOpen) return null;
-
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 10000,
-        background: 'rgba(15, 23, 42, 0.75)',
-        backdropFilter: 'blur(8px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16
-      }}
-      onClick={() => {
-        playTapSound();
-        onClose();
-      }}
+    <SlideModal
+      isOpen={isOpen}
+      onClose={onClose}
+      isDark={true}
+      maxWidth={620}
+      ariaLabel="DMCA Designated Agent Directory"
+      contentStyle={{ padding: '20px 24px' }}
     >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 620,
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          background: '#0F172A',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
-          borderRadius: 20,
-          padding: 24,
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
-          color: '#F8FAFC'
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      {({ dismiss }) => (
+        <div>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -68,7 +45,7 @@ export default function DmcaModal({ isOpen, onClose }) {
             type="button"
             onClick={() => {
               playTapSound();
-              onClose();
+              dismiss();
             }}
             style={{
               background: 'transparent',
@@ -171,7 +148,7 @@ export default function DmcaModal({ isOpen, onClose }) {
             type="button"
             onClick={() => {
               playTapSound();
-              onClose();
+              dismiss();
             }}
             style={{
               padding: '9px 18px',
@@ -188,6 +165,7 @@ export default function DmcaModal({ isOpen, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+      )}
+    </SlideModal>
   );
 }

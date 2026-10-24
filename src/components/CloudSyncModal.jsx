@@ -12,6 +12,7 @@ import {
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import { getCloudSyncState, subscribeCloudSyncState } from '../utils/sync';
 import { syncOrderToCloud } from '../utils/firebaseSync';
+import SlideModal from './SlideModal';
 
 export default function CloudSyncModal({ isOpen, onClose }) {
   const [syncState, setSyncState] = useState(getCloudSyncState());
@@ -130,19 +131,15 @@ service cloud.firestore {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
-      <div
-        className="modal-content-sheet"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          maxWidth: 540,
-          width: '94%',
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          borderRadius: 24,
-          padding: '24px'
-        }}
-      >
+    <SlideModal
+      isOpen={isOpen}
+      onClose={onClose}
+      maxWidth={540}
+      ariaLabel="Cross-Device Cloud Sync"
+      contentStyle={{ padding: '24px' }}
+    >
+      {({ dismiss }) => (
+        <div>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -172,7 +169,10 @@ service cloud.firestore {
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => {
+              playTapSound();
+              dismiss();
+            }}
             style={{
               background: '#F3F4F6',
               border: 'none',
@@ -184,6 +184,7 @@ service cloud.firestore {
               alignItems: 'center',
               justifyContent: 'center'
             }}
+            aria-label="Close"
           >
             <X size={16} />
           </button>
@@ -398,6 +399,7 @@ service cloud.firestore {
           )}
         </div>
       </div>
-    </div>
+      )}
+    </SlideModal>
   );
 }

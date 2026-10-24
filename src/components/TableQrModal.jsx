@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { playTapSound, playSuccessChime } from '../utils/audio';
 import { computeTableSignature } from '../utils/tableSecurity';
+import SlideModal from './SlideModal';
 
 export default function TableQrModal({
   isOpen,
@@ -110,19 +111,21 @@ export default function TableQrModal({
   };
 
   return (
-    <div className="table-qr-modal-overlay" onClick={onClose}>
-      <div
-        className="table-qr-modal-card"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
+    <SlideModal
+      isOpen={isOpen}
+      onClose={onClose}
+      maxWidth={480}
+      ariaLabel="Table QR Standee Modal"
+      contentStyle={{ padding: '24px' }}
+    >
+      {({ dismiss }) => (
+        <div>
         {/* Modal Header */}
         <div className="table-qr-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="table-qr-avatar" style={{ background: isStallMode ? 'rgba(16, 185, 129, 0.15)' : 'rgba(0, 122, 255, 0.15)' }}>
               {isStallMode ? (
-                <Store size={22} color="#10B981" />
+                 <Store size={22} color="#10B981" />
               ) : (
                 <QrCode size={22} color="#007AFF" />
               )}
@@ -140,7 +143,7 @@ export default function TableQrModal({
             className="auth-modal-close-btn"
             onClick={() => {
               playTapSound();
-              onClose();
+              dismiss();
             }}
             aria-label="Close QR Modal"
           >
@@ -291,6 +294,7 @@ export default function TableQrModal({
           </button>
         </div>
       </div>
-    </div>
+      )}
+    </SlideModal>
   );
 }

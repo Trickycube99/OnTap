@@ -23,6 +23,7 @@ import {
   sendPasswordReset,
   resendVerificationLink
 } from '../utils/firebaseAuth';
+import SlideModal from './SlideModal';
 
 export default function AuthModal({
   isOpen,
@@ -232,14 +233,19 @@ export default function AuthModal({
   };
 
   return (
-    <div className="auth-modal-overlay" onClick={handleCloseModal}>
-      <div
-        className="auth-modal-card"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        style={{ maxWidth: 450 }}
-      >
+    <>
+      <SlideModal
+      isOpen={isOpen}
+      onClose={() => {
+        resetForm();
+        onClose();
+      }}
+      maxWidth={460}
+      ariaLabel="Staff Authentication Modal"
+      contentStyle={{ padding: '24px' }}
+    >
+      {({ dismiss }) => (
+        <div>
         {/* Modal Header */}
         <div className="auth-modal-header">
           <div className="auth-role-avatar-wrapper">
@@ -268,7 +274,11 @@ export default function AuthModal({
           </div>
           <button
             className="auth-modal-close-btn"
-            onClick={handleCloseModal}
+            onClick={() => {
+              playTapSound();
+              resetForm();
+              dismiss();
+            }}
             aria-label="Close authentication modal"
           >
             <X size={18} />
@@ -716,6 +726,8 @@ export default function AuthModal({
           </div>
         </div>
       </div>
+      )}
+    </SlideModal>
 
       {/* Embedded Legal Policy Viewer */}
       <LegalModal
@@ -723,6 +735,6 @@ export default function AuthModal({
         initialTab={legalModalTab || 'privacy'}
         onClose={() => setLegalModalTab(null)}
       />
-    </div>
+    </>
   );
 }
