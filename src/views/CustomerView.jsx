@@ -36,7 +36,8 @@ import {
   isCustomerSessionExpired,
   detectFreshQrScan,
   markQrScanConsumed,
-  initCustomerInactivityWatcher
+  initCustomerInactivityWatcher,
+  getCustomerStorageKeys
 } from '../utils/customerSessionManager';
 
 export default function CustomerView({
@@ -73,8 +74,11 @@ export default function CustomerView({
   
   // Diner Identification State (Scoped strictly to this browser tab session via sessionStorage)
   // Survives page refresh within the same tab, but prompts again when opening a new tab
-  const dinerNameKey = `ontap_${activeBusinessId || 'default'}_diner_name`;
-  const dinerPhoneKey = `ontap_${activeBusinessId || 'default'}_diner_phone`;
+  const customerStorageKeys = useMemo(() => getCustomerStorageKeys(activeBusinessId), [activeBusinessId]);
+  const dinerNameKey = customerStorageKeys.dinerName;
+  const dinerPhoneKey = customerStorageKeys.dinerPhone;
+  const dinerOrderIdsKey = customerStorageKeys.orderIds;
+  const dinerLegacyOrderKey = customerStorageKeys.lastOrderId;
 
   const [customerName, setCustomerName] = useState(() => {
     if (typeof window !== 'undefined') {

@@ -252,16 +252,10 @@ export function initCustomerInactivityWatcher({ onInactivityExpire, bizId }) {
   };
   document.addEventListener('visibilitychange', handleVisibilityChange);
 
-  // Tab Close Handler:
-  // When the tab/window is closed, wipe all customer interface data so that re-opening or restoring
-  // never brings back previous customer cart, notes, or tickets
-  const handleTabClose = () => {
-    try {
-      wipeAllCustomerData(bizId);
-    } catch {}
-  };
-  window.addEventListener('pagehide', handleTabClose);
-  window.addEventListener('beforeunload', handleTabClose);
+  // Note: Tab closure wiping is natively and automatically handled by browser-scoped sessionStorage:
+  // When a tab/window is closed, the browser engine automatically destroys all sessionStorage data.
+  // We intentionally do not wipe in 'pagehide' or 'beforeunload' to allow normal page reloads
+  // and seamless app-switching when paying via external UPI apps (GPay/PhonePe).
 
   return () => {
     clearInterval(intervalId);
@@ -269,7 +263,5 @@ export function initCustomerInactivityWatcher({ onInactivityExpire, bizId }) {
       window.removeEventListener(evt, handleUserActivity);
     });
     document.removeEventListener('visibilitychange', handleVisibilityChange);
-    window.removeEventListener('pagehide', handleTabClose);
-    window.removeEventListener('beforeunload', handleTabClose);
   };
 }
