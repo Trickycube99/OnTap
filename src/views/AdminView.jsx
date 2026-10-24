@@ -2078,6 +2078,28 @@ export default function AdminView({
                     </span>
                   </div>
                 )}
+
+                {/* Backend Verification Bridge Security Audit Status */}
+                {latestEodReport?.backendVerification && (
+                  <div
+                    style={{
+                      background: latestEodReport.backendVerification.tamperDetected ? '#FEF2F2' : '#F0FDF4',
+                      border: latestEodReport.backendVerification.tamperDetected ? '1px solid #FECACA' : '1px solid #BBF7D0',
+                      borderRadius: 10,
+                      padding: '8px 12px',
+                      fontSize: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginTop: 8
+                    }}
+                  >
+                    <ShieldCheck size={16} color={latestEodReport.backendVerification.tamperDetected ? '#DC2626' : '#16A34A'} />
+                    <span style={{ color: latestEodReport.backendVerification.tamperDetected ? '#991B1B' : '#166534', fontWeight: 500 }}>
+                      {latestEodReport.backendVerification.auditNote}
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
               <div

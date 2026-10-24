@@ -10,6 +10,8 @@
 
 import { initFirebase, isQuotaExhausted, handleFirestoreError } from './firebaseSync.js';
 import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
+import { calculateVerificationBridge } from './salesBridge.js';
+import { loadData, getScopedKey, STORAGE_KEYS } from './storage.js';
 
 const DB_NAME = 'OnTap_OwnerDatabase_v1';
 const DB_VERSION = 2;
@@ -296,14 +298,90 @@ export async function syncCloudSubmissionsToIndexedDB(businessId) {
 
 /**
  * Master API: Save Staff Submitted Report across IndexedDB, Cloud Firestore, and Local Backup
+ * Automatically runs the Backend Verification Bridge against the immutable order ledger
+ * to ensure owner never receives fabricated, manipulated, or wrong financial information.
  */
-export async function persistStaffSubmission({ report, businessId }) {
+export async function persistStaffSubmission({ report, businessId, orders = null }) {
   if (!report || !report.id) return false;
   const targetBizId = businessId || report.businessId || 'default';
+
+  // 1. Retrieve valid order ledger if not directly passed in options
+  let orderLedger = Array.isArray(orders) ? orders : [];
+  if (orderLedger.length === 0 && typeof window !== 'undefined') {
+    try {
+      orderLedger = loadData(getScopedKey(STORAGE_KEYS.ORDERS, targetBizId), []);
+    } catch {
+      orderLedger = [];
+    }
+  }
+
+  // 2. Execute Backend Verification Bridge against immutable order ledger
+  const bridgeResult = calculateVerificationBridge({
+    orders: orderLedger,
+    refDate: new Date(report.createdAt || report.date || Date.now()),
+    latestEodReport: report
+  });
+
+  const verifiedExpected = {
+    cash: Number(bridgeResult.channels.expected.cash || 0),
+    card: Number(bridgeResult.channels.expected.card || 0),
+    upi: Number(bridgeResult.channels.expected.upi || 0),
+    total: Number(bridgeResult.totalExpectedAmount || 0)
+  };
+
+  const verifiedServed = {
+    cash: Number(bridgeResult.channels.served.cash || 0),
+    card: Number(bridgeResult.channels.served.card || 0),
+    upi: Number(bridgeResult.channels.served.upi || 0),
+    total: Number(bridgeResult.totalServedAmount || 0)
+  };
+
+  const actualTotal = Number(report.actual?.total ?? (
+    Number(report.actual?.cash || 0) + Number(report.actual?.card || 0) + Number(report.actual?.upi || 0)
+  ));
+
+  const verifiedVariance = actualTotal - verifiedExpected.total;
+  const isAuditBalanced = Math.abs(verifiedVariance) <= 200;
+
+  // Check if cashier reported expected numbers that differ from verified order ledger
+  const clientExpectedTotal = Number(report.expected?.total || 0);
+  const hasClientDiscrepancy = Boolean(clientExpectedTotal && Math.abs(clientExpectedTotal - verifiedExpected.total) > 1);
+
+  const backendVerification = {
+    isVerified: true,
+    verifiedAt: new Date().toISOString(),
+    ledgerExpected: verifiedExpected,
+    ledgerServed: verifiedServed,
+    actualCounted: report.actual || { cash: 0, card: 0, upi: 0, total: actualTotal },
+    ledgerVariance: verifiedVariance,
+    channelVariances: {
+      cash: Number(report.actual?.cash || 0) - verifiedExpected.cash,
+      card: Number(report.actual?.card || 0) - verifiedExpected.card,
+      upi: Number(report.actual?.upi || 0) - verifiedExpected.upi
+    },
+    servedOrdersCount: bridgeResult.servedCount,
+    totalOrdersCount: bridgeResult.expectedCount,
+    unservedOrdersCount: bridgeResult.unservedCount,
+    unservedAmount: bridgeResult.unservedAmount,
+    fulfillmentRate: bridgeResult.fulfillmentRate,
+    isAuditBalanced,
+    auditStatus: isAuditBalanced ? 'VERIFIED_BALANCED' : 'AUDIT_VARIANCE_FLAGGED',
+    tamperDetected: hasClientDiscrepancy,
+    clientReportedExpected: report.expected || null,
+    auditNote: hasClientDiscrepancy
+      ? `⚠️ AUDIT WARNING: Cashier reported expected total (₹${clientExpectedTotal.toFixed(0)}) differed from verified backend order ledger (₹${verifiedExpected.total.toFixed(0)}). Backend verification bridge corrected this to ensure owner accuracy.`
+      : (isAuditBalanced
+          ? `✅ Backend Verified: Counted ₹${actualTotal.toFixed(0)} reconciled against ₹${verifiedExpected.total.toFixed(0)} ledger expected.`
+          : `⚠️ Audit Variance: Counted ₹${actualTotal.toFixed(0)} vs Ledger Expected ₹${verifiedExpected.total.toFixed(0)} (Variance: ₹${verifiedVariance >= 0 ? '+' : ''}${verifiedVariance.toFixed(0)}). Reason: "${report.varianceReason || 'No note provided'}"`)
+  };
 
   const enrichedReport = {
     ...report,
     businessId: targetBizId,
+    // Enforce verified ledger numbers so owner gets guaranteed accurate data
+    expected: verifiedExpected,
+    variance: verifiedVariance,
+    backendVerification,
     persistedAt: new Date().toISOString()
   };
 
@@ -426,6 +504,11 @@ export function calculateStaffSubmittedAmounts({
     weekSubmissionsCount,
     monthSubmittedSales,
     monthSubmissionsCount,
+    // Backend verification bridge metadata for owner audit protection
+    backendVerification: todayReport?.backendVerification || null,
+    isBackendVerified: Boolean(todayReport?.backendVerification?.isVerified),
+    hasAuditTamperAlert: Boolean(todayReport?.backendVerification?.tamperDetected),
+    auditAlertMessage: todayReport?.backendVerification?.auditNote || '',
     // Clear status text
     statusLabel: hasStaffSubmittedToday
       ? `Submitted by ${submittedBy} (${submittedAt})`

@@ -32,9 +32,8 @@ import { playTapSound, playSuccessChime, playAlertChime, playNewOrderChime } fro
 import PrinterModal from '../components/PrinterModal';
 import WhatsAppAlertModal from '../components/WhatsAppAlertModal';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
-import VerificationBridgeCard from '../components/VerificationBridgeCard';
 import LegalFooter from '../components/LegalFooter';
-import { calculateVerificationBridge, buildDailyArchives, exportDailyDataCsv } from '../utils/salesBridge';
+import { buildDailyArchives, exportDailyDataCsv } from '../utils/salesBridge';
 import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
 import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
@@ -510,14 +509,6 @@ export default function CounterView({
   const totalVariance = diffCash + diffCard + diffUpi;
   const hasVarianceAlert = Math.abs(totalVariance) > 200.0; // ₹200 threshold
 
-  // Real-Time Verification Bridge between Counter Served Orders and Owner Expected Orders
-  const bridgeData = useMemo(() => {
-    return calculateVerificationBridge({
-      orders,
-      latestEodReport: Array.isArray(checklists) && checklists.length > 0 ? checklists[0] : null
-    });
-  }, [orders, checklists]);
-
   // Daily Cash Check Archives
   const dailyArchives = useMemo(() => {
     return buildDailyArchives({ orders, checklists });
@@ -846,8 +837,8 @@ export default function CounterView({
     if (setChecklists) {
       setChecklists((prev) => [report, ...(Array.isArray(prev) ? prev : [])]);
     }
-    // Store in IndexedDB and Cloud Firestore for permanent memory & fast indexed querying
-    persistStaffSubmission({ report, businessId: activeBusinessId });
+    // Store in IndexedDB and Cloud Firestore with backend verification bridge audit
+    persistStaffSubmission({ report, businessId: activeBusinessId, orders });
     broadcastSyncEvent(SYNC_EVENTS.CHECKLIST_SUBMITTED, report, activeBusinessId);
     setShowClosingConfirmModal(false);
     setChecklistSubmitted(true);
@@ -1207,13 +1198,6 @@ export default function CounterView({
       {/* VIEW 1: LIVE ORDERS STACK */}
       {activeSubTab === 'orders' && (
         <div>
-          {/* Real-Time Verification Bridge Card (Counter Served ⟷ Owner Expected) */}
-          <VerificationBridgeCard
-            bridgeData={bridgeData}
-            role="counter"
-            onNavigateToCashCheck={() => setActiveSubTab('checklist')}
-          />
-
           {/* Status Quick Filter Bar */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', paddingBottom: 4 }}>
             {['all', 'received', 'cooking', 'ready', 'served', 'rejected'].map((st) => (
@@ -2159,12 +2143,6 @@ export default function CounterView({
       {/* VIEW 4: DAILY CLOSING CHECKLIST (FR-P8 & 5.4) */}
       {activeSubTab === 'checklist' && (
         <div>
-          {/* Real-Time Verification Bridge Card */}
-          <VerificationBridgeCard
-            bridgeData={bridgeData}
-            role="counter"
-          />
-
           <div className="ios-card" style={{ marginBottom: 16 }}>
             <div className="card-top-row">
               <div className="card-title-group">
