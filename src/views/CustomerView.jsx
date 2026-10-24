@@ -43,6 +43,7 @@ import DmcaModal from '../components/DmcaModal';
 import LegalModal from '../components/LegalModal';
 import CookieBanner from '../components/CookieBanner';
 import SlideModal from '../components/SlideModal';
+import cookingAnimationGif from '../assets/output-onlinegiftools.gif';
 import { COMPANY_LEGAL_INFO } from '../utils/privacyCompliance';
 
 export default function CustomerView({
@@ -1175,6 +1176,9 @@ export default function CustomerView({
                           fontSize: 12,
                           padding: '4px 12px',
                           fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
                           background:
                             order.status === 'received'
                               ? '#EFF6FF'
@@ -1207,6 +1211,16 @@ export default function CustomerView({
                               : '1.5px solid #EF4444'
                         }}
                       >
+                        {(order.status === 'cooking' || order.status === 'in-progress') && (
+                          <img
+                            src={cookingAnimationGif}
+                            alt=""
+                            style={{ width: 16, height: 16, objectFit: 'contain', display: 'inline-block' }}
+                            onError={(e) => {
+                              e.currentTarget.src = '/output-onlinegiftools.gif';
+                            }}
+                          />
+                        )}
                         {order.status === 'received'
                           ? (language === 'hi' ? 'प्राप्त (Received)' : 'Received')
                           : (order.status === 'cooking' || order.status === 'in-progress')
@@ -1467,25 +1481,74 @@ export default function CustomerView({
 
                       {(order.status === 'cooking' || order.status === 'in-progress') && (
                         <div
+                          className="customer-cooking-card"
                           style={{
-                            background: '#FFFBEB',
+                            background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)',
                             border: '1.5px solid #F59E0B',
-                            borderRadius: 12,
-                            padding: '10px 14px',
+                            borderRadius: 16,
+                            padding: '16px 14px',
                             color: '#92400E',
-                            fontSize: 12.5,
-                            fontWeight: 600,
                             display: 'flex',
+                            flexDirection: 'column',
                             alignItems: 'center',
-                            gap: 8,
-                            marginBottom: 12
+                            textAlign: 'center',
+                            gap: 12,
+                            marginBottom: 14,
+                            boxShadow: '0 4px 16px rgba(245, 158, 11, 0.16)',
+                            animation: 'fadeIn 0.3s ease'
                           }}
                         >
-                          <Flame size={17} color="#D97706" style={{ flexShrink: 0 }} />
-                          <span>
+                          <div
+                            style={{
+                              position: 'relative',
+                              padding: '12px 18px',
+                              background: '#FFFFFF',
+                              borderRadius: 14,
+                              boxShadow: '0 2px 10px rgba(217, 119, 6, 0.12)',
+                              border: '1.5px solid rgba(245, 158, 11, 0.25)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              maxWidth: 240,
+                              width: '100%'
+                            }}
+                          >
+                            <img
+                              src={cookingAnimationGif}
+                              alt="Cooking in Kitchen"
+                              style={{
+                                width: 140,
+                                height: 'auto',
+                                maxHeight: 120,
+                                objectFit: 'contain',
+                                display: 'block'
+                              }}
+                              onError={(e) => {
+                                e.currentTarget.src = '/output-onlinegiftools.gif';
+                              }}
+                            />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                              <Flame size={14} color="#D97706" style={{ flexShrink: 0 }} />
+                              <span style={{ fontSize: 11, fontWeight: 800, color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                {language === 'hi' ? 'रसोई में सक्रिय' : 'Live in Kitchen'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+                            <Flame size={18} color="#D97706" style={{ flexShrink: 0 }} />
+                            <span style={{ fontSize: 13.5, fontWeight: 800, color: '#B45309' }}>
+                              {language === 'hi'
+                                ? 'रसोई में व्यंजन पक रहे हैं!'
+                                : 'Dishes are Cooking in Kitchen!'}
+                            </span>
+                          </div>
+
+                          <span style={{ fontSize: 12, fontWeight: 500, color: '#92400E', maxWidth: 360, lineHeight: 1.45 }}>
                             {language === 'hi'
-                              ? 'रसोई में व्यंजन पक रहे हैं! शेफ ब्रिगेड ताजगी से तैयार कर रही है।'
-                              : 'Dishes are Cooking! Executive chef brigade is actively preparing your order fresh.'}
+                              ? 'शेफ ब्रिगेड ताजगी से आपका ऑर्डर तैयार कर रही है। जैसे ही तैयार होगा आपको तुरंत सूचित किया जाएगा।'
+                              : 'Executive chef brigade is actively preparing your order fresh. You will be alerted the moment it is ready!'}
                           </span>
                         </div>
                       )}
@@ -2544,6 +2607,8 @@ export default function CustomerView({
         const hasActive = activeTickets.length > 0;
         const isMulti = customerOrders.length > 1;
         const allServed = !hasActive && customerOrders.some((o) => o.status === 'served' || o.status === 'done');
+        const isAnyCooking = activeTickets.some((t) => t.status === 'cooking' || t.status === 'in-progress') ||
+                             (latestActive && (latestActive.status === 'cooking' || latestActive.status === 'in-progress'));
 
         return (
           <div style={{ padding: '0 16px', marginBottom: 12 }}>
@@ -2552,9 +2617,9 @@ export default function CustomerView({
               style={{
                 padding: '12px 14px',
                 cursor: 'pointer',
-                border: allServed ? '1.5px solid #86EFAC' : isMulti ? '1.5px solid #60A5FA' : undefined,
-                boxShadow: allServed ? '0 4px 14px rgba(22, 163, 74, 0.12)' : isMulti ? '0 4px 14px rgba(37, 99, 235, 0.12)' : undefined,
-                background: allServed ? '#F0FDF4' : undefined
+                border: allServed ? '1.5px solid #86EFAC' : isAnyCooking ? '1.5px solid #F59E0B' : isMulti ? '1.5px solid #60A5FA' : undefined,
+                boxShadow: allServed ? '0 4px 14px rgba(22, 163, 74, 0.12)' : isAnyCooking ? '0 4px 14px rgba(245, 158, 11, 0.15)' : isMulti ? '0 4px 14px rgba(37, 99, 235, 0.12)' : undefined,
+                background: allServed ? '#F0FDF4' : isAnyCooking ? '#FFFDF5' : undefined
               }}
               onClick={() => {
                 playTapSound();
@@ -2568,13 +2633,15 @@ export default function CustomerView({
                     style={{
                       fontSize: 11,
                       fontWeight: 700,
-                      background: allServed ? '#DCFCE7' : isMulti ? '#EFF6FF' : undefined,
-                      color: allServed ? '#15803D' : isMulti ? '#1D4ED8' : undefined,
-                      border: allServed ? '1px solid #86EFAC' : isMulti ? '1px solid #BFDBFE' : undefined
+                      background: allServed ? '#DCFCE7' : isAnyCooking ? '#FFFBEB' : isMulti ? '#EFF6FF' : undefined,
+                      color: allServed ? '#15803D' : isAnyCooking ? '#B45309' : isMulti ? '#1D4ED8' : undefined,
+                      border: allServed ? '1px solid #86EFAC' : isAnyCooking ? '1px solid #F59E0B' : isMulti ? '1px solid #BFDBFE' : undefined
                     }}
                   >
                     {allServed
                       ? (language === 'hi' ? 'सभी व्यंजन परोसे गए ✓' : 'All Dishes Served ✓')
+                      : isAnyCooking
+                      ? (language === 'hi' ? 'रसोई में पक रहा है 🔥' : 'Cooking in Kitchen 🔥')
                       : isMulti
                       ? `${activeTickets.length} Active Tickets in Kitchen`
                       : latestActive.statusLabel}
@@ -2587,7 +2654,19 @@ export default function CustomerView({
                       : latestActive.id}
                   </span>
                 </div>
-                <span className="card-meta-text">{latestActive.table || activeTable} • Tap to View</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {isAnyCooking && (
+                    <img
+                      src={cookingAnimationGif}
+                      alt="Cooking"
+                      style={{ width: 24, height: 24, objectFit: 'contain' }}
+                      onError={(e) => {
+                        e.currentTarget.src = '/output-onlinegiftools.gif';
+                      }}
+                    />
+                  )}
+                  <span className="card-meta-text">{latestActive.table || activeTable} • Tap to View</span>
+                </div>
               </div>
 
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
