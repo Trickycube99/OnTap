@@ -27,11 +27,37 @@
   --pill-tag-bg: #FFEDD5;
   --pill-tag-text: #9A3412;
 
-  /* Typography Colors */
+  /* Typography Colors - WCAG 2.1 AA Verified Contrast */
   --text-primary: #0F172A;
-  --text-secondary: #475569;
-  --text-muted: #64748B;
+  --text-secondary: #334155;
+  --text-muted: #475569;
   --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* WCAG 2.1 AA Compliant Keyboard Navigation Focus Rings */
+:focus-visible {
+  outline: 2px solid #007AFF !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.25) !important;
+}
+
+/* Skip to main content accessibility link */
+.skip-to-content {
+  position: absolute;
+  top: -60px;
+  left: 16px;
+  background: #007AFF;
+  color: #FFFFFF;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  z-index: 100000;
+  text-decoration: none;
+  transition: top 0.2s ease;
+}
+.skip-to-content:focus {
+  top: 16px;
 }
 
 /* Base Styles */
@@ -41,6 +67,16 @@
   padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Respect user's system motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 html, body {

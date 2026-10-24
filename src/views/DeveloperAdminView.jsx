@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import TableQrModal from '../components/TableQrModal';
+import LegalFooter from '../components/LegalFooter';
 import { computeTableSignature } from '../utils/tableSecurity';
 import {
   purgeBusinessAccountComplete,
@@ -3616,6 +3617,13 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
           </div>
         </div>
       )}
+
+      {/* Visible Dashboard Footer with Privacy Policy & All Compliance Links */}
+      <LegalFooter
+        variant="dark"
+        restaurantName="Developer Superadmin Portal"
+        licenseText="Platform Control Panel • Delaware Corp"
+      />
     </div>
   );
 }

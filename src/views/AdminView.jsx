@@ -48,6 +48,9 @@ import { purgeBusinessAccountComplete, syncBusinessToCloud, resetAllOrdersAndFin
 import { syncMenuToCloud } from '../utils/firebaseSync';
 import VerificationBridgeCard from '../components/VerificationBridgeCard';
 import DmcaModal from '../components/DmcaModal';
+import LegalModal from '../components/LegalModal';
+import LegalFooter from '../components/LegalFooter';
+import { submitDataErasureRequest } from '../utils/privacyCompliance';
 import {
   calculateVerificationBridge,
   getDailyDateRange,
@@ -120,6 +123,8 @@ export default function AdminView({
   const [showCounterPin, setShowCounterPin] = useState(false);
   const [copiedOwnerKey, setCopiedOwnerKey] = useState(null);
   const [showDmcaModal, setShowDmcaModal] = useState(false);
+  const [showLegalModal, setShowLegalModal] = useState(false);
+  const [legalInitialTab, setLegalInitialTab] = useState('privacy');
   const [activeBiz, setActiveBiz] = useState(() => getActiveBusiness() || getBusinesses()[0]);
 
   // Owner Self-Account Deletion & Data Purge State
@@ -147,6 +152,15 @@ export default function AdminView({
     setDeleteAccountError('');
 
     try {
+      // 1. Submit verified server-side data erasure request under GDPR Art. 17 / CCPA / DPDP Sec. 12
+      await submitDataErasureRequest({
+        email: activeBiz?.owner?.email,
+        businessId: activeBiz.id,
+        requestType: 'owner_account_erasure',
+        reason: 'Owner Self-Requested Permanent Account Erasure'
+      });
+
+      // 2. Execute local and cloud systematic database purge
       const res = await purgeBusinessAccountComplete({
         businessId: activeBiz.id,
         actorRole: 'owner',
@@ -6860,24 +6874,66 @@ export default function AdminView({
               </div>
             </div>
 
-            {/* DMCA Designated Agent & Copyright Link */}
-            <div style={{ marginBottom: 14, textAlign: 'center' }}>
+            {/* Legal Documents & Company Transparency Links */}
+            <div style={{ marginBottom: 14, textAlign: 'center', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, fontSize: 11.5 }}>
               <button
                 type="button"
                 onClick={() => {
                   setShowOwnerCredentialsModal(false);
-                  setShowDmcaModal(true);
+                  setLegalInitialTab('privacy');
+                  setShowLegalModal(true);
                 }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#38BDF8',
-                  fontSize: 11.5,
-                  textDecoration: 'underline',
-                  cursor: 'pointer'
-                }}
+                style={{ background: 'none', border: 'none', color: '#38BDF8', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
               >
-                View DMCA Designated Agent Registration &amp; Copyright Policy
+                Privacy Policy
+              </button>
+              <span style={{ color: '#475569' }}>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOwnerCredentialsModal(false);
+                  setLegalInitialTab('terms');
+                  setShowLegalModal(true);
+                }}
+                style={{ background: 'none', border: 'none', color: '#38BDF8', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+              >
+                Terms of Service
+              </button>
+              <span style={{ color: '#475569' }}>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOwnerCredentialsModal(false);
+                  setLegalInitialTab('refund');
+                  setShowLegalModal(true);
+                }}
+                style={{ background: 'none', border: 'none', color: '#38BDF8', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+              >
+                Refund Policy
+              </button>
+              <span style={{ color: '#475569' }}>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOwnerCredentialsModal(false);
+                  setLegalInitialTab('cookie');
+                  setShowLegalModal(true);
+                }}
+                style={{ background: 'none', border: 'none', color: '#38BDF8', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+              >
+                Cookie Policy
+              </button>
+              <span style={{ color: '#475569' }}>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOwnerCredentialsModal(false);
+                  setLegalInitialTab('dmca');
+                  setShowLegalModal(true);
+                }}
+                style={{ background: 'none', border: 'none', color: '#38BDF8', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+              >
+                DMCA Notice
               </button>
             </div>
 
@@ -7188,6 +7244,20 @@ export default function AdminView({
           </div>
         </div>
       )}
+
+      {/* Visible Dashboard Footer with Privacy Policy & All Compliance Links */}
+      <LegalFooter
+        variant="dark"
+        restaurantName={activeBiz?.name || 'Restaurant Admin OS'}
+        licenseText="Store Owner &amp; Admin Back-Office"
+      />
+
+      {/* Interactive Global Legal Documents & Compliance Center */}
+      <LegalModal
+        isOpen={showLegalModal}
+        initialTab={legalInitialTab}
+        onClose={() => setShowLegalModal(false)}
+      />
 
       {/* DMCA Designated Agent Policy Modal (17 U.S.C. § 512(c)(2)) */}
       <DmcaModal isOpen={showDmcaModal} onClose={() => setShowDmcaModal(false)} />

@@ -3,6 +3,8 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import AuthModal from './components/AuthModal';
 import TableQrModal from './components/TableQrModal';
+import CookieBanner from './components/CookieBanner';
+import LegalModal from './components/LegalModal';
 import { AdminOwnerLoginGate, CounterLoginGate, QrCodeGate } from './components/AccessGates';
 import CustomerView from './views/CustomerView';
 import AboutChefView from './views/AboutChefView';
@@ -215,6 +217,7 @@ export default function App() {
   const [authSessions, setAuthSessions] = useState(() => getStoredSessions());
   const [authModal, setAuthModal] = useState({ isOpen: false, targetRole: null });
   const [isTableQrOpen, setIsTableQrOpen] = useState(false);
+  const [legalModal, setLegalModal] = useState({ isOpen: false, tab: 'privacy' });
 
   // Dedicated Firebase Auth Action State (Email Verification & Password Reset)
   const [authActionState, setAuthActionState] = useState(() => {
@@ -1292,6 +1295,9 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {/* WCAG 2.1 AA Skip to Content Keyboard Link */}
+      <a href="#main-content" className="skip-to-content">Skip to Main Content</a>
+
       {/* Dynamic Header: Clean & Isolated for Customer with QR, Workstation for Authenticated Staff */}
       {currentRole !== 'developer' && (
         (currentRole === 'customer' || currentRole === 'chef'
@@ -1587,6 +1593,18 @@ export default function App() {
         tagline={theme.tagline}
         businessId={activeBusinessId}
         serviceType={theme.serviceType || (theme.tables?.length === 1 && theme.tables[0].includes('Stand') ? 'stall' : 'dine_in')}
+      />
+
+      {/* GDPR / CCPA Global Cookie Consent Banner */}
+      <CookieBanner
+        onOpenLegal={(tab) => setLegalModal({ isOpen: true, tab: tab || 'privacy' })}
+      />
+
+      {/* Interactive Global Legal Documents & Compliance Modal */}
+      <LegalModal
+        isOpen={legalModal.isOpen}
+        initialTab={legalModal.tab}
+        onClose={() => setLegalModal({ isOpen: false, tab: 'privacy' })}
       />
     </div>
   );

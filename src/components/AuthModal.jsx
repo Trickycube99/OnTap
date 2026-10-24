@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import LegalModal from './LegalModal';
 import {
   Lock,
   Layers,
@@ -47,6 +48,18 @@ export default function AuthModal({
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [legalModalTab, setLegalModalTab] = useState(null);
+
+  // WCAG 2.1 AA Keyboard Escape Key Listener
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isOpen && !legalModalTab) {
+        handleCloseModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, legalModalTab]);
 
   const resetForm = () => {
     setPin('');
@@ -665,25 +678,52 @@ export default function AuthModal({
           </div>
         </form>
 
-        {/* Informative Footer note: accounts created only via Developer Dashboard */}
-        {currentStation === ROLES.ADMIN && adminAuthMode === 'login' && (
-          <div style={{
-            textAlign: 'center',
-            marginTop: 16,
-            paddingTop: 12,
-            borderTop: '1px solid #F1F5F9',
-            fontSize: 11,
-            color: '#94A3B8',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6
-          }}>
-            <Lock size={11} color="#94A3B8" />
-            <span>New accounts are provisioned exclusively via Developer Dashboard</span>
+        {/* Legal & Company Transparency Footer */}
+        <div style={{
+          textAlign: 'center',
+          marginTop: 14,
+          paddingTop: 10,
+          borderTop: '1px solid #F1F5F9',
+          fontSize: 10.5,
+          color: '#64748B',
+          lineHeight: 1.5
+        }}>
+          {currentStation === ROLES.ADMIN && adminAuthMode === 'login' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8, color: '#94A3B8' }}>
+              <Lock size={11} color="#94A3B8" />
+              <span>New accounts are provisioned exclusively via Developer Dashboard</span>
+            </div>
+          )}
+          <div>
+            By signing in, you agree to our{' '}
+            <button
+              type="button"
+              onClick={() => setLegalModalTab('terms')}
+              style={{ background: 'none', border: 'none', color: '#007AFF', textDecoration: 'underline', cursor: 'pointer', fontSize: 10.5, fontWeight: 600, padding: 0 }}
+            >
+              Terms of Service
+            </button>
+            {' '}and{' '}
+            <button
+              type="button"
+              onClick={() => setLegalModalTab('privacy')}
+              style={{ background: 'none', border: 'none', color: '#007AFF', textDecoration: 'underline', cursor: 'pointer', fontSize: 10.5, fontWeight: 600, padding: 0 }}
+            >
+              Privacy Policy
+            </button>.
           </div>
-        )}
+          <div style={{ color: '#94A3B8', marginTop: 4 }}>
+            OnTap Technologies Inc. • 100 Innovation Way, Suite 400, Wilmington, DE 19801, USA
+          </div>
+        </div>
       </div>
+
+      {/* Embedded Legal Policy Viewer */}
+      <LegalModal
+        isOpen={Boolean(legalModalTab)}
+        initialTab={legalModalTab || 'privacy'}
+        onClose={() => setLegalModalTab(null)}
+      />
     </div>
   );
 }

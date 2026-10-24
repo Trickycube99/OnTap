@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { playTapSound, playSuccessChime } from '../utils/audio';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
+import LegalFooter from '../components/LegalFooter';
 
 export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMenu }) {
   const [showVerifyModal, setShowVerifyModal] = useState(false);
@@ -334,9 +335,14 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
                 color: hasEndorsed ? '#16A34A' : '#111827'
               }}
             >
-              <Heart size={13} fill={hasEndorsed ? '#16A34A' : 'none'} color={hasEndorsed ? '#16A34A' : 'currentColor'} />
+              <Heart size={13} fill={hasEndorsed ? '#16A34A' : 'none'} color={hasEndorsed ? '#16A34A' : 'currentColor'} aria-hidden="true" />
               <span>{hasEndorsed ? 'Verified & Endorsed' : 'Endorse Chef Standard'}</span>
             </button>
+          </div>
+
+          {/* FTC Endorsement Transparency (16 CFR Part 255) */}
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic', lineHeight: 1.4 }}>
+            * FTC Disclosure (16 CFR Part 255): Endorsement counts reflect authentic dining feedback submitted in-app by verified patrons. Individual dining experiences may vary.
           </div>
 
           <div className="card-bottom-progress">
@@ -573,6 +579,13 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
           </div>
         </div>
       )}
+
+      {/* Visible Dashboard Footer with Privacy Policy & All Compliance Links */}
+      <LegalFooter
+        variant="light"
+        restaurantName={businessName}
+        licenseText="FSSAI Hygiene Certified Culinary Team"
+      />
     </div>
   );
 }

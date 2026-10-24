@@ -102,3 +102,72 @@ ${unsubscribeUrl}
 
   return { subject, html, text, unsubscribeUrl, physicalAddress };
 }
+
+/**
+ * Format transactional email (receipts, password resets, verification)
+ * Compliant with CAN-SPAM transactional messaging rules & GDPR Art 6(1)(b)
+ */
+export function formatTransactionalEmail({
+  recipientEmail,
+  subject,
+  bodyContent,
+  businessName = 'OnTap Dining & Restaurant OS',
+  businessAddress = null
+}) {
+  const physicalAddress = businessAddress || COMPANY_LEGAL_ADDRESS.formatted;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${subject || 'Receipt / Account Notice'}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F8FAFC; margin: 0; padding: 24px; color: #0F172A;">
+  <div style="max-width: 600px; margin: 0 auto; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 32px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+    <div style="margin-bottom: 24px;">
+      <h2 style="font-size: 20px; font-weight: 700; color: #0F172A; margin: 0 0 8px;">${businessName}</h2>
+      <div style="height: 2px; width: 40px; background: #007AFF;"></div>
+    </div>
+    
+    <div style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 32px;">
+      ${bodyContent}
+    </div>
+
+    <!-- Transactional Notice & Statutory Postal Address -->
+    <div style="border-top: 1px solid #E2E8F0; padding-top: 20px; font-size: 11px; line-height: 1.5; color: #64748B;">
+      <p style="margin: 0 0 6px;">
+        <strong>Transactional Notice:</strong> This is an essential administrative notification regarding your active transaction or account credentials sent pursuant to GDPR Art. 6(1)(b). It contains no promotional solicitations.
+      </p>
+      <p style="margin: 0 0 6px;">
+        <strong>Sender Physical Postal Address:</strong><br />
+        ${physicalAddress}<br />
+        ${COMPANY_LEGAL_ADDRESS.regionalOffice}
+      </p>
+      <p style="margin: 0;">
+        For privacy queries or statutory rights, contact <a href="mailto:privacy@ontap.app" style="color: #007AFF;">privacy@ontap.app</a>.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+${businessName}
+${subject}
+
+${bodyContent.replace(/<[^>]+>/g, '')}
+
+--------------------------------------------------
+Transactional Notice:
+This is an essential administrative notice regarding your transaction or account credentials.
+Sender Physical Postal Address:
+${physicalAddress}
+${COMPANY_LEGAL_ADDRESS.regionalOffice}
+
+Privacy contact: privacy@ontap.app
+  `.trim();
+
+  return { subject, html, text, physicalAddress };
+}

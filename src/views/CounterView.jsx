@@ -33,6 +33,7 @@ import PrinterModal from '../components/PrinterModal';
 import WhatsAppAlertModal from '../components/WhatsAppAlertModal';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
 import VerificationBridgeCard from '../components/VerificationBridgeCard';
+import LegalFooter from '../components/LegalFooter';
 import { calculateVerificationBridge, buildDailyArchives, exportDailyDataCsv } from '../utils/salesBridge';
 import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
@@ -3114,6 +3115,13 @@ export default function CounterView({
           onClose={() => setSelectedWhatsAppOrder(null)}
         />
       )}
+
+      {/* Compliance & Legal Documents Footer */}
+      <LegalFooter
+        variant="light"
+        restaurantName={theme?.restaurantName || 'Cashier Counter POS'}
+        licenseText="Terminal Station POS-01 • FSSAI Lic #10026011009821"
+      />
     </div>
   );
 }

@@ -40,6 +40,9 @@ import {
   getCustomerStorageKeys
 } from '../utils/customerSessionManager';
 import DmcaModal from '../components/DmcaModal';
+import LegalModal from '../components/LegalModal';
+import CookieBanner from '../components/CookieBanner';
+import { COMPANY_LEGAL_INFO } from '../utils/privacyCompliance';
 
 export default function CustomerView({
   activeBusinessId = '',
@@ -108,6 +111,10 @@ export default function CustomerView({
   });
   const [nameError, setNameError] = useState('');
   const [showDmcaModal, setShowDmcaModal] = useState(false);
+  const [showLegalModal, setShowLegalModal] = useState(false);
+  const [legalInitialTab, setLegalInitialTab] = useState('privacy');
+  const [showCookieSettings, setShowCookieSettings] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
 
   // Session Notification Banner State
   const [sessionNotice, setSessionNotice] = useState(null);
@@ -874,7 +881,7 @@ export default function CustomerView({
               )}
             </div>
 
-            <div style={{ marginBottom: 18 }}>
+            <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#4B5563', marginBottom: 6 }}>
                 {language === 'hi' ? 'मोबाइल नंबर (वैकल्पिक - बिल रसीद हेतु)' : 'Phone Number (Optional - for digital bill)'}
               </label>
@@ -889,6 +896,52 @@ export default function CustomerView({
                 value={customerPhoneInput}
                 onChange={(e) => setCustomerPhoneInput(e.target.value)}
               />
+            </div>
+
+            {/* Unbundled Marketing Opt-in Checkbox (Unticked by default - GDPR & DPDP § 6) */}
+            <div style={{ marginBottom: 14, padding: '8px 10px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 11.5, color: '#475569', cursor: 'pointer', lineHeight: 1.4 }}>
+                <input
+                  type="checkbox"
+                  checked={marketingOptIn}
+                  onChange={(e) => setMarketingOptIn(e.target.checked)}
+                  style={{ marginTop: 2, accentColor: '#007AFF', width: 15, height: 15 }}
+                />
+                <span>
+                  {language === 'hi'
+                    ? '(वैकल्पिक) मुझे शेफ के विशेष ऑफर्स व डाइनिंग छूट की सूचनाएं एसएमएस/व्हाट्सएप पर भेजें।'
+                    : '(Optional) Send me announcements regarding seasonal chef specials and dining rewards.'}
+                </span>
+              </label>
+            </div>
+
+            {/* COPPA / Minor Protection Notice */}
+            <div style={{ fontSize: 10.5, color: '#64748B', marginBottom: 14, lineHeight: 1.4, textAlign: 'center' }}>
+              Intended for diners 13+. Diners under 18 must order under adult supervision.
+              By proceeding, you agree to our{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNameModal(false);
+                  setLegalInitialTab('terms');
+                  setShowLegalModal(true);
+                }}
+                style={{ background: 'none', border: 'none', padding: 0, color: '#007AFF', textDecoration: 'underline', cursor: 'pointer', fontSize: 10.5, fontWeight: 600 }}
+              >
+                Terms
+              </button>
+              {' '}and{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNameModal(false);
+                  setLegalInitialTab('privacy');
+                  setShowLegalModal(true);
+                }}
+                style={{ background: 'none', border: 'none', padding: 0, color: '#007AFF', textDecoration: 'underline', cursor: 'pointer', fontSize: 10.5, fontWeight: 600 }}
+              >
+                Privacy Policy
+              </button>.
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -3031,23 +3084,118 @@ export default function CustomerView({
         >
           {theme.restaurantName} • FSSAI Lic #10026011009821
         </div>
-        <div>
-          Pure Contactless Table QR Ordering • Freshly Crafted & Served Hot
+        <div style={{ color: 'var(--text-muted)' }}>
+          Pure Contactless Table QR Ordering • Freshly Crafted &amp; Served Hot
         </div>
-        <div style={{ marginTop: 8 }}>
+
+        {/* Company Transparency & Legal Entity Details */}
+        <div style={{ marginTop: 10, fontSize: 10.5, color: '#64748B', lineHeight: 1.5 }}>
+          Platform operated by <strong>{COMPANY_LEGAL_INFO.legalName}</strong><br />
+          {COMPANY_LEGAL_INFO.physicalAddress}<br />
+          Contact: <a href={`mailto:${COMPANY_LEGAL_INFO.supportEmail}`} style={{ color: 'var(--primary-blue)', textDecoration: 'none' }}>{COMPANY_LEGAL_INFO.supportEmail}</a> | Phone: {COMPANY_LEGAL_INFO.phone}
+        </div>
+
+        {/* Legal Policies Navigation Row */}
+        <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, fontSize: 11 }}>
           <button
             type="button"
-            onClick={() => setShowDmcaModal(true)}
+            onClick={() => {
+              setLegalInitialTab('privacy');
+              setShowLegalModal(true);
+            }}
+            style={{ background: 'none', border: 'none', color: '#007AFF', textDecoration: 'underline', cursor: 'pointer', padding: 2 }}
+          >
+            Privacy Policy
+          </button>
+          <span style={{ color: '#CBD5E1' }}>•</span>
+          <button
+            type="button"
+            onClick={() => {
+              setLegalInitialTab('terms');
+              setShowLegalModal(true);
+            }}
+            style={{ background: 'none', border: 'none', color: '#007AFF', textDecoration: 'underline', cursor: 'pointer', padding: 2 }}
+          >
+            Terms of Service
+          </button>
+          <span style={{ color: '#CBD5E1' }}>•</span>
+          <button
+            type="button"
+            onClick={() => {
+              setLegalInitialTab('refund');
+              setShowLegalModal(true);
+            }}
+            style={{ background: 'none', border: 'none', color: '#007AFF', textDecoration: 'underline', cursor: 'pointer', padding: 2 }}
+          >
+            Refund Policy
+          </button>
+          <span style={{ color: '#CBD5E1' }}>•</span>
+          <button
+            type="button"
+            onClick={() => {
+              setLegalInitialTab('cookie');
+              setShowLegalModal(true);
+            }}
+            style={{ background: 'none', border: 'none', color: '#007AFF', textDecoration: 'underline', cursor: 'pointer', padding: 2 }}
+          >
+            Cookie Policy
+          </button>
+          <span style={{ color: '#CBD5E1' }}>•</span>
+          <button
+            type="button"
+            onClick={() => {
+              setLegalInitialTab('dmca');
+              setShowLegalModal(true);
+            }}
+            style={{ background: 'none', border: 'none', color: '#007AFF', textDecoration: 'underline', cursor: 'pointer', padding: 2 }}
+          >
+            DMCA Notice
+          </button>
+        </div>
+
+        {/* Consent & Data Deletion Action Buttons */}
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              playTapSound();
+              setShowCookieSettings(true);
+            }}
             style={{
-              background: 'none',
-              border: 'none',
-              color: '#94A3B8',
-              fontSize: 10.5,
-              textDecoration: 'underline',
+              padding: '5px 12px',
+              borderRadius: 8,
+              background: '#F1F5F9',
+              border: '1px solid #CBD5E1',
+              color: '#334155',
+              fontSize: 11,
+              fontWeight: 600,
               cursor: 'pointer'
             }}
           >
-            DMCA Designated Agent &amp; Copyright Policy
+            Cookie Preferences
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              playTapSound();
+              if (window.confirm('Clear all your local dining session data, table identity, and stored order numbers from this device?')) {
+                handleWipeCustomerInterface('user_requested');
+                alert('Your local dining data and table session have been cleared successfully.');
+              }
+            }}
+            style={{
+              padding: '5px 12px',
+              borderRadius: 8,
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              color: '#EF4444',
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            Clear My Diner Data
           </button>
         </div>
       </footer>
@@ -3055,7 +3203,24 @@ export default function CustomerView({
       {/* Mandatory Diner Name Pop-up Modal */}
       {renderNameModal()}
 
-      {/* DMCA Designated Agent Policy Modal (17 U.S.C. § 512(c)(2)) */}
+      {/* Interactive In-App Legal Documents Modal */}
+      <LegalModal
+        isOpen={showLegalModal}
+        initialTab={legalInitialTab}
+        onClose={() => setShowLegalModal(false)}
+      />
+
+      {/* Cookie Consent Banner in Settings Mode */}
+      <CookieBanner
+        forceOpen={showCookieSettings}
+        onClose={() => setShowCookieSettings(false)}
+        onOpenLegal={(tab) => {
+          setLegalInitialTab(tab);
+          setShowLegalModal(true);
+        }}
+      />
+
+      {/* DMCA Designated Agent Policy Modal Fallback */}
       <DmcaModal isOpen={showDmcaModal} onClose={() => setShowDmcaModal(false)} />
     </div>
   );
