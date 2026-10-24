@@ -635,6 +635,16 @@ export default function App() {
             businessId: msg.payload?.businessId || activeBusinessId
           });
         }
+      } else if (msg.type === SYNC_EVENTS.FINANCIALS_RESET) {
+        setOrders([]);
+        setExpenses([]);
+        setCart([]);
+        setTheme((prev) => ({
+          ...prev,
+          cashInHand: 0,
+          pendingAggregatorSettlement: 0,
+          upcomingObligations: { rent: 0, payroll: 0, emi: 0, dueDate: '' }
+        }));
       }
     }, activeBusinessId);
 

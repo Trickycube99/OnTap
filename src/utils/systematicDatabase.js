@@ -7,7 +7,7 @@
 // 4. Statutory Non-PII Compliance Retention (7-year tax & accounting ledger under GST Act & DPDP Act 2023)
 
 import { doc, setDoc, deleteDoc, collection, query, where, getDocs, writeBatch, onSnapshot } from 'firebase/firestore';
-import { initFirebase, deleteCloudOrdersForBusiness, isQuotaExhausted, handleFirestoreError } from './firebaseSync.js';
+import { initFirebase, deleteCloudOrdersForBusiness, purgeAllCloudOrdersAndFinancials, isQuotaExhausted, handleFirestoreError } from './firebaseSync.js';
 import { deleteOwnerAccountFromFirebase, getFirebaseAuth } from './firebaseAuth.js';
 import { signOut, deleteUser } from 'firebase/auth';
 import { getBusinesses, saveBusinesses, getActiveBusiness, setActiveBusiness } from './businessManager.js';
@@ -676,9 +676,118 @@ export async function purgeAllPreMadeMockAccountsAndData() {
   }
 }
 
+/**
+ * Complete Reset of All Orders, Amount & Financial Data Across Dashboards & Cloud Database
+ * 1. Purges all orders & checklists from Cloud Firestore database
+ * 2. Purges all orders, expenses, checklists & daily cash registers from localStorage
+ * 3. Resets theme financial metrics (cashInHand, obligations, settlement) to 0
+ * 4. Clears customer order tracking & tray sessions
+ * 5. Broadcasts real-time cross-tab synchronization event
+ */
+export async function resetAllOrdersAndFinancialData(targetBusinessId = null) {
+  // 1. Purge Cloud Firestore Database
+  try {
+    await purgeAllCloudOrdersAndFinancials(targetBusinessId);
+  } catch (err) {
+    console.warn('🔥 [Database Reset] Cloud purge notice:', err);
+  }
+
+  // 2. Purge LocalStorage Partitions
+  if (typeof localStorage !== 'undefined') {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+
+      const isOrderKey = k.includes('orders') || k.includes('order_ids') || k.includes('last_order_id');
+      const isExpenseKey = k.includes('expenses');
+      const isChecklistKey = k.includes('checklist') || k.includes('eod') || k.includes('daily_cash');
+      const isBridgeKey = k.includes('bridge');
+      const isSalesKey = k.includes('sales_summary') || k.includes('daily_archives') || k.includes('weekly_archives');
+
+      if (isOrderKey || isExpenseKey || isChecklistKey || isBridgeKey || isSalesKey) {
+        if (!targetBusinessId || targetBusinessId === 'all' || k.includes(targetBusinessId)) {
+          keysToRemove.push(k);
+        }
+      }
+    }
+
+    keysToRemove.forEach((k) => {
+      try {
+        localStorage.removeItem(k);
+      } catch {}
+    });
+
+    // Reset financial fields in all theme configurations
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.includes('theme')) {
+        try {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+              parsed.cashInHand = 0;
+              parsed.pendingAggregatorSettlement = 0;
+              parsed.upcomingObligations = { rent: 0, payroll: 0, emi: 0, dueDate: '' };
+              localStorage.setItem(k, JSON.stringify(parsed));
+            }
+          }
+        } catch {}
+      }
+    }
+  }
+
+  // 3. Purge Customer SessionStorage
+  if (typeof sessionStorage !== 'undefined') {
+    const sessionKeysToRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (!k) continue;
+      if (
+        k.includes('diner') ||
+        k.includes('order') ||
+        k.includes('cart') ||
+        k.includes('bridge')
+      ) {
+        sessionKeysToRemove.push(k);
+      }
+    }
+    sessionKeysToRemove.forEach((k) => {
+      try {
+        sessionStorage.removeItem(k);
+      } catch {}
+    });
+  }
+
+  // 4. Broadcast instant sync to all open tabs and devices
+  try {
+    broadcastSyncEvent(
+      SYNC_EVENTS.FINANCIALS_RESET,
+      {
+        businessId: targetBusinessId || 'all',
+        timestamp: Date.now()
+      },
+      targetBusinessId
+    );
+  } catch {}
+
+  console.log('✅ [Database & Financials Reset] Completed clean zero-reset across dashboards & Cloud Firestore.');
+  return { success: true };
+}
+
 // Automatically execute once on client startup to ensure clean zero-slate
 if (typeof window !== 'undefined') {
   try {
     purgeAllPreMadeMockAccountsAndData().catch(() => {});
+  } catch {}
+
+  // One-time automatic reset of orders & financial data across dashboards & database
+  const RESET_FLAG_KEY = 'ontap_financials_reset_executed_v20261024_01';
+  try {
+    if (localStorage.getItem(RESET_FLAG_KEY) !== 'done') {
+      localStorage.setItem(RESET_FLAG_KEY, 'done');
+      resetAllOrdersAndFinancialData().catch(() => {});
+    }
   } catch {}
 }

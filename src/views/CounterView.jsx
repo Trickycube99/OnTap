@@ -24,7 +24,8 @@ import {
   ArrowLeftRight,
   Download,
   FileSpreadsheet,
-  X
+  X,
+  RotateCcw
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime, playNewOrderChime } from '../utils/audio';
 import PrinterModal from '../components/PrinterModal';
@@ -35,7 +36,7 @@ import { calculateVerificationBridge, buildDailyArchives, exportDailyDataCsv } f
 import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
 import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
-import { syncBusinessToCloud } from '../utils/systematicDatabase';
+import { syncBusinessToCloud, resetAllOrdersAndFinancialData } from '../utils/systematicDatabase';
 
 function checkUnacceptedOverdue(order) {
   if (!order || !order.createdAt) return { elapsedMins: 0, isUnacceptedOverdue: false };
@@ -347,6 +348,9 @@ export default function CounterView({
           setPermissionsToast('⚡ Terminal Permissions Updated.');
           setTimeout(() => setPermissionsToast(''), 4500);
         }
+      } else if (msg.type === SYNC_EVENTS.FINANCIALS_RESET) {
+        if (setOrders) setOrders([]);
+        setChecklists([]);
       }
     }, activeBusinessId);
     return unsubscribe;
@@ -465,6 +469,28 @@ export default function CounterView({
   const dailyArchives = useMemo(() => {
     return buildDailyArchives({ orders, checklists });
   }, [orders, checklists]);
+
+  const [isResettingData, setIsResettingData] = useState(false);
+  const handleCounterResetFinancials = async () => {
+    playTapSound();
+    const confirmed = window.confirm(
+      '⚠️ PERMANENT RESET WARNING:\n\nAre you sure you want to reset all order history, sales totals, and cash check registers to ₹0?\n\nThis will permanently purge:\n• All kitchen and counter orders\n• All daily cash check closing registers\n• Cloud Firestore database records\n\nThis action cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    setIsResettingData(true);
+    try {
+      await resetAllOrdersAndFinancialData(activeBusinessId);
+      if (setOrders) setOrders([]);
+      setChecklists([]);
+      playSuccessChime();
+      alert('✓ All orders and financial records have been reset to ₹0 across all dashboards and cloud database.');
+    } catch (err) {
+      alert(`Reset error: ${err.message}`);
+    } finally {
+      setIsResettingData(false);
+    }
+  };
 
   // Status Handlers (FR-P2)
   const handleUpdateStatus = (orderId, newStatus, newLabel, progressPercent) => {
@@ -2031,6 +2057,54 @@ export default function CounterView({
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Reset Orders & Cash Register Card */}
+          <div
+            style={{
+              padding: '14px 16px',
+              borderRadius: 14,
+              background: '#FEF2F2',
+              border: '1.5px solid #FECACA',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 12,
+              marginBottom: 16
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#DC2626' }}>
+                <RotateCcw size={15} />
+                <span>Reset Orders &amp; Cash Data</span>
+              </div>
+              <div style={{ fontSize: 11, color: '#991B1B', marginTop: 2 }}>
+                Clear all live counter orders, served history, and cash check reports to ₹0 in POS &amp; Cloud Database.
+              </div>
+            </div>
+            <button
+              type="button"
+              style={{
+                padding: '8px 16px',
+                fontSize: 12,
+                fontWeight: 700,
+                background: '#DC2626',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 8,
+                cursor: isResettingData ? 'not-allowed' : 'pointer',
+                opacity: isResettingData ? 0.6 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+              disabled={isResettingData}
+              onClick={handleCounterResetFinancials}
+            >
+              <RotateCcw size={13} />
+              <span>{isResettingData ? 'Resetting...' : 'Reset Orders & Cash'}</span>
+            </button>
           </div>
         </div>
       )}

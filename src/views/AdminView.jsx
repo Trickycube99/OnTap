@@ -35,7 +35,8 @@ import {
   FileSpreadsheet,
   KeyRound,
   ExternalLink,
-  Store
+  Store,
+  RotateCcw
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
@@ -43,7 +44,7 @@ import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/s
 import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
-import { purgeBusinessAccountComplete, syncBusinessToCloud } from '../utils/systematicDatabase';
+import { purgeBusinessAccountComplete, syncBusinessToCloud, resetAllOrdersAndFinancialData } from '../utils/systematicDatabase';
 import { syncMenuToCloud } from '../utils/firebaseSync';
 import VerificationBridgeCard from '../components/VerificationBridgeCard';
 import {
@@ -212,10 +213,38 @@ export default function AdminView({
         );
         playSuccessChime();
         setTimeout(() => setLiveEodToast(''), 7000);
+      } else if (msg.type === SYNC_EVENTS.FINANCIALS_RESET) {
+        if (setOrders) setOrders([]);
+        if (setExpenses) setExpenses([]);
+        if (setChecklists) setChecklists([]);
       }
     }, activeBusinessId);
     return () => unsubscribe();
-  }, [setChecklists, activeBusinessId]);
+  }, [setChecklists, setOrders, setExpenses, activeBusinessId]);
+
+  // Handle Master Financials & Orders Reset (Across Dashboards & Cloud Database)
+  const [isResettingFinancials, setIsResettingFinancials] = useState(false);
+  const handleResetFinancials = async () => {
+    playTapSound();
+    const confirmed = window.confirm(
+      '⚠️ PERMANENT RESET WARNING:\n\nAre you sure you want to reset all order history, sales totals, expenses, and cash check registers to ₹0?\n\nThis will permanently purge:\n• All kitchen and counter orders\n• All sales and profit/expense records\n• All daily cash check closing registers\n• Cloud Firestore database records\n\nThis action cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    setIsResettingFinancials(true);
+    try {
+      await resetAllOrdersAndFinancialData(activeBusinessId);
+      if (setOrders) setOrders([]);
+      if (setExpenses) setExpenses([]);
+      if (setChecklists) setChecklists([]);
+      playSuccessChime();
+      alert('✓ All orders and financial records have been reset to ₹0 in all dashboards and the cloud database.');
+    } catch (err) {
+      alert(`Reset error: ${err.message}`);
+    } finally {
+      setIsResettingFinancials(false);
+    }
+  };
 
   // Coupons & Offers Management State
   const [showCouponModal, setShowCouponModal] = useState(false);
@@ -2564,6 +2593,54 @@ export default function AdminView({
               ))}
             </div>
           </div>
+
+          {/* Master Financials & Orders Reset Card */}
+          <div
+            style={{
+              marginTop: 20,
+              padding: '16px',
+              borderRadius: 14,
+              background: '#FEF2F2',
+              border: '1.5px solid #FECACA',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 12
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: '#DC2626' }}>
+                <RotateCcw size={16} />
+                <span>Reset All Financial &amp; Order Data</span>
+              </div>
+              <div style={{ fontSize: 11, color: '#991B1B', marginTop: 3 }}>
+                Permanently wipe all sales, orders, expenses, and cash check records across all dashboards &amp; Cloud Firestore database.
+              </div>
+            </div>
+            <button
+              type="button"
+              style={{
+                padding: '9px 18px',
+                fontSize: 12,
+                fontWeight: 700,
+                background: '#DC2626',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 10,
+                cursor: isResettingFinancials ? 'not-allowed' : 'pointer',
+                opacity: isResettingFinancials ? 0.6 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+              disabled={isResettingFinancials}
+              onClick={handleResetFinancials}
+            >
+              <RotateCcw size={14} />
+              <span>{isResettingFinancials ? 'Resetting...' : 'Reset All Financial Data'}</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -2874,6 +2951,54 @@ export default function AdminView({
               </div>
             </div>
           )}
+
+          {/* Master Financials & Orders Reset Card in Daily Cash Check */}
+          <div
+            style={{
+              marginTop: 20,
+              padding: '16px',
+              borderRadius: 14,
+              background: '#FEF2F2',
+              border: '1.5px solid #FECACA',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 12
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: '#DC2626' }}>
+                <RotateCcw size={16} />
+                <span>Reset Orders &amp; Cash Closing Records</span>
+              </div>
+              <div style={{ fontSize: 11, color: '#991B1B', marginTop: 3 }}>
+                Purge all daily closing counts, variance audits, and counter orders in dashboards &amp; cloud Firestore.
+              </div>
+            </div>
+            <button
+              type="button"
+              style={{
+                padding: '9px 18px',
+                fontSize: 12,
+                fontWeight: 700,
+                background: '#DC2626',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 10,
+                cursor: isResettingFinancials ? 'not-allowed' : 'pointer',
+                opacity: isResettingFinancials ? 0.6 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+              disabled={isResettingFinancials}
+              onClick={handleResetFinancials}
+            >
+              <RotateCcw size={14} />
+              <span>{isResettingFinancials ? 'Resetting...' : 'Reset All Cash & Order Data'}</span>
+            </button>
+          </div>
         </div>
       )}
 

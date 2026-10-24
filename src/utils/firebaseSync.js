@@ -693,5 +693,59 @@ export async function deleteCloudOrdersForBusiness(businessId) {
   }
 }
 
+/**
+ * Permanently purge all operational orders and checklists from Cloud Firestore database
+ * If businessId is provided and not 'all', purges for that business; otherwise purges across all businesses.
+ */
+export async function purgeAllCloudOrdersAndFinancials(businessId = null) {
+  const database = initFirebase();
+  if (!database) return { success: true, count: 0 };
+
+  try {
+    let ordersPurged = 0;
+    let checklistsPurged = 0;
+
+    // 1. Purge restaurant_orders
+    const ordersCol = collection(database, 'restaurant_orders');
+    const qOrders = businessId && businessId !== 'all'
+      ? query(ordersCol, where('businessId', '==', businessId))
+      : query(ordersCol);
+    const snapshotOrders = await getDocs(qOrders);
+
+    if (!snapshotOrders.empty) {
+      const batch = writeBatch(database);
+      snapshotOrders.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+      ordersPurged = snapshotOrders.size;
+      console.log(`🔥 [Cloud Sync] Purged ${ordersPurged} orders from Cloud Firestore.`);
+    }
+
+    // 2. Purge restaurant_checklists
+    try {
+      const checklistsCol = collection(database, 'restaurant_checklists');
+      const qChecklists = businessId && businessId !== 'all'
+        ? query(checklistsCol, where('businessId', '==', businessId))
+        : query(checklistsCol);
+      const snapshotChecklists = await getDocs(qChecklists);
+      if (!snapshotChecklists.empty) {
+        const batchChecklists = writeBatch(database);
+        snapshotChecklists.forEach((docSnap) => {
+          batchChecklists.delete(docSnap.ref);
+        });
+        await batchChecklists.commit();
+        checklistsPurged = snapshotChecklists.size;
+        console.log(`🔥 [Cloud Sync] Purged ${checklistsPurged} checklists from Cloud Firestore.`);
+      }
+    } catch {}
+
+    return { success: true, ordersPurged, checklistsPurged };
+  } catch (err) {
+    console.warn('🔥 [Cloud Sync] Error during cloud order & financial purge:', err);
+    return { success: false, error: err.message };
+  }
+}
+
 
 
