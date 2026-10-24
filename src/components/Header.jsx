@@ -286,6 +286,38 @@ export default function Header({
 
         {/* Right: Staff Profile, Sound Toggle, QR Standees, Reset & Logout */}
         <div className="header-right">
+          {/* Mobile Workstation Switcher (visible only on mobile viewports <= 768px) */}
+          <div className="mobile-station-switch">
+            {currentRole === 'admin' && (
+              <button
+                className="btn-secondary-pill mobile-switch-pill"
+                onClick={() => {
+                  playTapSound();
+                  onRoleSwitch('counter');
+                }}
+                title="Switch to Billing Counter"
+                style={{ color: '#007AFF', borderColor: '#BFDBFE', background: '#EFF6FF', fontWeight: 600 }}
+              >
+                <Layers size={13} color="#007AFF" />
+                <span>POS{activeOrdersCount > 0 ? ` (${activeOrdersCount})` : ''}</span>
+              </button>
+            )}
+            {currentRole === 'counter' && canReturnToAdmin && (
+              <button
+                className="btn-secondary-pill mobile-switch-pill"
+                onClick={() => {
+                  playTapSound();
+                  onRoleSwitch('admin');
+                }}
+                title="Return to Owner Dashboard"
+                style={{ color: '#8B5CF6', borderColor: '#DDD6FE', background: '#F5F3FF', fontWeight: 600 }}
+              >
+                <BarChart3 size={13} color="#8B5CF6" />
+                <span>Admin</span>
+              </button>
+            )}
+          </div>
+
           {/* Active Staff Operator Badge */}
           <div className="header-auth-profile-pill">
             <User size={13} color={currentRole === 'developer' ? '#38BDF8' : '#007AFF'} />

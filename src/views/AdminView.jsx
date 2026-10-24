@@ -36,7 +36,8 @@ import {
   KeyRound,
   ExternalLink,
   Store,
-  RotateCcw
+  RotateCcw,
+  SlidersHorizontal
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
@@ -1637,31 +1638,59 @@ export default function AdminView({
           <div className="screen-title">Manager Dashboard</div>
           <div className="screen-subtitle">{activeBiz?.name} — Daily Sales, Menu &amp; Staff</div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            playTapSound();
-            setShowOwnerCredentialsModal(true);
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '7px 14px',
-            borderRadius: 12,
-            background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
-            color: '#FFFFFF',
-            border: 'none',
-            fontSize: 12,
-            fontWeight: 700,
-            cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(124, 58, 237, 0.35)',
-            transition: 'all 0.2s'
-          }}
-        >
-          <KeyRound size={15} />
-          <span>My Logins &amp; PINs</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              playTapSound();
+              setActiveAdminTab('branding');
+            }}
+            title="Configure Restaurant Name, GST, Logo, and Tables"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '7px 12px',
+              borderRadius: 12,
+              background: activeAdminTab === 'branding' ? '#007AFF' : '#FFFFFF',
+              color: activeAdminTab === 'branding' ? '#FFFFFF' : '#334155',
+              border: activeAdminTab === 'branding' ? '1.5px solid #007AFF' : '1.5px solid #CBD5E1',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              boxShadow: activeAdminTab === 'branding' ? '0 2px 8px rgba(0, 122, 255, 0.35)' : 'none'
+            }}
+          >
+            <SlidersHorizontal size={14} color={activeAdminTab === 'branding' ? '#FFFFFF' : '#007AFF'} />
+            <span>Store Settings</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              playTapSound();
+              setShowOwnerCredentialsModal(true);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '7px 14px',
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+              color: '#FFFFFF',
+              border: 'none',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(124, 58, 237, 0.35)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <KeyRound size={15} />
+            <span>My Logins &amp; PINs</span>
+          </button>
+        </div>
       </div>
 
       {/* Live EOD Submission Notification Toast */}
@@ -2381,7 +2410,7 @@ export default function AdminView({
                   title="Punch walk-in or phone order"
                 >
                   <Plus size={14} color="#007AFF" />
-                  <span>{showWalkInPunch ? 'Hide Punch Grid' : '+ Punch Walk-in'}</span>
+                  <span>{showWalkInPunch ? 'Hide Punch Grid' : 'Punch Walk-in'}</span>
                 </button>
                 <button
                   type="button"

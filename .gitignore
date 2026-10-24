@@ -38,3 +38,4 @@ service-account*.json
 
 # Firebase
 .firebase/
+mobile-audit-screenshots/

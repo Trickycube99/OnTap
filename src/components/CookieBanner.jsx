@@ -76,7 +76,9 @@ export default function CookieBanner({ forceOpen = false, onClose, onOpenLegal }
         borderTop: '1px solid rgba(255, 255, 255, 0.15)',
         boxShadow: '0 -10px 40px rgba(0, 0, 0, 0.6)',
         color: '#F8FAFC',
-        fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
+        fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+        maxHeight: '85vh',
+        overflowY: 'auto'
       }}
     >
       <div

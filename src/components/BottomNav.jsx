@@ -69,19 +69,19 @@ export default function BottomNav({
       return tabs;
     } else if (currentRole === 'counter') {
       return [
-        { id: 'orders', label: 'Kitchen Orders', icon: Layers, badge: activeOrdersCount > 0 ? activeOrdersCount : null },
+        { id: 'orders', label: 'Orders', icon: Layers, badge: activeOrdersCount > 0 ? activeOrdersCount : null },
         { id: 'manual', label: 'New Order', icon: PlusCircle },
-        { id: 'stock', label: 'Items & Rates', icon: SlidersHorizontal },
+        { id: 'stock', label: 'Items', icon: SlidersHorizontal },
         { id: 'checklist', label: 'Daily Cash', icon: CheckSquare }
       ];
     } else {
       // Owner Admin
       return [
         { id: 'sales', label: 'Sales', icon: BarChart3 },
-        { id: 'orders', label: 'Bills', icon: Receipt },
-        { id: 'offers', label: 'Discounts', icon: Tag },
-        { id: 'pnl', label: 'Profit & Cash', icon: DollarSign },
-        { id: 'payroll', label: 'Salaries', icon: Users }
+        { id: 'orders', label: 'Orders', icon: Receipt },
+        { id: 'menu', label: 'Menu', icon: Utensils },
+        { id: 'pnl', label: 'P&L', icon: DollarSign },
+        { id: 'branding', label: 'Settings', icon: SlidersHorizontal }
       ];
     }
   };

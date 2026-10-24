@@ -866,16 +866,17 @@ export default function CounterView({
             background: 'linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%)',
             border: '1.5px solid #DDD6FE',
             borderRadius: 14,
-            padding: '12px 16px',
+            padding: '12px 14px',
             marginBottom: 16,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 12,
+            flexWrap: 'wrap',
+            gap: 10,
             boxShadow: '0 4px 14px rgba(124, 58, 237, 0.08)'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 200px' }}>
             <div
               style={{
                 width: 36,
@@ -910,14 +911,16 @@ export default function CounterView({
             style={{
               background: '#7C3AED',
               borderColor: '#6D28D9',
-              padding: '8px 16px',
+              padding: '8px 14px',
               fontSize: 12,
               fontWeight: 700,
               display: 'inline-flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: 6,
               whiteSpace: 'nowrap',
-              boxShadow: '0 2px 8px rgba(124, 58, 237, 0.3)'
+              boxShadow: '0 2px 8px rgba(124, 58, 237, 0.3)',
+              flex: '1 1 auto'
             }}
           >
             <BarChart3 size={14} />
