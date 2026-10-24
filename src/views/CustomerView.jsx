@@ -185,10 +185,7 @@ export default function CustomerView({
       } catch (e) {
         // fallback
       }
-      const legacy =
-        sessionStorage.getItem(dinerLegacyOrderKey) ||
-        sessionStorage.getItem('ontap_customer_last_order_id') ||
-        '';
+      const legacy = sessionStorage.getItem(dinerLegacyOrderKey) || '';
       return legacy ? [legacy] : [];
     }
     return [];

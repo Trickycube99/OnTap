@@ -51,7 +51,9 @@ import {
 import {
   detectFreshQrScan,
   isCustomerSessionExpired,
-  wipeAllCustomerData
+  wipeAllCustomerData,
+  markQrScanConsumed,
+  getCustomerStorageKeys
 } from './utils/customerSessionManager';
 
 export { sanitizeTableFromParam };
@@ -250,6 +252,7 @@ export default function App() {
   const [cart, setCart] = useState(() => {
     if (detectFreshQrScan() || isCustomerSessionExpired()) {
       wipeAllCustomerData(initialBizId);
+      markQrScanConsumed();
       return [];
     }
     return [];
@@ -260,6 +263,7 @@ export default function App() {
     if (detectFreshQrScan() || isCustomerSessionExpired()) {
       setCart([]);
       wipeAllCustomerData(activeBusinessId);
+      markQrScanConsumed(activeTable);
     }
   }, [activeBusinessId]);
   const [activeTable, setActiveTable] = useState(() => {
@@ -825,10 +829,24 @@ export default function App() {
     };
   }, [currentRole, showAboutChef, canReturnToAdmin, activeBusinessId]);
 
-  // Active in-progress orders count (table-scoped for customer view)
-  const activeOrdersCount = currentRole === 'customer'
-    ? orders.filter((o) => o.table === activeTable && o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length
-    : orders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length;
+  // Active in-progress orders count (strictly scoped to this customer's placed orders so it starts at 0 until an order is placed)
+  const activeOrdersCount = useMemo(() => {
+    if (currentRole === 'customer') {
+      if (typeof window === 'undefined') return 0;
+      try {
+        const keys = getCustomerStorageKeys(activeBusinessId);
+        const raw = sessionStorage.getItem(keys.orderIds);
+        const placedIds = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(placedIds) || placedIds.length === 0) return 0;
+        return orders.filter(
+          (o) => placedIds.includes(o.id) && o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected'
+        ).length;
+      } catch {
+        return 0;
+      }
+    }
+    return orders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length;
+  }, [currentRole, orders, activeBusinessId]);
 
   // Handle Order Placement from Customer
   const handlePlaceOrder = (newOrder) => {

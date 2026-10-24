@@ -59,7 +59,6 @@ export function wipeAllCustomerData(bizId) {
     'flowscape_guest_active_tab',
     SESSION_KEYS.SESSION_START,
     SESSION_KEYS.LAST_ACTIVITY,
-    SESSION_KEYS.LAST_SCANNED_TABLE,
     SESSION_KEYS.LAST_SCANNED_QR
   ];
 
@@ -154,12 +153,16 @@ export function detectFreshQrScan() {
     const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
     const hashParams = new URLSearchParams(hashQuery);
 
-    const isQrFlag = urlParams.get('qr') === 'true' || hashParams.get('qr') === 'true' || urlParams.get('qr') === '1' || hashParams.get('qr') === '1';
+    const isQrFlag =
+      urlParams.get('qr') === 'true' ||
+      hashParams.get('qr') === 'true' ||
+      urlParams.get('qr') === '1' ||
+      hashParams.get('qr') === '1';
     const isScanFlag = Boolean(urlParams.get('scan') || hashParams.get('scan'));
     const sig = urlParams.get('sig') || hashParams.get('sig');
     const table = urlParams.get('table') || hashParams.get('table') || urlParams.get('t') || hashParams.get('t');
 
-    // If QR or scan flag is present in URL, it is an explicit QR scan
+    // If QR or scan flag is present in URL, it is an explicit fresh QR scan
     if (isQrFlag || isScanFlag) {
       return true;
     }
@@ -167,7 +170,7 @@ export function detectFreshQrScan() {
     // Check if table + signature are present and different from previously recorded scan
     if (table && sig) {
       const lastRecordedTable = sessionStorage.getItem(SESSION_KEYS.LAST_SCANNED_TABLE);
-      if (lastRecordedTable !== table) {
+      if (lastRecordedTable && lastRecordedTable !== table) {
         return true;
       }
     }
@@ -189,15 +192,37 @@ export function markQrScanConsumed(table = '') {
     }
     sessionStorage.setItem(SESSION_KEYS.LAST_SCANNED_QR, String(Date.now()));
 
-    // Clean up ?qr=true from URL bar so in-tab refreshes don't re-trigger a wipe
+    // Clean up ?qr=true and ?scan from BOTH URL search params AND hash params so in-tab refreshes don't re-trigger a wipe
     const currentUrl = new URL(window.location.href);
+    let changed = false;
+
     if (currentUrl.searchParams.has('qr')) {
       currentUrl.searchParams.delete('qr');
+      changed = true;
     }
     if (currentUrl.searchParams.has('scan')) {
       currentUrl.searchParams.delete('scan');
+      changed = true;
     }
-    window.history.replaceState(null, '', currentUrl.toString());
+
+    if (currentUrl.hash && currentUrl.hash.includes('?')) {
+      const [hashPath, hashQuery] = currentUrl.hash.split('?');
+      const hashParams = new URLSearchParams(hashQuery);
+      if (hashParams.has('qr')) {
+        hashParams.delete('qr');
+        changed = true;
+      }
+      if (hashParams.has('scan')) {
+        hashParams.delete('scan');
+        changed = true;
+      }
+      const newHashQuery = hashParams.toString();
+      currentUrl.hash = newHashQuery ? `${hashPath}?${newHashQuery}` : hashPath;
+    }
+
+    if (changed) {
+      window.history.replaceState(null, '', currentUrl.toString());
+    }
   } catch {}
 }
 
