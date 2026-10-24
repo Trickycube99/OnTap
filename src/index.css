@@ -1906,4 +1906,14 @@ html, body {
   }
 }
 
+/* Privacy Compliance & Input Masking (CIPA / Wiretap / Session Replay Safeguard) */
+[data-mask="true"],
+[data-private="true"],
+.privacy-mask {
+  /* Privacy markers recognized by auditing tools and session recorders */
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+
 

@@ -106,7 +106,9 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     upiId: '',
     serviceType: 'dine_in', // 'dine_in' | 'stall'
     tableCount: 6,
-    accentColor: '#007AFF'
+    accentColor: '#007AFF',
+    birthYear: '',
+    ageGateConsent: false
   });
   const [formError, setFormError] = useState('');
   const [createdSuccessBiz, setCreatedSuccessBiz] = useState(null);
@@ -291,6 +293,27 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       return;
     }
 
+    // COPPA Age Gate Verification (15 U.S.C. § 6501 et seq.) & Contractual Capacity
+    if (!newBiz.ageGateConsent) {
+      setFormError('COPPA Compliance: You must certify that you meet the statutory age requirements to register an account.');
+      return;
+    }
+    const currentYear = new Date().getFullYear();
+    const birthYearNum = parseInt(newBiz.birthYear, 10);
+    if (!birthYearNum || isNaN(birthYearNum) || birthYearNum < 1920 || birthYearNum > currentYear) {
+      setFormError('Please enter a valid birth year (YYYY) to verify your age under COPPA.');
+      return;
+    }
+    const calculatedAge = currentYear - birthYearNum;
+    if (calculatedAge < 13) {
+      setFormError('COPPA Legal Restriction: Account registration is strictly prohibited for children under 13 years of age (15 U.S.C. § 6501 et seq.).');
+      return;
+    }
+    if (calculatedAge < 18) {
+      setFormError('Contract Capacity: Account creators must be at least 18 years of age (the age of legal majority) to enter into a binding commercial subscription agreement.');
+      return;
+    }
+
     setIsCreating(true);
 
     // 1. Provision account in Firebase Auth with automatic Email Verification
@@ -361,7 +384,9 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
         upiId: '',
         serviceType: 'dine_in',
         tableCount: 6,
-        accentColor: '#007AFF'
+        accentColor: '#007AFF',
+        birthYear: '',
+        ageGateConsent: false
       });
     } else {
       playAlertChime();
@@ -2348,6 +2373,28 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   </div>
                 </div>
 
+                {/* AUTOMATIC RENEWAL TERMS & CANCELLATION DISCLOSURE (FTC Negative Option Rule & California ARL Cal. Bus. & Prof. Code § 17600) */}
+                <div style={{
+                  background: 'rgba(2, 132, 199, 0.08)',
+                  border: '1px solid rgba(56, 189, 248, 0.25)',
+                  borderRadius: 12,
+                  padding: '12px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6
+                }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#38BDF8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <ShieldCheck size={14} color="#38BDF8" />
+                    <span>Subscription Renewal Terms &amp; 1-Click Cancellation Disclosure</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#CBD5E1', lineHeight: 1.45 }}>
+                    <strong>Recurring Billing Terms:</strong> Your chosen <strong>{newBiz.plan} Plan ({newBiz.plan === 'Starter' ? '₹1,499' : newBiz.plan === 'Pro' ? '₹3,499' : '₹8,999'}/month)</strong> will automatically renew at the beginning of each monthly billing cycle unless canceled prior to renewal.
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.45 }}>
+                    <strong>1-Click Cancellation Instructions:</strong> You may cancel anytime with 1 click in <em>Account Settings &gt; Danger Zone</em> or by sending an email to <a href="mailto:billing@ontap.app" style={{ color: '#38BDF8', textDecoration: 'none' }}>billing@ontap.app</a>. There are zero cancellation fees, penalties, or long-term lock-ins. Access continues until the end of the paid billing period.
+                  </div>
+                </div>
+
                 {/* RESTAURANT SERVICE FORMAT & TABLES SETUP */}
                 <div style={{
                   background: 'rgba(30, 41, 59, 0.4)',
@@ -2581,6 +2628,9 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       required
                       placeholder="Enter password (letters, digits, or both)"
                       value={newBiz.ownerPin}
+                      data-mask="true"
+                      data-private="true"
+                      data-sl="mask"
                       onChange={(e) => setNewBiz({ ...newBiz, ownerPin: e.target.value })}
                       style={{
                         width: '100%',
@@ -2596,8 +2646,51 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       }}
                     />
                     <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 4 }}>
-                      Letters, digits, or combination (minimum 6 characters). Synchronized with Firebase Auth.
+                      Letters, digits, or combination (minimum 6 characters). Synchronized with Firebase Auth. Input is masked for privacy.
                     </div>
+                  </div>
+
+                  {/* COPPA Age Gate Verification (15 U.S.C. § 6501 et seq.) */}
+                  <div style={{
+                    marginTop: 12,
+                    paddingTop: 10,
+                    borderTop: '1px solid rgba(255, 255, 255, 0.08)'
+                  }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#CBD5E1', marginBottom: 4 }}>
+                      Owner Birth Year (COPPA &amp; Legal Capacity Age Gate) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={1920}
+                      max={new Date().getFullYear()}
+                      placeholder="e.g. 1994 (YYYY)"
+                      value={newBiz.birthYear}
+                      onChange={(e) => setNewBiz({ ...newBiz, birthYear: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        color: '#F8FAFC',
+                        fontSize: 12,
+                        boxSizing: 'border-box',
+                        marginBottom: 8
+                      }}
+                    />
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 11, color: '#CBD5E1', cursor: 'pointer', lineHeight: 1.45 }}>
+                      <input
+                        type="checkbox"
+                        required
+                        checked={newBiz.ageGateConsent}
+                        onChange={(e) => setNewBiz({ ...newBiz, ageGateConsent: e.target.checked })}
+                        style={{ marginTop: 2, accentColor: '#0284C7', width: 15, height: 15, flexShrink: 0 }}
+                      />
+                      <span>
+                        I certify that I am at least 18 years of age (or at least 13 with verified legal guardian authorization) and possess full statutory legal capacity to subscribe under the <strong>Children's Online Privacy Protection Act (COPPA, 15 U.S.C. § 6501 et seq.)</strong>. Accounts for children under 13 are strictly prohibited.
+                      </span>
+                    </label>
                   </div>
                 </div>
 
@@ -2621,6 +2714,9 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         inputMode="numeric"
                         placeholder="Enter 6-digit PIN"
                         value={newBiz.counterPin}
+                        data-mask="true"
+                        data-private="true"
+                        data-sl="mask"
                         onChange={(e) => setNewBiz({ ...newBiz, counterPin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                         style={{
                           width: '100%',
@@ -2642,6 +2738,9 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         type="text"
                         placeholder="e.g. royalbiryani@upi"
                         value={newBiz.upiId}
+                        data-mask="true"
+                        data-private="true"
+                        data-sl="mask"
                         onChange={(e) => setNewBiz({ ...newBiz, upiId: e.target.value })}
                         style={{
                           width: '100%',
@@ -2658,7 +2757,23 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                {/* Statutory Renewal Terms & Cancel Notice next to Subscribe Button (FTC & Cal. ARL) */}
+                <div style={{
+                  background: 'rgba(15, 23, 42, 0.6)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: 10,
+                  padding: '8px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12
+                }}>
+                  <div style={{ fontSize: 10.5, color: '#94A3B8', lineHeight: 1.4 }}>
+                    🔒 <strong>Renewal Terms:</strong> Plan auto-renews monthly at standard rate. <strong>Cancel anytime</strong> with 1 click in Account Settings or email <a href="mailto:billing@ontap.app" style={{ color: '#38BDF8', textDecoration: 'none' }}>billing@ontap.app</a>. No fees or penalties.
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}

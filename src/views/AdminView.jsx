@@ -47,6 +47,7 @@ import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/busin
 import { purgeBusinessAccountComplete, syncBusinessToCloud, resetAllOrdersAndFinancialData } from '../utils/systematicDatabase';
 import { syncMenuToCloud } from '../utils/firebaseSync';
 import VerificationBridgeCard from '../components/VerificationBridgeCard';
+import DmcaModal from '../components/DmcaModal';
 import {
   calculateVerificationBridge,
   getDailyDateRange,
@@ -118,6 +119,7 @@ export default function AdminView({
   const [showOwnerPin, setShowOwnerPin] = useState(false);
   const [showCounterPin, setShowCounterPin] = useState(false);
   const [copiedOwnerKey, setCopiedOwnerKey] = useState(null);
+  const [showDmcaModal, setShowDmcaModal] = useState(false);
   const [activeBiz, setActiveBiz] = useState(() => getActiveBusiness() || getBusinesses()[0]);
 
   // Owner Self-Account Deletion & Data Purge State
@@ -6834,6 +6836,51 @@ export default function AdminView({
               </div>
             </div>
 
+            {/* Automatic Renewal Terms & 1-Click Cancellation Instructions (FTC Negative Option Rule & Cal. ARL § 17600) */}
+            <div style={{
+              background: 'rgba(2, 132, 199, 0.08)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              borderRadius: 14,
+              padding: '12px 14px',
+              marginBottom: 14
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#38BDF8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  ACTIVE PLAN: {activeBiz?.plan || 'PRO'} (RECURRING)
+                </span>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: '#34D399', background: 'rgba(16, 185, 129, 0.15)', padding: '2px 8px', borderRadius: 12 }}>
+                  Active &amp; Auto-Renewing
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: '#CBD5E1', lineHeight: 1.45, marginBottom: 6 }}>
+                <strong>Renewal Terms:</strong> Your subscription renews automatically each month at your plan rate unless canceled prior to the next billing cycle.
+              </div>
+              <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.45 }}>
+                <strong>1-Click Cancel Instructions:</strong> You may cancel anytime without fees or penalties by clicking "Delete Business Account &amp; Erase All Data" below or emailing <a href="mailto:billing@ontap.app" style={{ color: '#38BDF8', textDecoration: 'none' }}>billing@ontap.app</a>. Access remains active until the end of the prepaid monthly cycle.
+              </div>
+            </div>
+
+            {/* DMCA Designated Agent & Copyright Link */}
+            <div style={{ marginBottom: 14, textAlign: 'center' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOwnerCredentialsModal(false);
+                  setShowDmcaModal(true);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#38BDF8',
+                  fontSize: 11.5,
+                  textDecoration: 'underline',
+                  cursor: 'pointer'
+                }}
+              >
+                View DMCA Designated Agent Registration &amp; Copyright Policy
+              </button>
+            </div>
+
             <p style={{ fontSize: 11.5, color: '#94A3B8', lineHeight: 1.5, margin: '0 0 16px' }}>
               Use these details to log in as the Store Owner or Cashier Counter. Keep your PINs private.
             </p>
@@ -7044,6 +7091,9 @@ export default function AdminView({
                 <input
                   type="password"
                   value={deleteConfirmPin}
+                  data-mask="true"
+                  data-private="true"
+                  data-sl="mask"
                   onChange={(e) => setDeleteConfirmPin(e.target.value)}
                   placeholder="Enter your owner password"
                   disabled={isDeletingAccount}
@@ -7138,6 +7188,9 @@ export default function AdminView({
           </div>
         </div>
       )}
+
+      {/* DMCA Designated Agent Policy Modal (17 U.S.C. § 512(c)(2)) */}
+      <DmcaModal isOpen={showDmcaModal} onClose={() => setShowDmcaModal(false)} />
     </div>
   );
 }

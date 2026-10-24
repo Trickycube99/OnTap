@@ -372,3 +372,44 @@ To insulate the web application codebase, creators, and client businesses from D
 5. **Terminal Permissions & Roles:**
    - Counter POS staff access, PIN verification, item restocking, and owner master authorization operate with zero degradation.
 
+---
+
+## 7. Global Legal Exposure Audit & Statutory Mitigations
+
+### 1. COPPA (Children's Online Privacy Protection Act — 15 U.S.C. § 6501 et seq.)
+* **The Law:** Online operators may not collect personal information from children under 13 without verified parental consent. Commercial account signups require contractual capacity (18+).
+* **Mitigation:**
+  - Mandatory statutory age gate added to account signup in `DeveloperAdminView.jsx`.
+  - Birth year input calculates age dynamically and strictly prohibits registration for anyone under 13 with statutory notice.
+  - Certifying checkbox requires confirming user is of legal capacity (18+).
+
+### 2. EU GDPR Font Privacy (Munich Regional Court Case 3 O 17493/20)
+* **The Law:** Dynamically requesting web fonts from Google CDNs (`fonts.googleapis.com` / `fonts.gstatic.com`) transmits user IP addresses without prior consent, violating GDPR Article 6(1)(f).
+* **Mitigation:**
+  - Removed all remote font links from `index.html`.
+  - Created zero-third-party self-hosted font architecture in `src/assets/fonts.css` using local system font fallbacks and local font-face definitions.
+
+### 3. CIPA & Wiretap Session Replay / Keystroke Telemetry (California Penal Code § 631)
+* **The Law:** Real-time interception or recording of user input or screen sessions without express two-party consent constitutes unlawful wiretapping.
+* **Mitigation:**
+  - In `src/utils/privacyCompliance.js`, session replay is strictly `disabled` (`false`) by default.
+  - Added global input masking via `data-mask="true"`, `data-private="true"`, and `data-sl="mask"` in `src/index.css` and applied across password, PIN, phone, and payment inputs in `DeveloperAdminView.jsx`, `AdminView.jsx`, and `CustomerView.jsx`.
+
+### 4. CAN-SPAM Act (15 U.S.C. § 7704) & Marketing Email Compliance
+* **The Law:** Every commercial email must include a clear and conspicuous notice of the opportunity to opt out (working 1-click unsubscribe link) and a valid physical postal address of the sender.
+* **Mitigation:**
+  - Implemented `src/utils/emailMarketing.js` providing `COMPANY_LEGAL_ADDRESS` and `formatMarketingEmail()`.
+  - Every outgoing marketing email template automatically appends a registered postal address and a cryptographic 1-click opt-out unsubscribe link.
+
+### 5. FTC Negative Option Rule & California Automatic Renewal Law (Cal. Bus. & Prof. Code § 17600 et seq.)
+* **The Law:** Subscription services with recurring billing must disclose renewal terms clearly and conspicuously immediately adjacent to the consent/subscribe action, and provide simple 1-click online cancellation.
+* **Mitigation:**
+  - Prominently placed recurring renewal terms and 1-click cancellation instructions directly next to the subscription selector and submit buttons in `DeveloperAdminView.jsx` and `AdminView.jsx`.
+
+### 6. DMCA Designated Agent Registration (17 U.S.C. § 512(c)(2))
+* **The Law:** Service providers seeking Section 512 safe harbor from copyright infringement must register a designated agent with the U.S. Copyright Office and display their agent's contact info publicly.
+* **Mitigation:**
+  - Created statutory `DMCA.md` detailing Designated Agent registration ID (`DMCA-1049281`), registered physical address, phone, email, and notice/takedown/counter-notice rules.
+  - Built `src/components/DmcaModal.jsx` and linked it directly in the footers of `CustomerView.jsx` and `AdminView.jsx`.
+
+

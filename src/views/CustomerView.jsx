@@ -39,6 +39,7 @@ import {
   initCustomerInactivityWatcher,
   getCustomerStorageKeys
 } from '../utils/customerSessionManager';
+import DmcaModal from '../components/DmcaModal';
 
 export default function CustomerView({
   activeBusinessId = '',
@@ -106,6 +107,7 @@ export default function CustomerView({
     return '';
   });
   const [nameError, setNameError] = useState('');
+  const [showDmcaModal, setShowDmcaModal] = useState(false);
 
   // Session Notification Banner State
   const [sessionNotice, setSessionNotice] = useState(null);
@@ -879,6 +881,9 @@ export default function CustomerView({
               <input
                 type="tel"
                 className="ios-input"
+                data-mask="true"
+                data-private="true"
+                data-sl="mask"
                 style={{ fontSize: 14, padding: '10px 14px' }}
                 placeholder="+91 98765 43210"
                 value={customerPhoneInput}
@@ -3029,10 +3034,29 @@ export default function CustomerView({
         <div>
           Pure Contactless Table QR Ordering • Freshly Crafted & Served Hot
         </div>
+        <div style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            onClick={() => setShowDmcaModal(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#94A3B8',
+              fontSize: 10.5,
+              textDecoration: 'underline',
+              cursor: 'pointer'
+            }}
+          >
+            DMCA Designated Agent &amp; Copyright Policy
+          </button>
+        </div>
       </footer>
 
       {/* Mandatory Diner Name Pop-up Modal */}
       {renderNameModal()}
+
+      {/* DMCA Designated Agent Policy Modal (17 U.S.C. § 512(c)(2)) */}
+      <DmcaModal isOpen={showDmcaModal} onClose={() => setShowDmcaModal(false)} />
     </div>
   );
 }

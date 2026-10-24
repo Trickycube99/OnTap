@@ -1,0 +1,21 @@
+/**
+ * Self-Hosted Font Stack & Privacy Safe Typography
+ * Compliant with GDPR (LG München Az. 3 O 17493/20 - Zero IP transmission to Google)
+ * Uses high-performance local native system fonts and local Inter font-face definitions.
+ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: local('Inter'),
+       local('Inter-Regular'),
+       local('-apple-system'),
+       local('BlinkMacSystemFont'),
+       local('Segoe UI');
+}
+
+:root {
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+}
