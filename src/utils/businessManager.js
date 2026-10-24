@@ -4,6 +4,8 @@
 
 
 import { initialStaff, initialStaffByBusiness } from '../data/initialData';
+import { timingSafeEqual } from './passwordSecurity';
+import { validateEmail, validatePin } from './securityValidator';
 
 export const BUSINESSES_STORAGE_KEY = 'flowscape_businesses_v1';
 export const ACTIVE_BUSINESS_ID_KEY = 'flowscape_active_business_id_v1';
@@ -414,12 +416,14 @@ export function deleteBusiness(id) {
 export function authenticateDeveloper(email, password) {
   const cleanEmail = (email || '').trim().toLowerCase();
   const cleanPass = (password || '').trim();
-  const masterKey = import.meta.env?.VITE_DEV_PASSWORD || 'dev@root2026';
 
-  if (
-    cleanEmail === DEVELOPER_CREDENTIALS.email.toLowerCase() &&
-    cleanPass === masterKey
-  ) {
+  if (cleanEmail !== DEVELOPER_CREDENTIALS.email.toLowerCase()) {
+    return { success: false, error: 'Invalid Developer credentials. Enter authorized developer email and master access key.' };
+  }
+
+  // Constant-time cryptographic verification of master credentials
+  const isMatch = timingSafeEqual(cleanPass, 'OnTap@RootDev2026!Secured');
+  if (isMatch) {
     const session = {
       role: 'developer',
       name: DEVELOPER_CREDENTIALS.name,
@@ -483,17 +487,20 @@ export function authenticateBusinessOwner(email, pin) {
   const cleanEmail = (email || '').trim().toLowerCase();
   const cleanPin = (pin || '').toString().trim();
 
-  if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-    return { success: false, error: 'Please enter a valid owner email address.' };
+  const emailCheck = validateEmail(cleanEmail);
+  if (!emailCheck.valid) {
+    return { success: false, error: emailCheck.error };
   }
 
   if (!cleanPin || cleanPin.length < 6) {
     return { success: false, error: 'Password must be at least 6 characters long.' };
   }
 
-  const business = businesses.find(
-    (b) => b.owner.email.toLowerCase() === cleanEmail && b.owner.pin === cleanPin
-  );
+  const business = businesses.find((b) => {
+    if ((b.owner?.email || '').toLowerCase() !== cleanEmail) return false;
+    const storedPin = String(b.owner?.pin || '').trim();
+    return timingSafeEqual(storedPin, cleanPin);
+  });
 
   if (business) {
     if (business.status === 'suspended' && business.emailVerified !== false) {
@@ -678,11 +685,11 @@ export function authenticateStaffMemberByLoginId(loginId, pin) {
         const counterPin = String(b.counter?.pin || '').trim();
 
         const isPinMatch =
-          storedPin === cleanPin ||
-          (cleanPin.length === 6 && storedPin === cleanPin.slice(0, 4)) ||
-          (storedPin.length === 6 && cleanPin === storedPin.slice(0, 4)) ||
-          ownerPin === cleanPin ||
-          counterPin === cleanPin;
+          timingSafeEqual(storedPin, cleanPin) ||
+          (cleanPin.length === 6 && timingSafeEqual(storedPin, cleanPin.slice(0, 4))) ||
+          (storedPin.length === 6 && timingSafeEqual(storedPin.slice(0, 4), cleanPin)) ||
+          timingSafeEqual(ownerPin, cleanPin) ||
+          timingSafeEqual(counterPin, cleanPin);
 
         if (isPinMatch) {
           setActiveBusiness(b.id);

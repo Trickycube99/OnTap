@@ -35,7 +35,27 @@ export default function CloudSyncModal({ isOpen, onClose }) {
 service cloud.firestore {
   match /databases/{database}/documents {
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+    match /businesses/{businessId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /restaurant_orders/{orderDocId} {
+      allow read: if true;
+      allow create: if request.resource.data.businessId != null;
+      allow update, delete: if request.auth != null;
+    }
+    match /restaurant_checklists/{reportDocId} {
+      allow read, write: if request.auth != null;
+    }
+    match /restaurant_config/{configDocId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /restaurant_alerts/{alertDocId} {
+      allow create: if true;
+      allow read, update: if request.auth != null;
     }
   }
 }`;

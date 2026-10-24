@@ -124,7 +124,7 @@ export function handleFirestoreError(err, context = 'operation') {
 
   let errorMsg = message || 'Firestore operation error';
   if (code === 'permission-denied') {
-    errorMsg = 'Firestore Security Rules are locked. Please set rules to allow read, write in Firebase Console.';
+    errorMsg = 'Access Denied: Firestore security rules prevented this operation. Check role authorization.';
   }
 
   updateSyncState({
@@ -365,11 +365,11 @@ export function subscribeToCloudOrders(businessId, onOrdersUpdated, onStatusUpda
         isInitial = false;
       },
       (error) => {
-        console.warn('🔥 [Cloud Sync] Firestore snapshot listener error:', error);
+        if (import.meta.env?.DEV) console.warn('🔥 [Cloud Sync] Firestore snapshot listener error:', error);
         let errorMsg = error.message;
         const code = error.code || 'UNKNOWN';
         if (code === 'permission-denied') {
-          errorMsg = 'Firestore Security Rules are locked. Please set rules to allow read, write in Firebase Console.';
+          errorMsg = 'Access Denied: Firestore security rules prevented this subscription. Check role authorization.';
         }
         updateSyncState({
           status: 'error',

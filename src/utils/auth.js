@@ -10,6 +10,7 @@ import {
   getActiveBusiness,
   DEVELOPER_CREDENTIALS
 } from './businessManager.js';
+import { checkRateLimit, recordFailedAttempt, resetRateLimit } from './securityValidator.js';
 
 export const ROLES = {
   CUSTOMER: 'customer',
@@ -93,12 +94,19 @@ export const ROLE_CONFIGS = {
         return { valid: false, error: 'Staff POS PIN must be 4 to 6 numeric digits.' };
       }
 
+      const rateCheck = checkRateLimit(`login_counter_${loginId}`);
+      if (!rateCheck.allowed) {
+        return { valid: false, error: rateCheck.error };
+      }
+
       // Cross-organization multi-tenant authentication by Login ID & PIN
       const authRes = authenticateStaffMemberByLoginId(loginId, pin);
       if (!authRes.success) {
+        recordFailedAttempt(`login_counter_${loginId}`);
         return { valid: false, error: authRes.error };
       }
 
+      resetRateLimit(`login_counter_${loginId}`);
       return { valid: true, business: authRes.business, resolvedSession: authRes.session };
     },
     createSession: (creds, validationResult = null) => {
@@ -107,7 +115,7 @@ export const ROLE_CONFIGS = {
       }
       const activeBiz = getActiveBusiness();
       const pin = (creds?.pin || '').toString().trim();
-      const isAdminOverride = activeBiz.owner.pin === pin || pin === '882100' || pin === '8821';
+      const isAdminOverride = Boolean(activeBiz?.owner?.pin && activeBiz.owner.pin === pin);
       return {
         role: ROLES.COUNTER,
         businessId: activeBiz.id,
@@ -139,12 +147,19 @@ export const ROLE_CONFIGS = {
         return { valid: false, error: 'Please enter your 6-digit Owner Master PIN.' };
       }
 
+      const rateCheck = checkRateLimit(`login_admin_${email}`);
+      if (!rateCheck.allowed) {
+        return { valid: false, error: rateCheck.error };
+      }
+
       // Authenticate against multi-tenant business database
       const authRes = authenticateBusinessOwner(email, pin);
       if (!authRes.success) {
+        recordFailedAttempt(`login_admin_${email}`);
         return { valid: false, error: authRes.error };
       }
 
+      resetRateLimit(`login_admin_${email}`);
       return { valid: true, business: authRes.business, resolvedSession: authRes.session };
     },
     createSession: (creds, validationResult = null) => {
@@ -177,10 +192,19 @@ export const ROLE_CONFIGS = {
     validate: (creds) => {
       const email = (creds?.email || '').trim().toLowerCase();
       const password = (creds?.password || creds?.pin || '').trim();
+
+      const rateCheck = checkRateLimit(`login_dev_${email}`);
+      if (!rateCheck.allowed) {
+        return { valid: false, error: rateCheck.error };
+      }
+
       const authRes = authenticateDeveloper(email, password);
       if (!authRes.success) {
+        recordFailedAttempt(`login_dev_${email}`);
         return { valid: false, error: authRes.error };
       }
+
+      resetRateLimit(`login_dev_${email}`);
       return { valid: true, resolvedSession: authRes.session };
     },
     createSession: (creds, validationResult = null) => {
