@@ -1404,7 +1404,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                   No Business Accounts Registered
                 </h3>
                 <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 24px', maxWidth: 440, marginInline: 'auto', lineHeight: 1.6 }}>
-                  All previous pre-made mock demo accounts have been purged. The platform is ready from scratch for live production use. Click below to provision your first restaurant outlet.
+                  The platform is ready for live production use. Click below to provision your first restaurant outlet.
                 </p>
                 <button
                   onClick={() => {

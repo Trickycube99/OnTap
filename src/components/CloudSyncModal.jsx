@@ -71,7 +71,7 @@ service cloud.firestore {
       if (success) {
         setTestResult({
           status: 'success',
-          message: '✓ Success! Test document written to Firestore. Real-time multi-device cloud sync is live!'
+          message: '✓ Success! Connected to cloud backup. Cloud sync is active!'
         });
         playSuccessChime();
       } else {

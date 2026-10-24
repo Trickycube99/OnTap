@@ -289,7 +289,7 @@ export default function CounterView({
           }
         } catch {}
         playSuccessChime();
-        setPermissionsToast('✓ Operator switched to Business Owner.');
+        setPermissionsToast('✓ Switched to Owner.');
         setShowSwitchOperatorModal(false);
         setIsVerifyingSwitch(false);
         return;
@@ -321,7 +321,7 @@ export default function CounterView({
         }
       } catch {}
       playSuccessChime();
-      setPermissionsToast(`✓ Terminal operator switched to ${targetStaff.name} (${targetStaff.role}).`);
+      setPermissionsToast(`✓ Switched to ${targetStaff.name}.`);
       setShowSwitchOperatorModal(false);
       setIsVerifyingSwitch(false);
     } else {
@@ -358,7 +358,7 @@ export default function CounterView({
       } else if (msg.type === SYNC_EVENTS.STAFF_UPDATED) {
         if (Array.isArray(msg.payload) && setStaff) {
           setStaff(msg.payload);
-          setPermissionsToast('⚡ Terminal Permissions Updated.');
+          setPermissionsToast('✓ Permissions updated.');
           setTimeout(() => setPermissionsToast(''), 4500);
         }
       } else if (msg.type === SYNC_EVENTS.MENU_UPDATED) {
@@ -516,7 +516,7 @@ export default function CounterView({
   const handleCounterResetFinancials = async () => {
     playTapSound();
     const confirmed = window.confirm(
-      '⚠️ PERMANENT RESET WARNING:\n\nAre you sure you want to reset all order history, sales totals, and cash check registers to ₹0?\n\nThis will permanently purge:\n• All kitchen and counter orders\n• All daily cash check closing registers\n• Cloud Firestore database records\n\nThis action cannot be undone.'
+      '⚠️ PERMANENT RESET WARNING:\n\nAre you sure you want to reset all order history, sales totals, and cash check registers to ₹0?\n\nThis will permanently purge:\n• All kitchen and counter orders\n• All daily cash check closing registers\n• Cloud backup records\n\nThis action cannot be undone.'
     );
     if (!confirmed) return;
 
@@ -526,7 +526,7 @@ export default function CounterView({
       if (setOrders) setOrders([]);
       setChecklists([]);
       playSuccessChime();
-      alert('✓ All orders and financial records have been reset to ₹0 across all dashboards and cloud database.');
+      alert('✓ All orders and financial records have been reset to ₹0 across all terminals.');
     } catch (err) {
       alert(`Reset error: ${err.message}`);
     } finally {
@@ -2431,7 +2431,7 @@ export default function CounterView({
                 <span>Reset Orders &amp; Cash Data</span>
               </div>
               <div style={{ fontSize: 11, color: '#991B1B', marginTop: 2 }}>
-                Clear all live counter orders, served history, and cash check reports to ₹0 in POS &amp; Cloud Database.
+                Clear all live counter orders, served history, and cash check reports to ₹0 across terminals.
               </div>
             </div>
             <button

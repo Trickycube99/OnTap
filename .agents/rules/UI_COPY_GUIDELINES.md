@@ -48,9 +48,16 @@ Every screen must read like a polished, consumer-ready commercial product. Never
   - ❌ `Auto-optimized for instant multi-device synchronization`
   - ✅ Clean format hints: `PNG, JPG, or WebP format`
 
+### 7. Functional Integrity Rule (Zero Functional Impact)
+- **CRITICAL REQUIREMENT**: Any UI copy, label, modal, or toast adjustment MUST NEVER affect, degrade, or break the application's functionality.
+- All underlying event listeners, cross-device sync handlers, database transactions (IndexedDB & Cloud Firestore), component state managers, role permissions, and business logic MUST remain 100% intact and fully operational.
+- Only visible user-facing text, error messages, feedback toasts, and instructional guidance are updated for clean consumer-ready presentation.
+
 ---
 
 ## Checklist Before Committing UI Changes
 - [ ] Are all error and access restriction messages concise and actionable?
 - [ ] Is there any mention of database, broadcast, sync, developer triggers, or requirement IDs?
 - [ ] Would a non-technical restaurant owner or cashier understand every word without confusion?
+- [ ] Has full functionality been verified with zero regressions to events, handlers, or state logic?
+

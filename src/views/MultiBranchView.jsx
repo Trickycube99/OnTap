@@ -102,7 +102,7 @@ export default function MultiBranchView({ theme, chef: _chef }) {
               <span>Sync Menu & Pricing Network</span>
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-              Broadcast real-time dishes and pricing across all {branches.length} branches
+              Update dishes and pricing instantly across all {branches.length} branches
             </div>
           </div>
 

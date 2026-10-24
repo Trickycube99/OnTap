@@ -324,7 +324,7 @@ export default function AdminView({
   const handleResetFinancials = async () => {
     playTapSound();
     const confirmed = window.confirm(
-      '⚠️ PERMANENT RESET WARNING:\n\nAre you sure you want to reset all order history, sales totals, expenses, and cash check registers to ₹0?\n\nThis will permanently purge:\n• All kitchen and counter orders\n• All sales and profit/expense records\n• All daily cash check closing registers\n• Cloud Firestore database records\n\nThis action cannot be undone.'
+      '⚠️ PERMANENT RESET WARNING:\n\nAre you sure you want to reset all order history, sales totals, expenses, and cash check registers to ₹0?\n\nThis will permanently purge:\n• All kitchen and counter orders\n• All sales and profit/expense records\n• All daily cash check closing registers\n• Cloud backup records\n\nThis action cannot be undone.'
     );
     if (!confirmed) return;
 
@@ -335,7 +335,7 @@ export default function AdminView({
       if (setExpenses) setExpenses([]);
       if (setChecklists) setChecklists([]);
       playSuccessChime();
-      alert('✓ All orders and financial records have been reset to ₹0 in all dashboards and the cloud database.');
+      alert('✓ All orders and financial records have been reset to ₹0 across all dashboards.');
     } catch (err) {
       alert(`Reset error: ${err.message}`);
     } finally {
@@ -2832,7 +2832,7 @@ export default function AdminView({
                 <span>Reset All Financial &amp; Order Data</span>
               </div>
               <div style={{ fontSize: 11, color: '#991B1B', marginTop: 3 }}>
-                Permanently wipe all sales, orders, expenses, and cash check records across all dashboards &amp; Cloud Firestore database.
+                Permanently wipe all sales, orders, expenses, and cash check records across all dashboards.
               </div>
             </div>
             <button
@@ -3190,7 +3190,7 @@ export default function AdminView({
                 <span>Reset Orders &amp; Cash Closing Records</span>
               </div>
               <div style={{ fontSize: 11, color: '#991B1B', marginTop: 3 }}>
-                Purge all daily closing counts, variance audits, and counter orders in dashboards &amp; cloud Firestore.
+                Purge all daily closing counts, variance audits, and counter orders across all terminals.
               </div>
             </div>
             <button
