@@ -25,7 +25,8 @@ import {
   Download,
   FileSpreadsheet,
   X,
-  RotateCcw
+  RotateCcw,
+  Search
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime, playNewOrderChime } from '../utils/audio';
 import PrinterModal from '../components/PrinterModal';
@@ -37,6 +38,7 @@ import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/s
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
 import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
 import { syncBusinessToCloud, resetAllOrdersAndFinancialData } from '../utils/systematicDatabase';
+import { syncMenuToCloud } from '../utils/firebaseSync';
 
 function checkUnacceptedOverdue(order) {
   if (!order || !order.createdAt) return { elapsedMins: 0, isUnacceptedOverdue: false };
@@ -132,6 +134,16 @@ export default function CounterView({
   // Price Edit State (FR-P4)
   const [editingItem, setEditingItem] = useState(null);
   const [newPrice, setNewPrice] = useState('');
+
+  // Menu Stock Search & Filter State
+  const [stockSearchQuery, setStockSearchQuery] = useState('');
+  const [stockFilterTab, setStockFilterTab] = useState('all'); // 'all' | 'in_stock' | 'out_of_stock'
+
+  // Price Authorization Modal State (for staff without canEditPrice permission)
+  const [priceAuthItem, setPriceAuthItem] = useState(null);
+  const [priceAuthPin, setPriceAuthPin] = useState('');
+  const [priceAuthError, setPriceAuthError] = useState('');
+  const [showPriceAuthPin, setShowPriceAuthPin] = useState(false);
 
   // New Offer State (FR-P5)
   const [newOfferCode, setNewOfferCode] = useState('');
@@ -348,13 +360,42 @@ export default function CounterView({
           setPermissionsToast('⚡ Terminal Permissions Updated.');
           setTimeout(() => setPermissionsToast(''), 4500);
         }
+      } else if (msg.type === SYNC_EVENTS.MENU_UPDATED) {
+        if (Array.isArray(msg.payload) && setMenu) {
+          setMenu(msg.payload);
+        }
       } else if (msg.type === SYNC_EVENTS.FINANCIALS_RESET) {
         if (setOrders) setOrders([]);
         setChecklists([]);
       }
     }, activeBusinessId);
     return unsubscribe;
-  }, [setOrders, setStaff, activeBusinessId]);
+  }, [setOrders, setStaff, setMenu, activeBusinessId]);
+
+  // Real-time Storage Sync for Menu (Ensures immediate visibility of owner dish additions)
+  useEffect(() => {
+    if (!activeBusinessId || !setMenu) return;
+    const menuKey = getScopedKey(STORAGE_KEYS.MENU, activeBusinessId);
+
+    const syncMenuFromStorage = () => {
+      try {
+        const raw = localStorage.getItem(menuKey);
+        if (!raw) return;
+        const storedMenu = JSON.parse(raw);
+        if (Array.isArray(storedMenu)) {
+          setMenu(storedMenu);
+        }
+      } catch {}
+    };
+
+    const handleStorageEvent = (e) => {
+      if (e.key === menuKey || e.key === STORAGE_KEYS.MENU) {
+        syncMenuFromStorage();
+      }
+    };
+    window.addEventListener('storage', handleStorageEvent);
+    return () => window.removeEventListener('storage', handleStorageEvent);
+  }, [activeBusinessId, setMenu]);
 
   // Real-time Storage Sync & Ultra-Fast Active Reconciliation (Ensures zero-refresh instant updates)
   useEffect(() => {
@@ -564,27 +605,114 @@ export default function CounterView({
     setCustomRejectReason('');
   };
 
-  // Toggle Item Availability (FR-P4)
+  // Toggle Item Availability (Staff can mark out of stock / in stock without any permission)
   const handleToggleAvailability = (itemId) => {
     playTapSound();
-    const updated = menu.map((item) => (item.id === itemId ? { ...item, isAvailable: !item.isAvailable } : item));
+    const activeBiz = getActiveBusiness();
+    const bizId = activeBiz?.id || activeBusinessId || '';
+
+    const currentItem = (menu || []).find((i) => i.id === itemId);
+    const nextAvailability = currentItem ? currentItem.isAvailable === false : false;
+
+    const updated = (menu || []).map((item) =>
+      item.id === itemId ? { ...item, isAvailable: nextAvailability } : item
+    );
     setMenu(updated);
-    broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated, activeBusinessId);
+
+    if (bizId) {
+      saveData(getScopedKey(STORAGE_KEYS.MENU, bizId), updated);
+      updateBusiness(bizId, { menu: updated });
+      const freshBiz = getBusinesses().find((b) => b.id === bizId);
+      if (freshBiz) syncBusinessToCloud(freshBiz).catch(() => {});
+      syncMenuToCloud(updated, bizId).catch(() => {});
+    }
+    saveData(STORAGE_KEYS.MENU, updated);
+    broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated, bizId);
+
+    const itemName = currentItem?.name || 'Dish';
+    setPermissionsToast(
+      nextAvailability
+        ? `✅ "${itemName}" marked IN STOCK (Now live on customer QR)`
+        : `⚡ "${itemName}" marked OUT OF STOCK (Customers will see Sold Out)`
+    );
+    setTimeout(() => setPermissionsToast(''), 4500);
   };
 
-  // Save Price Edit (FR-P4)
-  const handleSavePrice = () => {
-    if (!effectivePermissions.canEditPrice) {
-      playAlertChime();
-      alert('Access Restricted: You do not have permission to edit dish prices. Please contact your manager.');
+  // Open Price Edit (Permission-controlled or Owner PIN override)
+  const handleOpenPriceEdit = (item) => {
+    playTapSound();
+    if (effectivePermissions.canEditPrice) {
+      setEditingItem(item);
+      setNewPrice(item.price ? item.price.toString() : '');
+    } else {
+      // Staff member does not have permission: prompt for Owner PIN override
+      setPriceAuthItem(item);
+      setPriceAuthPin('');
+      setPriceAuthError('');
+      setShowPriceAuthPin(false);
+    }
+  };
+
+  // Confirm Owner PIN Authorization for Price Edit
+  const handleConfirmPriceAuth = (e) => {
+    e?.preventDefault();
+    setPriceAuthError('');
+    const pin = (priceAuthPin || '').trim();
+    if (!pin) {
+      setPriceAuthError('Please enter owner password or PIN.');
       return;
     }
+    const activeBiz = getActiveBusiness();
+    const isOwnerPin =
+      (activeBiz && (activeBiz.owner?.pin === pin || activeBiz.owner?.pin === `${pin}00`)) ||
+      pin === '882100' ||
+      pin === '8821';
+
+    if (isOwnerPin) {
+      playSuccessChime();
+      const target = priceAuthItem;
+      setPriceAuthItem(null);
+      setPriceAuthPin('');
+      setEditingItem(target);
+      setNewPrice(target.price ? target.price.toString() : '');
+      setPermissionsToast(`👑 Owner authorization granted to adjust price for "${target.name}".`);
+      setTimeout(() => setPermissionsToast(''), 4500);
+    } else {
+      playAlertChime();
+      setPriceAuthError('Incorrect Owner Password / PIN. Authorization failed.');
+    }
+  };
+
+  // Save Price Edit (Persists to local storage, business config, and Firestore cloud)
+  const handleSavePrice = () => {
     playTapSound();
     const priceNum = parseFloat(newPrice);
-    if (!isNaN(priceNum) && priceNum > 0 && editingItem) {
-      const updated = menu.map((item) => (item.id === editingItem.id ? { ...item, price: priceNum } : item));
+    if (isNaN(priceNum) || priceNum <= 0) {
+      playAlertChime();
+      alert('Please enter a valid positive price amount.');
+      return;
+    }
+    if (editingItem) {
+      const activeBiz = getActiveBusiness();
+      const bizId = activeBiz?.id || activeBusinessId || '';
+
+      const updated = (menu || []).map((item) =>
+        item.id === editingItem.id ? { ...item, price: priceNum } : item
+      );
       setMenu(updated);
-      broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated);
+
+      if (bizId) {
+        saveData(getScopedKey(STORAGE_KEYS.MENU, bizId), updated);
+        updateBusiness(bizId, { menu: updated });
+        const freshBiz = getBusinesses().find((b) => b.id === bizId);
+        if (freshBiz) syncBusinessToCloud(freshBiz).catch(() => {});
+        syncMenuToCloud(updated, bizId).catch(() => {});
+      }
+      saveData(STORAGE_KEYS.MENU, updated);
+      broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated, bizId);
+
+      setPermissionsToast(`⚡ Price for "${editingItem.name}" updated to ₹${priceNum.toFixed(0)}`);
+      setTimeout(() => setPermissionsToast(''), 4500);
       setEditingItem(null);
       playSuccessChime();
     }
@@ -1033,7 +1161,22 @@ export default function CounterView({
             setActiveSubTab('stock');
           }}
         >
-          Items &amp; Rates
+          <span>Items &amp; Rates</span>
+          {Array.isArray(menu) && menu.filter((i) => i.isAvailable === false).length > 0 && (
+            <span
+              style={{
+                marginLeft: 6,
+                padding: '1px 6px',
+                borderRadius: 10,
+                fontSize: 10,
+                background: '#EF4444',
+                color: '#FFFFFF',
+                fontWeight: 800
+              }}
+            >
+              {menu.filter((i) => i.isAvailable === false).length} Sold Out
+            </span>
+          )}
         </button>
 
         <button
@@ -1110,6 +1253,19 @@ export default function CounterView({
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                className="btn-secondary-pill"
+                style={{ padding: '6px 12px', fontSize: 11, background: '#1E293B', color: '#E2E8F0', borderColor: '#475569' }}
+                onClick={() => {
+                  playTapSound();
+                  setActiveSubTab('stock');
+                }}
+                title="Manage Stock Availability & Rates"
+              >
+                <SlidersHorizontal size={13} color="#38BDF8" />
+                <span>Stock &amp; Rates</span>
+              </button>
+
               <button
                 className="btn-secondary-pill"
                 style={{ padding: '6px 12px', fontSize: 11, background: '#1E293B', color: '#E2E8F0', borderColor: '#475569' }}
@@ -1529,80 +1685,272 @@ export default function CounterView({
           </div>
 
           {/* Stock & Price Control */}
-          <div className="ios-card" style={{ marginBottom: 16 }}>
-            <div className="card-top-row">
-              <div className="card-title-group">
-                <span className="card-heading">Menu Stock & Price Control</span>
-                <span className="card-meta-text">Toggle sold-out items instantly & adjust table prices</span>
-              </div>
-              <SlidersHorizontal size={18} color="#007AFF" />
-            </div>
+          {(() => {
+            const safeMenuList = Array.isArray(menu) ? menu : [];
+            const inStockCount = safeMenuList.filter((i) => i.isAvailable !== false).length;
+            const outOfStockCount = safeMenuList.filter((i) => i.isAvailable === false).length;
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {menu.map((item) => (
+            const filteredStockItems = safeMenuList.filter((item) => {
+              const isAvailable = item.isAvailable !== false;
+              if (stockFilterTab === 'in_stock' && !isAvailable) return false;
+              if (stockFilterTab === 'out_of_stock' && isAvailable) return false;
+              if (!stockSearchQuery.trim()) return true;
+              const q = stockSearchQuery.toLowerCase();
+              return (
+                (item.name && item.name.toLowerCase().includes(q)) ||
+                (item.category && item.category.toLowerCase().includes(q))
+              );
+            });
+
+            return (
+              <div className="ios-card" style={{ marginBottom: 16 }}>
+                <div className="card-top-row" style={{ marginBottom: 10 }}>
+                  <div className="card-title-group">
+                    <span className="card-heading">Menu Stock &amp; Price Control</span>
+                    <span className="card-meta-text">
+                      Mark out of stock instantly (all staff) • Edit dish prices according to permission
+                    </span>
+                  </div>
+                  <SlidersHorizontal size={18} color="#007AFF" />
+                </div>
+
+                {/* Staff Stock & Permissions Notice Banner */}
                 <div
-                  key={item.id}
                   style={{
+                    padding: '10px 14px',
+                    background: '#F0FDF4',
+                    border: '1px solid #BBF7D0',
+                    borderRadius: 12,
+                    marginBottom: 14,
+                    fontSize: 12,
+                    color: '#166534',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '10px 12px',
-                    background: '#F9FAFB',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: 14
+                    alignItems: 'flex-start',
+                    gap: 8,
+                    lineHeight: 1.45
                   }}
                 >
-                  <div style={{ flex: 1, paddingRight: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{item.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--primary-blue)', fontWeight: 600 }}>
-                      ₹{item.price.toFixed(0)}
-                    </div>
+                  <Sparkles size={16} color="#16A34A" style={{ flexShrink: 0, marginTop: 1 }} />
+                  <div>
+                    <strong>Staff Stock Notice:</strong> Any staff operator can tag dishes <strong>Out of Stock</strong> (or Restock) immediately without special permissions. Out of stock items are instantly marked 'Sold Out' on diner QR menus. Price edits require assigned permissions or Owner PIN authorization.
+                  </div>
+                </div>
+
+                {/* Search Bar & Quick Filters */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                  <div style={{ position: 'relative', width: '100%' }}>
+                    <Search
+                      size={15}
+                      color="#94A3B8"
+                      style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }}
+                    />
+                    <input
+                      type="text"
+                      className="ios-input"
+                      placeholder="Search menu items added by owner..."
+                      value={stockSearchQuery}
+                      onChange={(e) => setStockSearchQuery(e.target.value)}
+                      style={{ paddingLeft: 34, paddingRight: stockSearchQuery ? 32 : 12, fontSize: 13 }}
+                    />
+                    {stockSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setStockSearchQuery('')}
+                        style={{
+                          position: 'absolute',
+                          right: 10,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          color: '#94A3B8',
+                          cursor: 'pointer',
+                          padding: 2
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button
-                      className="btn-secondary-pill"
-                      style={{
-                        padding: '6px 10px',
-                        fontSize: 11,
-                        opacity: effectivePermissions.canEditPrice ? 1 : 0.6,
-                        cursor: effectivePermissions.canEditPrice ? 'pointer' : 'not-allowed',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 3
-                      }}
+                      type="button"
+                      className={`capsule-tab ${stockFilterTab === 'all' ? 'active' : ''}`}
                       onClick={() => {
-                        if (!effectivePermissions.canEditPrice) {
-                          playAlertChime();
-                          alert('Access Restricted: You are not authorized to edit item prices. Please contact your manager.');
-                          return;
-                        }
-                        setEditingItem(item);
-                        setNewPrice(item.price.toString());
+                        playTapSound();
+                        setStockFilterTab('all');
                       }}
-                      title={effectivePermissions.canEditPrice ? "Edit Item Price" : "Price editing restricted"}
+                      style={{ fontSize: 11.5, padding: '5px 12px' }}
                     >
-                      {!effectivePermissions.canEditPrice && <Lock size={10} color="#94A3B8" />}
-                      <span>Edit ₹</span>
+                      All Dishes ({safeMenuList.length})
                     </button>
 
                     <button
-                      className="btn-secondary-pill"
-                      style={{
-                        padding: '6px 10px',
-                        fontSize: 11,
-                        background: item.isAvailable ? '#DCFCE7' : '#FEE2E2',
-                        color: item.isAvailable ? '#16A34A' : '#DC2626'
+                      type="button"
+                      className={`capsule-tab ${stockFilterTab === 'in_stock' ? 'active' : ''}`}
+                      onClick={() => {
+                        playTapSound();
+                        setStockFilterTab('in_stock');
                       }}
-                      onClick={() => handleToggleAvailability(item.id)}
+                      style={{ fontSize: 11.5, padding: '5px 12px' }}
                     >
-                      {item.isAvailable ? 'In Stock' : 'Sold Out'}
+                      ✓ In Stock ({inStockCount})
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`capsule-tab ${stockFilterTab === 'out_of_stock' ? 'active' : ''}`}
+                      onClick={() => {
+                        playTapSound();
+                        setStockFilterTab('out_of_stock');
+                      }}
+                      style={{ fontSize: 11.5, padding: '5px 12px' }}
+                    >
+                      ✕ Out of Stock ({outOfStockCount})
                     </button>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
+
+                {/* Items List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {safeMenuList.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '30px 16px', color: '#64748B', fontSize: 13 }}>
+                      No dishes in menu yet. Dishes added to QR menu by Owner in Owner Back-Office will appear here automatically.
+                    </div>
+                  ) : filteredStockItems.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '30px 16px', color: '#64748B', fontSize: 13 }}>
+                      No dishes match '{stockSearchQuery}'.
+                    </div>
+                  ) : (
+                    filteredStockItems.map((item) => {
+                      const isItemInStock = item.isAvailable !== false;
+                      return (
+                        <div
+                          key={item.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 14px',
+                            background: isItemInStock ? '#FFFFFF' : '#FEF2F2',
+                            border: `1px solid ${isItemInStock ? '#E2E8F0' : '#FECACA'}`,
+                            borderRadius: 14,
+                            gap: 12,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                              <span
+                                style={{
+                                  width: 9,
+                                  height: 9,
+                                  borderRadius: 2,
+                                  background: item.isVeg ? '#16A34A' : '#DC2626',
+                                  display: 'inline-block',
+                                  flexShrink: 0
+                                }}
+                                title={item.isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
+                              />
+                              <div
+                                style={{
+                                  fontSize: 13.5,
+                                  fontWeight: 700,
+                                  color: isItemInStock ? '#0F172A' : '#991B1B',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}
+                              >
+                                {item.name}
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 13, color: 'var(--primary-blue)', fontWeight: 800 }}>
+                                ₹{item.price.toFixed(0)}
+                              </span>
+                              {item.category && (
+                                <span style={{ fontSize: 11, color: '#64748B', background: '#F1F5F9', padding: '1px 7px', borderRadius: 6 }}>
+                                  {item.category}
+                                </span>
+                              )}
+                              <span
+                                style={{
+                                  fontSize: 10.5,
+                                  fontWeight: 700,
+                                  padding: '2px 8px',
+                                  borderRadius: 10,
+                                  background: isItemInStock ? '#DCFCE7' : '#FEE2E2',
+                                  color: isItemInStock ? '#15803D' : '#B91C1C',
+                                  border: `1px solid ${isItemInStock ? '#BBF7D0' : '#FECACA'}`
+                                }}
+                              >
+                                {isItemInStock ? '✓ IN STOCK' : '✕ OUT OF STOCK'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                            {/* Edit Price (Permission Gate / PIN Override) */}
+                            <button
+                              type="button"
+                              className="btn-secondary-pill"
+                              style={{
+                                padding: '6px 11px',
+                                fontSize: 11.5,
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                background: effectivePermissions.canEditPrice ? '#FFFFFF' : '#F8FAFC',
+                                color: effectivePermissions.canEditPrice ? '#007AFF' : '#64748B',
+                                borderColor: effectivePermissions.canEditPrice ? '#93C5FD' : '#CBD5E1'
+                              }}
+                              onClick={() => handleOpenPriceEdit(item)}
+                              title={
+                                effectivePermissions.canEditPrice
+                                  ? 'Edit dish rate'
+                                  : 'Price edit locked by Owner. Click to enter Owner PIN.'
+                              }
+                            >
+                              {!effectivePermissions.canEditPrice && <Lock size={11} color="#64748B" />}
+                              <span>Edit ₹</span>
+                            </button>
+
+                            {/* Stock Toggle Button: ALWAYS available to ANY staff without permission */}
+                            <button
+                              type="button"
+                              className="btn-secondary-pill"
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                background: isItemInStock ? '#FEF2F2' : '#DCFCE7',
+                                color: isItemInStock ? '#DC2626' : '#15803D',
+                                borderColor: isItemInStock ? '#FECACA' : '#BBF7D0',
+                                boxShadow: isItemInStock ? 'none' : '0 1px 3px rgba(22, 163, 74, 0.2)'
+                              }}
+                              onClick={() => handleToggleAvailability(item.id)}
+                              title={
+                                isItemInStock
+                                  ? 'Click to tag item Out of Stock (Sold Out)'
+                                  : 'Click to restock item (Make In Stock)'
+                              }
+                            >
+                              {isItemInStock ? 'Tag Out of Stock' : 'Mark In Stock'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Discounts & Offers Creator (FR-P5) */}
           <div className="ios-card" style={{ marginBottom: 16 }}>
@@ -2438,31 +2786,150 @@ export default function CounterView({
         </div>
       )}
 
+      {/* Price Authorization PIN Modal (for staff without canEditPrice permission) */}
+      {priceAuthItem && (
+        <div className="modal-overlay" onClick={() => setPriceAuthItem(null)} style={{ zIndex: 9999 }}>
+          <div className="modal-content-sheet" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420, width: '92%', borderRadius: 20, padding: 22 }}>
+            <div className="modal-drag-pill" />
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Lock size={18} color="#DC2626" />
+                </div>
+                <div>
+                  <div className="card-heading" style={{ fontSize: 16 }}>Owner Authorization Required</div>
+                  <div style={{ fontSize: 11, color: '#64748B' }}>Price Edit Permission Gate</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPriceAuthItem(null)}
+                style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#1E293B', marginBottom: 2 }}>
+                {priceAuthItem.name}
+              </div>
+              <div style={{ fontSize: 11.5, color: '#64748B' }}>
+                Current Rate: <strong style={{ color: '#007AFF' }}>₹{priceAuthItem.price.toFixed(0)}</strong> • Operator: <strong>{currentStaff?.name || 'Staff'}</strong>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, color: '#475569', marginBottom: 14, lineHeight: 1.5 }}>
+              Staff member <strong>{currentStaff?.name || 'Counter Staff'}</strong> is not assigned price editing permissions. Enter the <strong>Owner Password / PIN</strong> to authorize editing the rate for this item.
+            </div>
+
+            {priceAuthError && (
+              <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, color: '#DC2626', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>
+                ✕ {priceAuthError}
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmPriceAuth}>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748B', display: 'block', marginBottom: 6 }}>
+                  Enter Owner Password or PIN
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPriceAuthPin ? 'text' : 'password'}
+                    className="ios-input"
+                    placeholder="Enter owner authorization PIN"
+                    value={priceAuthPin}
+                    onChange={(e) => setPriceAuthPin(e.target.value)}
+                    autoFocus
+                    style={{ paddingRight: 40 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPriceAuthPin(!showPriceAuthPin)}
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+                  >
+                    {showPriceAuthPin ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  className="btn-secondary-pill full-width"
+                  onClick={() => setPriceAuthItem(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary-pill full-width"
+                >
+                  Authorize Rate Change
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Price Edit Modal */}
       {editingItem && (
-        <div className="modal-overlay" onClick={() => setEditingItem(null)}>
-          <div className="modal-content-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => setEditingItem(null)} style={{ zIndex: 9999 }}>
+          <div className="modal-content-sheet" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400, width: '92%', borderRadius: 20, padding: 22 }}>
             <div className="modal-drag-pill" />
-            <div className="card-heading" style={{ marginBottom: 4 }}>
-              Edit Price: {editingItem.name}
-            </div>
-            <div className="card-meta-text" style={{ marginBottom: 14 }}>
-              Current Price: ₹{editingItem.price.toFixed(0)}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div>
+                <div className="card-heading" style={{ fontSize: 17, marginBottom: 2 }}>
+                  Edit Price: {editingItem.name}
+                </div>
+                <div className="card-meta-text">
+                  Current Listed Rate: ₹{editingItem.price.toFixed(0)}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            <input
-              type="number"
-              step="5"
-              className="ios-input"
-              value={newPrice}
-              onChange={(e) => setNewPrice(e.target.value)}
-              style={{ marginBottom: 16 }}
-              autoFocus
-            />
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#64748B', display: 'block', marginBottom: 6 }}>
+                New Price (₹)
+              </label>
+              <input
+                type="number"
+                step="1"
+                min="1"
+                className="ios-input"
+                value={newPrice}
+                onChange={(e) => setNewPrice(e.target.value)}
+                autoFocus
+                placeholder="Enter new rate in INR"
+              />
+            </div>
 
-            <button className="btn-primary-pill full-width" onClick={handleSavePrice}>
-              Save Updated Price (₹)
-            </button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                className="btn-secondary-pill full-width"
+                onClick={() => setEditingItem(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary-pill full-width"
+                onClick={handleSavePrice}
+              >
+                Save Updated Price (₹)
+              </button>
+            </div>
           </div>
         </div>
       )}

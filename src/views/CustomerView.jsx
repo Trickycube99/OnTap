@@ -283,11 +283,18 @@ export default function CustomerView({
       return null;
     }
     // If a specific pairing dish ID is configured, find that dish
+    let candidate = null;
     if (upsellPairingId !== undefined) {
-      return safeMenu.find((item) => String(item.id) === String(upsellPairingId)) || null;
+      candidate = safeMenu.find((item) => String(item.id) === String(upsellPairingId)) || null;
+    } else {
+      // If no preference configured at all, check if dish id 3 exists; otherwise return null
+      candidate = safeMenu.find((item) => item.id === 3) || null;
     }
-    // If no preference configured at all, check if dish id 3 exists; otherwise return null (do not force safeMenu[0])
-    return safeMenu.find((item) => item.id === 3) || null;
+    // Do not suggest dishes that are marked Out of Stock!
+    if (candidate && candidate.isAvailable === false) {
+      return null;
+    }
+    return candidate;
   }, [upsellPairingId, safeMenu]);
 
   // Find all orders placed by this diner session on this table:
@@ -415,6 +422,11 @@ export default function CustomerView({
   };
 
   const handleAddToCart = (item, note = '') => {
+    if (item.isAvailable === false) {
+      playAlertChime();
+      alert(language === 'hi' ? 'यह व्यंजन इस समय समाप्त (Out of Stock) है।' : 'Sorry, this dish is currently out of stock.');
+      return;
+    }
     playTapSound();
     setCart((prevCart) => {
       const existing = prevCart.find((ci) => ci.id === item.id && ci.note === note);
@@ -2572,15 +2584,17 @@ export default function CustomerView({
             {language === 'hi' ? 'कोई व्यंजन नहीं मिला।' : 'No culinary items found matching your filters.'}
           </div>
         ) : (
-          filteredMenu.map((item) => (
-            <div
-              key={item.id}
-              className={`ios-card ${!item.isAvailable ? 'opacity-50' : ''}`}
-              style={{
-                opacity: item.isAvailable ? 1 : 0.6,
-                filter: item.isAvailable ? 'none' : 'grayscale(0.7)'
-              }}
-            >
+          filteredMenu.map((item) => {
+            const isItemInStock = item.isAvailable !== false;
+            return (
+              <div
+                key={item.id}
+                className={`ios-card ${!isItemInStock ? 'opacity-50' : ''}`}
+                style={{
+                  opacity: isItemInStock ? 1 : 0.6,
+                  filter: isItemInStock ? 'none' : 'grayscale(0.7)'
+                }}
+              >
               <div style={{ display: 'flex', gap: 14 }}>
                 {/* Item Image with Veg/Non-veg badge */}
                 <div style={{ position: 'relative', width: 96, height: 96, flexShrink: 0 }}>
@@ -2650,7 +2664,7 @@ export default function CustomerView({
                       ))}
                     </div>
 
-                    {item.isAvailable ? (
+                    {isItemInStock ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <button
                           className="btn-secondary-pill"
@@ -2740,15 +2754,27 @@ export default function CustomerView({
                         )}
                       </div>
                     ) : (
-                      <span className="status-pill pending" style={{ fontSize: 11 }}>
-                        {t('soldOut')}
+                      <span
+                        className="status-pill pending"
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          background: '#FEE2E2',
+                          color: '#DC2626',
+                          border: '1px solid #FECACA',
+                          padding: '4px 10px',
+                          borderRadius: 14
+                        }}
+                      >
+                        {t('soldOut') || 'Sold Out'}
                       </span>
                     )}
                   </div>
                 </div>
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
