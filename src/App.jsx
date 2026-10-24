@@ -48,6 +48,11 @@ import {
   verifyTableSignature,
   verifyOrLockTable
 } from './utils/tableSecurity';
+import {
+  detectFreshQrScan,
+  isCustomerSessionExpired,
+  wipeAllCustomerData
+} from './utils/customerSessionManager';
 
 export { sanitizeTableFromParam };
 
@@ -242,7 +247,21 @@ export default function App() {
   );
 
   // Cart & Active Table State (Customer specific, initialized from scanned QR if present)
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    if (detectFreshQrScan() || isCustomerSessionExpired()) {
+      wipeAllCustomerData(initialBizId);
+      return [];
+    }
+    return [];
+  });
+
+  // Automatically wipe customer cart & session if a fresh QR scan is detected or 2-hour inactivity expired
+  useEffect(() => {
+    if (detectFreshQrScan() || isCustomerSessionExpired()) {
+      setCart([]);
+      wipeAllCustomerData(activeBusinessId);
+    }
+  }, [activeBusinessId]);
   const [activeTable, setActiveTable] = useState(() => {
     const activeBiz = initialBiz || getActiveBusiness();
     const isStall = activeBiz?.serviceType === 'stall' || (activeBiz?.tables?.length === 1 && activeBiz.tables[0].includes('Stand'));

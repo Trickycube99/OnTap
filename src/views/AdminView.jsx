@@ -45,6 +45,19 @@ import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
 import { purgeBusinessAccountComplete, syncBusinessToCloud } from '../utils/systematicDatabase';
 import { syncMenuToCloud } from '../utils/firebaseSync';
+import VerificationBridgeCard from '../components/VerificationBridgeCard';
+import {
+  calculateVerificationBridge,
+  getDailyDateRange,
+  getWeekDateRange,
+  get30thMonthDateRange,
+  buildDailyArchives,
+  buildWeeklyArchives,
+  buildMonthlyArchives,
+  exportDailyDataCsv,
+  exportWeeklyDataCsv,
+  exportMonthlyDataCsv
+} from '../utils/salesBridge';
 
 // Coupons & Offers Helpers (placed outside component for purity)
 const isOfferExpired = (offer) => {
@@ -543,41 +556,34 @@ export default function AdminView({
     return (orders || []).filter((o) => o && o.status !== 'rejected' && o.status !== 'cancelled');
   }, [orders]);
 
-  // Today's orders (local calendar day: 00:00:00 to 23:59:59)
+  // Reset Cycle Period Metadata
+  const weekPeriodInfo = useMemo(() => getWeekDateRange(new Date()), []);
+  const monthPeriodInfo = useMemo(() => get30thMonthDateRange(new Date()), []);
+
+  // Today's orders (local calendar day: 00:00:00 to 23:59:59, resetting on midnight)
   const todayOrders = useMemo(() => {
-    const now = new Date();
+    const { start, end } = getDailyDateRange(new Date());
     return validOrders.filter((o) => {
       const d = getOrderDate(o);
-      return (
-        d.getFullYear() === now.getFullYear() &&
-        d.getMonth() === now.getMonth() &&
-        d.getDate() === now.getDate()
-      );
+      return d >= start && d <= end;
     });
   }, [validOrders]);
 
-  // This Week's orders (current calendar week: Monday 00:00:00 to Sunday 23:59:59, resetting every week)
+  // This Week's orders (current calendar week: Monday 00:00:00 to Sunday 23:59:59, resetting every Monday)
   const weekOrders = useMemo(() => {
-    const now = new Date();
-    const currentDay = now.getDay();
-    const distanceToMonday = (currentDay + 6) % 7;
-    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday, 0, 0, 0, 0);
-    const endOfWeek = new Date(startOfWeek.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
+    const { startOfWeek, endOfWeek } = getWeekDateRange(new Date());
     return validOrders.filter((o) => {
       const d = getOrderDate(o);
       return d >= startOfWeek && d <= endOfWeek;
     });
   }, [validOrders]);
 
-  // This Month's orders (1st of current month to end of month, resetting every month)
+  // This Month's orders (30th to 29th monthly cycle, resetting on every 30th)
   const monthOrders = useMemo(() => {
-    const now = new Date();
+    const { startOfCycle, endOfCycle } = get30thMonthDateRange(new Date());
     return validOrders.filter((o) => {
       const d = getOrderDate(o);
-      return (
-        d.getFullYear() === now.getFullYear() &&
-        d.getMonth() === now.getMonth()
-      );
+      return d >= startOfCycle && d <= endOfCycle;
     });
   }, [validOrders]);
 
@@ -622,6 +628,29 @@ export default function AdminView({
   const totalRecordedExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const netDailyProfit = effectiveGrossSales - totalRecordedExpenses;
   const expectedNetProfit = todayGrossSales - totalRecordedExpenses;
+
+  // Real-Time Verification Bridge between Counter Served Orders and Owner Expected Orders
+  const bridgeData = useMemo(() => {
+    return calculateVerificationBridge({
+      orders,
+      latestEodReport
+    });
+  }, [orders, latestEodReport]);
+
+  // Daily Cash Check Archives (automatically preserving all historical days)
+  const dailyArchives = useMemo(() => {
+    return buildDailyArchives({ orders, checklists });
+  }, [orders, checklists]);
+
+  // Weekly Sales & P&L Archives (Monday to Sunday Cycles, Resetting on Monday)
+  const weeklyArchives = useMemo(() => {
+    return buildWeeklyArchives({ orders, expenses });
+  }, [orders, expenses]);
+
+  // Monthly Sales & P&L Archives (30th to 29th Cycles, Resetting on 30th)
+  const monthlyArchives = useMemo(() => {
+    return buildMonthlyArchives({ orders, expenses });
+  }, [orders, expenses]);
 
   // Cash vs Obligations in ₹ (Section 5.4)
   const totalUpcomingObligations =
@@ -1735,6 +1764,13 @@ export default function AdminView({
             )}
           </div>
 
+          {/* Real-Time Verification Bridge (Counter Served ⟷ Owner Expected) */}
+          <VerificationBridgeCard
+            bridgeData={bridgeData}
+            role="owner"
+            onNavigateToCashCheck={() => setActiveAdminTab('eod-checklists')}
+          />
+
           {/* Top 3 KPI Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
             <div className="ios-card active-gradient" style={{ padding: '12px 10px' }}>
@@ -1761,27 +1797,37 @@ export default function AdminView({
               <div style={{ fontSize: 10, color: hasEodSubmitted ? '#15803D' : '#16A34A', marginTop: 4 }}>
                 {hasEodSubmitted
                   ? `Filled (Expected: ₹${todayGrossSales.toFixed(0)})`
-                  : `${totalOrdersCount} orders (Expected)`}
+                  : `${totalOrdersCount} orders (Resets Midnight)`}
               </div>
             </div>
 
             <div className="ios-card" style={{ padding: '12px 10px' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>This Week</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>This Week</div>
+                <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8' }}>
+                  Resets Mon
+                </span>
+              </div>
               <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>
                 ₹{weekSales.toFixed(0)}
               </div>
               <div style={{ fontSize: 10, color: '#16A34A', marginTop: 4 }}>
-                {weekOrders.length} {weekOrders.length === 1 ? 'order' : 'orders'} this week
+                {weekOrders.length} {weekOrders.length === 1 ? 'order' : 'orders'} • {weekPeriodInfo.daysUntilReset}d left
               </div>
             </div>
 
             <div className="ios-card" style={{ padding: '12px 10px' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>This Month</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>This Month</div>
+                <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#FEF3C7', color: '#B45309' }}>
+                  Resets 30th
+                </span>
+              </div>
               <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>
                 ₹{monthSales.toFixed(0)}
               </div>
               <div style={{ fontSize: 10, color: '#16A34A', marginTop: 4 }}>
-                {monthOrders.length} {monthOrders.length === 1 ? 'order' : 'orders'} this month
+                {monthOrders.length} {monthOrders.length === 1 ? 'order' : 'orders'} • {monthPeriodInfo.daysUntilReset}d left
               </div>
             </div>
           </div>
@@ -2304,12 +2350,232 @@ export default function AdminView({
               </div>
             </div>
           </div>
+
+          {/* WEEKLY SALES & P&L ARCHIVE SECTION (Monday to Sunday, Reset on Monday) */}
+          <div className="ios-card" style={{ marginBottom: 16 }}>
+            <div className="card-top-row">
+              <div className="card-title-group">
+                <span className="card-heading">Weekly Sales &amp; Profit Archive</span>
+                <span className="card-meta-text">
+                  Keeps accumulating Monday through Sunday • Resets every Monday at midnight
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary-pill"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: 11 }}
+                onClick={() => {
+                  playTapSound();
+                  exportWeeklyDataCsv(weeklyArchives, theme?.restaurantName || 'Restaurant');
+                  playSuccessChime();
+                }}
+                title="Export weekly records to CSV"
+              >
+                <Download size={13} />
+                <span>Export Weekly P&amp;L (CSV)</span>
+              </button>
+            </div>
+
+            {/* Current Active Week Summary Card */}
+            <div
+              style={{
+                background: '#EFF6FF',
+                border: '1.5px solid #BFDBFE',
+                borderRadius: 12,
+                padding: '12px',
+                marginBottom: 12
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#1D4ED8' }}>
+                  Current Active Week ({weekPeriodInfo.startOfWeek.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} - {weekPeriodInfo.endOfWeek.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#DBEAFE', color: '#1E40AF' }}>
+                  ⏳ Resets Mon ({weekPeriodInfo.daysUntilReset}d left)
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Gross Sales</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--primary-blue)' }}>₹{weekSales.toFixed(0)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Served Sales</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#15803D' }}>
+                    ₹{weekOrders.filter(o => o.status === 'served' || o.status === 'done').reduce((s, o) => s + (Number(o.total) || 0), 0).toFixed(0)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Orders</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>{weekOrders.length}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Est. Net Profit</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#16A34A' }}>
+                    ₹{(weekSales - totalRecordedExpenses).toFixed(0)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Weekly History Table */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>
+              All Stored Weekly Cycles:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {weeklyArchives.map((w) => (
+                <div
+                  key={w.key}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: '#F9FAFB',
+                    borderRadius: 10,
+                    padding: '8px 12px',
+                    fontSize: 12,
+                    border: w.isCurrent ? '1px solid #BFDBFE' : '1px solid #E5E7EB'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {w.weekLabel} {w.isCurrent && <span style={{ fontSize: 9, background: '#DBEAFE', color: '#1E40AF', padding: '1px 5px', borderRadius: 4, marginLeft: 4 }}>Active</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {w.orderCount} orders • Served: ₹{w.servedSales.toFixed(0)} • Exp: ₹{w.totalExpenses.toFixed(0)}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 800, color: w.netProfit >= 0 ? '#15803D' : '#DC2626' }}>
+                      ₹{w.grossSales.toFixed(0)}
+                    </div>
+                    <div style={{ fontSize: 10, color: w.netProfit >= 0 ? '#16A34A' : '#DC2626' }}>
+                      Net: ₹{w.netProfit.toFixed(0)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* MONTHLY SALES & P&L ARCHIVE SECTION (30th to 29th Cycles, Reset on 30th) */}
+          <div className="ios-card" style={{ marginBottom: 16 }}>
+            <div className="card-top-row">
+              <div className="card-title-group">
+                <span className="card-heading">Monthly Sales &amp; Profit Archive</span>
+                <span className="card-meta-text">
+                  Keeps accumulating for a month • Resets on every 30th at midnight
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary-pill"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: 11 }}
+                onClick={() => {
+                  playTapSound();
+                  exportMonthlyDataCsv(monthlyArchives, theme?.restaurantName || 'Restaurant');
+                  playSuccessChime();
+                }}
+                title="Export monthly records to CSV"
+              >
+                <Download size={13} />
+                <span>Export Monthly P&amp;L (CSV)</span>
+              </button>
+            </div>
+
+            {/* Current Active Month Summary Card */}
+            <div
+              style={{
+                background: '#FEF3C7',
+                border: '1.5px solid #FCD34D',
+                borderRadius: 12,
+                padding: '12px',
+                marginBottom: 12
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>
+                  Current Active Month Cycle ({monthPeriodInfo.cycleLabel})
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#FDE68A', color: '#78350F' }}>
+                  ⏳ Resets on 30th ({monthPeriodInfo.daysUntilReset}d left)
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: '#92400E' }}>Gross Sales</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#B45309' }}>₹{monthSales.toFixed(0)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#92400E' }}>Served Sales</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#15803D' }}>
+                    ₹{monthOrders.filter(o => o.status === 'served' || o.status === 'done').reduce((s, o) => s + (Number(o.total) || 0), 0).toFixed(0)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#92400E' }}>Orders</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#78350F' }}>{monthOrders.length}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#92400E' }}>Est. Net Profit</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#16A34A' }}>
+                    ₹{(monthSales - totalRecordedExpenses).toFixed(0)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Monthly History Table */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>
+              All Stored Monthly 30th-to-29th Cycles:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {monthlyArchives.map((m) => (
+                <div
+                  key={m.key}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: '#F9FAFB',
+                    borderRadius: 10,
+                    padding: '8px 12px',
+                    fontSize: 12,
+                    border: m.isCurrent ? '1px solid #FCD34D' : '1px solid #E5E7EB'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {m.monthLabel} {m.isCurrent && <span style={{ fontSize: 9, background: '#FDE68A', color: '#78350F', padding: '1px 5px', borderRadius: 4, marginLeft: 4 }}>Active Cycle</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {m.orderCount} orders • Served: ₹{m.servedSales.toFixed(0)} • Exp: ₹{m.totalExpenses.toFixed(0)}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 800, color: m.netProfit >= 0 ? '#15803D' : '#DC2626' }}>
+                      ₹{m.grossSales.toFixed(0)}
+                    </div>
+                    <div style={{ fontSize: 10, color: m.netProfit >= 0 ? '#16A34A' : '#DC2626' }}>
+                      Net: ₹{m.netProfit.toFixed(0)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
       {/* 3A. EOD CLOSING AUDIT & HISTORICAL RECONCILIATIONS TAB */}
       {activeAdminTab === 'eod-checklists' && (
         <div>
+          {/* Real-Time Verification Bridge Card (Owner View) */}
+          <VerificationBridgeCard
+            bridgeData={bridgeData}
+            role="owner"
+          />
+
           {/* Header Card */}
           <div className="ios-card active-gradient" style={{ marginBottom: 16 }}>
             <div className="card-top-row">
@@ -2318,10 +2584,26 @@ export default function AdminView({
                   Daily Cash &amp; Closing Reports
                 </span>
                 <span className="card-meta-text">
-                  View cash, card, and UPI closing counts submitted by your cashier staff at the end of each day
+                  Daily closing counts &amp; midnight auto-archived settlements stored and available to export anytime
                 </span>
               </div>
-              <FileSpreadsheet size={22} color="#16A34A" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn-secondary-pill"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: 11, background: '#FFFFFF' }}
+                  onClick={() => {
+                    playTapSound();
+                    exportDailyDataCsv(dailyArchives, theme?.restaurantName || 'Restaurant');
+                    playSuccessChime();
+                  }}
+                  title="Export all daily records to CSV"
+                >
+                  <Download size={13} />
+                  <span>Export Daily Register (CSV)</span>
+                </button>
+                <FileSpreadsheet size={22} color="#16A34A" />
+              </div>
             </div>
 
             {/* Quick KPI stats */}
@@ -2336,7 +2618,7 @@ export default function AdminView({
               <div style={{ background: '#FFFFFF', padding: '10px 12px', borderRadius: 12, border: '1px solid #E5E7EB' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Daily Reports</div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
-                  {checklists.length}
+                  {dailyArchives.length}
                 </div>
               </div>
 
@@ -2364,9 +2646,9 @@ export default function AdminView({
           </div>
 
           {/* List of EOD Reports */}
-          {Array.isArray(checklists) && checklists.length > 0 ? (
+          {Array.isArray(dailyArchives) && dailyArchives.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {checklists.map((report, idx) => {
+              {dailyArchives.map((report, idx) => {
                 const actualTotal = report.actual?.total ?? 0;
                 const expectedTotal = report.expected?.total ?? 0;
                 const variance = report.variance ?? (actualTotal - expectedTotal);

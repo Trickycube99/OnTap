@@ -22,12 +22,16 @@ import {
   Eye,
   EyeOff,
   ArrowLeftRight,
+  Download,
+  FileSpreadsheet,
   X
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime, playNewOrderChime } from '../utils/audio';
 import PrinterModal from '../components/PrinterModal';
 import WhatsAppAlertModal from '../components/WhatsAppAlertModal';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
+import VerificationBridgeCard from '../components/VerificationBridgeCard';
+import { calculateVerificationBridge, buildDailyArchives, exportDailyDataCsv } from '../utils/salesBridge';
 import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
 import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
@@ -448,6 +452,19 @@ export default function CounterView({
   const diffUpi = actualUpi !== '' ? Number(actualUpi) - expectedUpi : 0;
   const totalVariance = diffCash + diffCard + diffUpi;
   const hasVarianceAlert = Math.abs(totalVariance) > 200.0; // ₹200 threshold
+
+  // Real-Time Verification Bridge between Counter Served Orders and Owner Expected Orders
+  const bridgeData = useMemo(() => {
+    return calculateVerificationBridge({
+      orders,
+      latestEodReport: Array.isArray(checklists) && checklists.length > 0 ? checklists[0] : null
+    });
+  }, [orders, checklists]);
+
+  // Daily Cash Check Archives
+  const dailyArchives = useMemo(() => {
+    return buildDailyArchives({ orders, checklists });
+  }, [orders, checklists]);
 
   // Status Handlers (FR-P2)
   const handleUpdateStatus = (orderId, newStatus, newLabel, progressPercent) => {
@@ -1007,6 +1024,13 @@ export default function CounterView({
       {/* VIEW 1: LIVE ORDERS STACK */}
       {activeSubTab === 'orders' && (
         <div>
+          {/* Real-Time Verification Bridge Card (Counter Served ⟷ Owner Expected) */}
+          <VerificationBridgeCard
+            bridgeData={bridgeData}
+            role="counter"
+            onNavigateToCashCheck={() => setActiveSubTab('checklist')}
+          />
+
           {/* Status Quick Filter Bar */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', paddingBottom: 4 }}>
             {['all', 'received', 'cooking', 'ready', 'served', 'rejected'].map((st) => (
@@ -1754,6 +1778,12 @@ export default function CounterView({
       {/* VIEW 4: DAILY CLOSING CHECKLIST (FR-P8 & 5.4) */}
       {activeSubTab === 'checklist' && (
         <div>
+          {/* Real-Time Verification Bridge Card */}
+          <VerificationBridgeCard
+            bridgeData={bridgeData}
+            role="counter"
+          />
+
           <div className="ios-card" style={{ marginBottom: 16 }}>
             <div className="card-top-row">
               <div className="card-title-group">
@@ -1932,6 +1962,73 @@ export default function CounterView({
                 >
                   Recount / Edit Cash
                 </button>
+              </div>
+            )}
+          </div>
+
+          {/* Historical Daily Cash Check Archives Section & Export */}
+          <div className="ios-card" style={{ marginBottom: 16 }}>
+            <div className="card-top-row">
+              <div className="card-title-group">
+                <span className="card-heading">Daily Cash Check Records Archive</span>
+                <span className="card-meta-text">
+                  Daily closing settlements stored and ready for instant export
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary-pill"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 12 }}
+                onClick={() => {
+                  playTapSound();
+                  exportDailyDataCsv(dailyArchives, theme?.restaurantName || 'Restaurant');
+                  playSuccessChime();
+                }}
+                title="Export all daily records to CSV"
+              >
+                <Download size={14} />
+                <span>Export Daily Register (CSV)</span>
+              </button>
+            </div>
+
+            {dailyArchives.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--text-muted)', fontSize: 12 }}>
+                No daily closing entries recorded yet.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                {dailyArchives.map((rec) => (
+                  <div
+                    key={rec.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: '#F9FAFB',
+                      border: '1px solid #E5E7EB',
+                      borderRadius: 10,
+                      padding: '10px 12px',
+                      fontSize: 12
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {rec.date} ({rec.dayOfWeek}) {rec.isToday && <span style={{ fontSize: 10, background: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>Today</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                        Served: <strong>₹{rec.servedTotal.toFixed(0)}</strong> • Placed: <strong>₹{rec.expectedTotal.toFixed(0)}</strong> • {rec.status}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 800, color: '#15803D', fontSize: 14 }}>
+                        ₹{(rec.filledTotal !== null ? rec.filledTotal : rec.expectedTotal).toFixed(0)}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                        {rec.orderCount} orders
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

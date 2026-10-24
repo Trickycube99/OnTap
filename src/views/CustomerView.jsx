@@ -31,6 +31,13 @@ import { getTranslation } from '../utils/i18n';
 import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 import { getActiveBusiness } from '../utils/businessManager';
+import {
+  wipeAllCustomerData,
+  isCustomerSessionExpired,
+  detectFreshQrScan,
+  markQrScanConsumed,
+  initCustomerInactivityWatcher
+} from '../utils/customerSessionManager';
 
 export default function CustomerView({
   activeBusinessId = '',
@@ -102,52 +109,66 @@ export default function CustomerView({
   });
   const [nameError, setNameError] = useState('');
 
-  // Clean up any cross-tab localStorage diner names so brand-new tabs always ask for the name
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.removeItem(dinerNameKey);
-        localStorage.removeItem(`flowscape_diner_name_${activeBusinessId}`);
-        localStorage.removeItem('flowscape_diner_name');
-        localStorage.removeItem(dinerPhoneKey);
-        localStorage.removeItem(`flowscape_diner_phone_${activeBusinessId}`);
-        localStorage.removeItem('flowscape_diner_phone');
-      } catch (err) {}
+  // Session Notification Banner State
+  const [sessionNotice, setSessionNotice] = useState(null);
+
+  // Master customer interface wipe function
+  const handleWipeCustomerInterface = (reason = 'inactivity') => {
+    wipeAllCustomerData(activeBusinessId);
+    if (typeof setCart === 'function') setCart([]);
+    setPlacedOrderIds([]);
+    setCustomerName('');
+    setCustomerPhone('');
+    setCustomerNameInput('');
+    setCustomerPhoneInput('');
+    setShowNameModal(true);
+    setOrderNote('');
+    setAppliedPromo(null);
+    setPromoInput('');
+    setPromoMessage('');
+    setIsCartOpen(false);
+    setShowUpiModal(false);
+    setCustomizingItem(null);
+    setItemNoteInput('');
+    setSelectedCategory('All');
+    setVegOnly(false);
+    if (typeof setActiveTab === 'function') setActiveTab('menu');
+
+    if (reason === 'inactivity') {
+      setSessionNotice({
+        type: 'warning',
+        text: 'Customer session wiped after 2 hours of inactivity. Fresh menu loaded.'
+      });
+      setTimeout(() => setSessionNotice(null), 8000);
+    } else if (reason === 'qr_rescan') {
+      setSessionNotice({
+        type: 'info',
+        text: 'Table QR scanned again: Previous customer session wiped. Fresh dining session started.'
+      });
+      setTimeout(() => setSessionNotice(null), 8000);
     }
-  }, [dinerNameKey, dinerPhoneKey, activeBusinessId]);
+  };
 
-  // Scoped key to track all tickets ordered by this diner session on this table in this browser tab
-  const dinerOrderIdsKey = `ontap_${activeBusinessId || 'default'}_customer_order_ids`;
-  const dinerLegacyOrderKey = `ontap_${activeBusinessId || 'default'}_last_order_id`;
-
-  // Detect if this page load is from a newly scanned table QR code
+  // 1. Initial check on mount: wipe if session expired (>2 hours) or if fresh QR was scanned
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
-      const hashParams = new URLSearchParams(hashQuery);
-      const isFreshQrScan = urlParams.get('qr') === 'true' || hashParams.get('qr') === 'true';
+    if (isCustomerSessionExpired()) {
+      handleWipeCustomerInterface('inactivity');
+    } else if (detectFreshQrScan()) {
+      handleWipeCustomerInterface('qr_rescan');
+      markQrScanConsumed(activeTable);
+    }
+  }, [activeTable, activeBusinessId]);
 
-      if (isFreshQrScan) {
-        // Physical QR code was scanned again: clear old completed tickets to start fresh!
-        sessionStorage.removeItem(dinerOrderIdsKey);
-        sessionStorage.removeItem(dinerLegacyOrderKey);
-        sessionStorage.removeItem('ontap_customer_last_order_id');
-        try {
-          localStorage.removeItem(dinerOrderIdsKey);
-          localStorage.removeItem(dinerLegacyOrderKey);
-        } catch (e) {}
-        setPlacedOrderIds([]);
-
-        // Clean up ?qr=true from the address bar so normal page refreshes in this tab retain their tickets
-        try {
-          const currentUrl = new URL(window.location.href);
-          currentUrl.searchParams.delete('qr');
-          window.history.replaceState(null, '', currentUrl.toString());
-        } catch (e) {}
+  // 2. Continuous 2-hour inactivity watcher and tab close wipe listener
+  useEffect(() => {
+    const cleanup = initCustomerInactivityWatcher({
+      bizId: activeBusinessId,
+      onInactivityExpire: () => {
+        handleWipeCustomerInterface('inactivity');
       }
-    }
-  }, [dinerOrderIdsKey, dinerLegacyOrderKey]);
+    });
+    return cleanup;
+  }, [activeBusinessId]);
 
   const [placedOrderIds, setPlacedOrderIds] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -268,31 +289,16 @@ export default function CustomerView({
     return safeMenu.find((item) => item.id === 3) || null;
   }, [upsellPairingId, safeMenu]);
 
-  // Find all orders placed by this diner across rounds on this table:
-  // All ordered tickets are retained in the live status stack (even when served)
-  // until the tab is closed or the QR code is scanned again!
+  // Find all orders placed by this diner session on this table:
+  // All ordered tickets are retained in the live status stack strictly for this session
+  // and are completely wiped when the tab is closed, when the QR is scanned again, or after 2 hours of inactivity!
   const customerOrders = useMemo(() => {
-    let matched = [];
-    if (placedOrderIds.length > 0) {
-      // Retain all tickets placed by this diner session regardless of status (received, cooking, ready, served, done, rejected)
-      matched = orders.filter((o) => placedOrderIds.includes(o.id));
+    if (!placedOrderIds || placedOrderIds.length === 0) {
+      return [];
     }
-    if (matched.length === 0) {
-      matched = orders.filter(
-        (o) => o.table === activeTable && (o.status === 'received' || o.status === 'cooking' || o.status === 'ready' || o.status === 'in-progress' || o.status === 'served' || o.status === 'done' || o.status === 'rejected')
-      );
-    } else {
-      // Supplement with any concurrent orders on this table
-      const extra = orders.filter(
-        (o) => o.table === activeTable &&
-        !matched.some((m) => m.id === o.id) &&
-        (o.status === 'received' || o.status === 'cooking' || o.status === 'ready' || o.status === 'in-progress' || o.status === 'served' || o.status === 'done')
-      );
-      matched = [...matched, ...extra];
-    }
-    // Sort latest ticket first
+    const matched = (orders || []).filter((o) => o && placedOrderIds.includes(o.id));
     return matched.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  }, [orders, activeTable, placedOrderIds]);
+  }, [orders, placedOrderIds]);
 
   // Keep single activeCustomerOrder reference for backward compatibility
   const activeCustomerOrder = customerOrders[0] || null;
@@ -865,6 +871,7 @@ export default function CustomerView({
     return (
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 110 }}>
         {renderNameModal()}
+        {renderSessionNotice()}
 
         {/* Screen Title & Live Pulse Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
@@ -1668,6 +1675,7 @@ export default function CustomerView({
     return (
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 95 }}>
         {renderNameModal()}
+        {renderSessionNotice()}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
             <div className="screen-title">{t('yourOrderTray')}</div>
@@ -2212,6 +2220,12 @@ export default function CustomerView({
   // -------------------------------------------------------------
   return (
     <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 95 }}>
+      {renderNameModal()}
+      {sessionNotice && (
+        <div style={{ padding: '12px 18px 0' }}>
+          {renderSessionNotice()}
+        </div>
+      )}
       {/* Screen Title & Welcome with Diner Name Pill */}
       <div style={{ padding: '12px 18px 4px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
