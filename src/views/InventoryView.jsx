@@ -1,35 +1,59 @@
 import React, { useState } from 'react';
 import {
   Boxes,
-  TrendingDown
+  TrendingDown,
+  Plus,
+  PackageOpen
 } from 'lucide-react';
 import { playTapSound, playSuccessChime } from '../utils/audio';
 
 export default function InventoryView({ menu: _menu }) {
-  const [ingredients, setIngredients] = useState([
-    { id: 'ing-1', name: 'A2 Gir Cow Clarified Ghee', category: 'Dairy & Fats', inStock: 18.5, unit: 'kg', reorderLevel: 5.0, costPerUnit: 1100 },
-    { id: 'ing-2', name: 'Fresh Prime Farm Chicken', category: 'Poultry', inStock: 6.2, unit: 'kg', reorderLevel: 8.0, costPerUnit: 240, isLow: true },
-    { id: 'ing-3', name: 'Artisanal Fresh Burrata Cheese', category: 'Dairy & Fats', inStock: 14, unit: 'pieces', reorderLevel: 6, costPerUnit: 180 },
-    { id: 'ing-4', name: 'Chikmagalur Single-Origin Coffee Beans', category: 'Dry Pantry', inStock: 12.0, unit: 'kg', reorderLevel: 4.0, costPerUnit: 850 },
-    { id: 'ing-5', name: 'Ratnagiri Alphonso Mango Puree', category: 'Beverages', inStock: 8.5, unit: 'litres', reorderLevel: 5.0, costPerUnit: 320 },
-    { id: 'ing-6', name: 'Slow Cold-Fermented Sourdough Dough', category: 'Bakery', inStock: 25, unit: 'dough balls', reorderLevel: 10, costPerUnit: 45 }
-  ]);
+  const [ingredients, setIngredients] = useState([]);
+  const [wastageLog, setWastageLog] = useState([]);
 
-  const [wastageLog, setWastageLog] = useState([
-    { id: 'w-1', date: '2026-10-14', ingredient: 'Fresh Prime Farm Chicken', quantity: '1.2 kg', reason: 'Tandoor marinade hold time exceeded (FSSAI audit)', loss: 288 },
-    { id: 'w-2', date: '2026-10-12', ingredient: 'Artisanal Fresh Burrata Cheese', quantity: '2 pieces', reason: 'Cold chain transit temperature drop', loss: 360 }
-  ]);
+  // Add Item State
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newIngName, setNewIngName] = useState('');
+  const [newIngCat, setNewIngCat] = useState('Dairy & Fats');
+  const [newIngStock, setNewIngStock] = useState('');
+  const [newIngUnit, setNewIngUnit] = useState('kg');
+  const [newIngReorder, setNewIngReorder] = useState('5');
+  const [newIngCost, setNewIngCost] = useState('');
 
   // Wastage Form
-  const [selectedIng, setSelectedIng] = useState(ingredients[0].name);
+  const [selectedIng, setSelectedIng] = useState('');
   const [wasteQty, setWasteQty] = useState('');
   const [wasteReason, setWasteReason] = useState('');
+
+  const handleAddIngredient = (e) => {
+    e.preventDefault();
+    playTapSound();
+    if (!newIngName.trim()) return;
+
+    const newItem = {
+      id: `ing-${Date.now()}`,
+      name: newIngName.trim(),
+      category: newIngCat,
+      inStock: parseFloat(newIngStock) || 0,
+      unit: newIngUnit.trim() || 'units',
+      reorderLevel: parseFloat(newIngReorder) || 0,
+      costPerUnit: parseFloat(newIngCost) || 0
+    };
+
+    setIngredients((prev) => [...prev, newItem]);
+    if (!selectedIng) setSelectedIng(newItem.name);
+    setNewIngName('');
+    setNewIngStock('');
+    setNewIngCost('');
+    setShowAddForm(false);
+    playSuccessChime();
+  };
 
   const handleLogWastage = (e) => {
     e.preventDefault();
     playTapSound();
     const qtyNum = parseFloat(wasteQty);
-    if (!qtyNum || isNaN(qtyNum)) return;
+    if (!qtyNum || isNaN(qtyNum) || !selectedIng) return;
 
     const matchedIng = ingredients.find((i) => i.name === selectedIng);
     const lossValue = Math.round(qtyNum * (matchedIng ? matchedIng.costPerUnit : 100));
@@ -63,7 +87,7 @@ export default function InventoryView({ menu: _menu }) {
       {/* Title */}
       <div style={{ marginBottom: 14 }}>
         <div className="screen-title">Kitchen Stock & Wastage</div>
-        <div className="screen-subtitle">Check raw ingredients in stock, low supplies, and wasted items</div>
+        <div className="screen-subtitle">Real-time raw ingredient tracking, low supplies, and waste recording</div>
       </div>
 
       {/* Top Inventory Metrics */}
@@ -83,7 +107,7 @@ export default function InventoryView({ menu: _menu }) {
         </div>
 
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Wasted Items (This Week)</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Wasted Items</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#D97706', marginTop: 2 }}>
             ₹{wastageLog.reduce((s, w) => s + w.loss, 0).toLocaleString('en-IN')}
           </div>
@@ -97,52 +121,135 @@ export default function InventoryView({ menu: _menu }) {
             <span className="card-heading">Kitchen Ingredients & Supplies</span>
             <span className="card-meta-text">Current stock in kitchen and minimum required</span>
           </div>
-          <Boxes size={20} color="#007AFF" />
+          <button
+            type="button"
+            className="btn-secondary-pill"
+            style={{ fontSize: 11, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 4 }}
+            onClick={() => {
+              playTapSound();
+              setShowAddForm(!showAddForm);
+            }}
+          >
+            <Plus size={13} />
+            <span>{showAddForm ? 'Cancel' : 'Add Item'}</span>
+          </button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {ingredients.map((ing) => {
-            const isLow = ing.inStock <= ing.reorderLevel;
+        {/* Add Ingredient Form */}
+        {showAddForm && (
+          <form onSubmit={handleAddIngredient} style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: 12, marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', marginBottom: 8 }}>Register New Kitchen Ingredient</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 8 }}>
+              <input
+                type="text"
+                className="ios-input"
+                placeholder="Ingredient name (e.g. Milk, Rice, Chicken)"
+                value={newIngName}
+                onChange={(e) => setNewIngName(e.target.value)}
+                required
+              />
+              <select className="ios-select" value={newIngCat} onChange={(e) => setNewIngCat(e.target.value)}>
+                <option value="Dairy & Fats">Dairy & Fats</option>
+                <option value="Poultry & Meat">Poultry & Meat</option>
+                <option value="Dry Pantry">Dry Pantry</option>
+                <option value="Vegetables & Herbs">Vegetables</option>
+                <option value="Bakery">Bakery</option>
+                <option value="Beverages">Beverages</option>
+              </select>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 10 }}>
+              <input
+                type="number"
+                step="0.1"
+                className="ios-input"
+                placeholder="Quantity"
+                value={newIngStock}
+                onChange={(e) => setNewIngStock(e.target.value)}
+                required
+              />
+              <input
+                type="text"
+                className="ios-input"
+                placeholder="Unit (kg/ltr/pcs)"
+                value={newIngUnit}
+                onChange={(e) => setNewIngUnit(e.target.value)}
+                required
+              />
+              <input
+                type="number"
+                step="0.1"
+                className="ios-input"
+                placeholder="Min needed"
+                value={newIngReorder}
+                onChange={(e) => setNewIngReorder(e.target.value)}
+              />
+              <input
+                type="number"
+                step="1"
+                className="ios-input"
+                placeholder="Cost/unit (₹)"
+                value={newIngCost}
+                onChange={(e) => setNewIngCost(e.target.value)}
+                required
+              />
+            </div>
+            <button type="submit" className="btn-primary-pill full-width" style={{ fontSize: 12, padding: '7px 12px' }}>
+              Save Ingredient to Inventory
+            </button>
+          </form>
+        )}
 
-            return (
-              <div
-                key={ing.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '10px 12px',
-                  background: isLow ? '#FEF2F2' : '#F9FAFB',
-                  border: isLow ? '1px solid #FCA5A5' : '1px solid #E5E7EB',
-                  borderRadius: 14
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>{ing.name}</span>
-                    {isLow && (
-                      <span className="status-pill tag" style={{ background: '#FEE2E2', color: '#DC2626', fontSize: 9 }}>
-                        Buy Soon
-                      </span>
-                    )}
+        {ingredients.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {ingredients.map((ing) => {
+              const isLow = ing.inStock <= ing.reorderLevel;
+
+              return (
+                <div
+                  key={ing.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '10px 12px',
+                    background: isLow ? '#FEF2F2' : '#F9FAFB',
+                    border: isLow ? '1px solid #FCA5A5' : '1px solid #E5E7EB',
+                    borderRadius: 14
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{ing.name}</span>
+                      {isLow && (
+                        <span className="status-pill tag" style={{ background: '#FEE2E2', color: '#DC2626', fontSize: 9 }}>
+                          Buy Soon
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                      Category: {ing.category} • Cost: ₹{ing.costPerUnit}/{ing.unit}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                    Category: {ing.category} • Cost: ₹{ing.costPerUnit}/{ing.unit}
+
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: isLow ? '#DC2626' : '#111827' }}>
+                      {ing.inStock} {ing.unit}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                      Min Needed: {ing.reorderLevel} {ing.unit}
+                    </div>
                   </div>
                 </div>
-
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: isLow ? '#DC2626' : '#111827' }}>
-                    {ing.inStock} {ing.unit}
-                  </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                    Min Needed: {ing.reorderLevel} {ing.unit}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ padding: '24px 16px', textAlign: 'center', color: '#64748B', background: '#F8FAFC', borderRadius: 12, border: '1px dashed #CBD5E1' }}>
+            <PackageOpen size={32} color="#94A3B8" style={{ margin: '0 auto 8px' }} />
+            <div style={{ fontWeight: 600, fontSize: 13, color: '#334155' }}>No Inventory Ingredients Added Yet</div>
+            <div style={{ fontSize: 11, marginTop: 4 }}>Tap "+ Add Item" above to track your kitchen supplies and minimum stock levels.</div>
+          </div>
+        )}
       </div>
 
       {/* Kitchen Wastage Logger */}
@@ -155,77 +262,85 @@ export default function InventoryView({ menu: _menu }) {
           <TrendingDown size={20} color="#DC2626" />
         </div>
 
-        <form onSubmit={handleLogWastage} style={{ marginBottom: 14 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Select Item</label>
-              <select
-                className="ios-select"
-                value={selectedIng}
-                onChange={(e) => setSelectedIng(e.target.value)}
-              >
-                {ingredients.map((i) => (
-                  <option key={i.id} value={i.name}>
-                    {i.name}
-                  </option>
-                ))}
-              </select>
+        {ingredients.length > 0 ? (
+          <form onSubmit={handleLogWastage} style={{ marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Select Item</label>
+                <select
+                  className="ios-select"
+                  value={selectedIng || (ingredients[0]?.name || '')}
+                  onChange={(e) => setSelectedIng(e.target.value)}
+                >
+                  {ingredients.map((i) => (
+                    <option key={i.id} value={i.name}>
+                      {i.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Quantity Wasted</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  className="ios-input"
+                  placeholder="e.g. 1.5"
+                  value={wasteQty}
+                  onChange={(e) => setWasteQty(e.target.value)}
+                  required
+                />
+              </div>
             </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Quantity Wasted</label>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Reason (e.g. Expired, Burnt)</label>
               <input
-                type="number"
-                step="0.1"
+                type="text"
                 className="ios-input"
-                placeholder="e.g. 1.5"
-                value={wasteQty}
-                onChange={(e) => setWasteQty(e.target.value)}
-                required
+                placeholder="e.g. Expired, burnt during cooking, spilled"
+                value={wasteReason}
+                onChange={(e) => setWasteReason(e.target.value)}
               />
             </div>
-          </div>
 
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Reason (e.g. Expired, Burnt)</label>
-            <input
-              type="text"
-              className="ios-input"
-              placeholder="e.g. Expired, burnt during cooking, spilled"
-              value={wasteReason}
-              onChange={(e) => setWasteReason(e.target.value)}
-            />
+            <button type="submit" className="btn-primary-pill full-width" style={{ background: '#DC2626' }}>
+              <span>Save & Deduct from Stock</span>
+            </button>
+          </form>
+        ) : (
+          <div style={{ padding: '14px', textAlign: 'center', color: '#64748B', fontSize: 12, background: '#F8FAFC', borderRadius: 10, marginBottom: 12 }}>
+            Add ingredients above to record kitchen wastage and spoiled food.
           </div>
-
-          <button type="submit" className="btn-primary-pill full-width" style={{ background: '#DC2626' }}>
-            <span>Save & Deduct from Stock</span>
-          </button>
-        </form>
+        )}
 
         {/* Wastage History */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>Recent Wasted Items:</div>
-          {wastageLog.map((w) => (
-            <div
-              key={w.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                padding: '8px 10px',
-                background: '#F9FAFB',
-                borderRadius: 10,
-                fontSize: 12
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 600 }}>{w.ingredient} ({w.quantity})</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  {w.reason} • {w.date}
+        {wastageLog.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>Recent Wasted Items:</div>
+            {wastageLog.map((w) => (
+              <div
+                key={w.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  padding: '8px 10px',
+                  background: '#F9FAFB',
+                  borderRadius: 10,
+                  fontSize: 12
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600 }}>{w.ingredient} ({w.quantity})</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {w.reason} • {w.date}
+                  </div>
                 </div>
+                <span style={{ fontWeight: 700, color: '#DC2626' }}>-₹{w.loss}</span>
               </div>
-              <span style={{ fontWeight: 700, color: '#DC2626' }}>-₹{w.loss}</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

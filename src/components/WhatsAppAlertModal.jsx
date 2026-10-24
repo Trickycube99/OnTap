@@ -2,14 +2,42 @@ import React, { useState } from 'react';
 import { MessageSquare, X, CheckCheck } from 'lucide-react';
 import { playTapSound, playSuccessChime } from '../utils/audio';
 
-export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
+export default function WhatsAppAlertModal({ order, orders = [], expenses = [], theme, chef, onClose }) {
   const [activeTab, setActiveTab] = useState('customer'); // 'customer' | 'owner'
+
+  // Calculate live daily numbers from real-time database
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todaysOrders = (orders || []).filter((o) => {
+    if (!o) return false;
+    const dateStr = (o.createdAt || o.timestamp || '').slice(0, 10);
+    return (!dateStr || dateStr === todayStr) && o.status !== 'rejected' && o.status !== 'cancelled';
+  });
+
+  const totalSales = todaysOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const cashSales = todaysOrders
+    .filter((o) => (o.paymentMode || '').toLowerCase().includes('cash') || (o.paymentMode || '').toLowerCase().includes('counter'))
+    .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const upiSales = todaysOrders
+    .filter((o) => (o.paymentMode || '').toLowerCase().includes('upi'))
+    .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const cardSales = todaysOrders
+    .filter((o) => (o.paymentMode || '').toLowerCase().includes('card'))
+    .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+  const todaysExpenses = (expenses || []).filter((e) => {
+    if (!e) return false;
+    const d = (e.date || '').slice(0, 10);
+    return !d || d === todayStr;
+  });
+  const totalExpenses = todaysExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const netProfit = totalSales - totalExpenses;
+
   const [messages, setMessages] = useState([
     {
       id: 1,
       sender: `${theme?.restaurantName || 'Restaurant'} Kitchen`,
       time: 'Just now',
-      text: `*Namaste ${order?.customerName || 'Guest'}!* 🙏\n\nYour order *#${order?.id || 'ORD-NEW'}* from *${theme?.restaurantName || 'Restaurant'}* has been received by our kitchen team.\n\n🍽️ *Table:* ${order?.table || 'Table 01'}\n💰 *Total:* ₹${order?.total || 0}\n⚡ *Status:* Cooking in Kitchen\n\nTrack your order in real time.`,
+      text: `*Namaste ${order?.customerName || 'Guest'}!* 🙏\n\nYour order *#${order?.id || 'ORD-NEW'}* from *${theme?.restaurantName || 'Restaurant'}* has been received by our kitchen team.\n\n🍽️ *Table:* ${order?.table || 'Table 01'}\n💰 *Total:* ₹${Number(order?.total || 0).toLocaleString('en-IN')}\n⚡ *Status:* Cooking in Kitchen\n\nTrack your order in real time.`,
       status: 'read'
     }
   ]);
@@ -20,7 +48,7 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
       id: Date.now(),
       sender: `${theme?.restaurantName || 'Restaurant'} Kitchen`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      text: `*Order Update #${order?.id}* 🔔\n\n${statusText}\n\nFreshly prepared with top hygiene and care. Thank you!`,
+      text: `*Order Update #${order?.id || 'NEW'}* 🔔\n\n${statusText}\n\nFreshly prepared with top hygiene and care. Thank you!`,
       status: 'read'
     };
     setMessages((prev) => [...prev, newMsg]);
@@ -33,7 +61,7 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
       id: Date.now(),
       sender: 'Store Manager Bot',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      text: `📊 *Today's Sales & Cash Summary*\n\n📅 Date: ${new Date().toLocaleDateString('en-IN')}\n\n💰 *Total Sales:* ₹24,850\n💵 *Cash:* ₹8,400\n⚡ *UPI:* ₹11,250\n💳 *Card:* ₹5,200\n\n📉 *Today's Expenses:* ₹13,050\n📈 *Net Profit:* ₹11,800\n\n⚠️ *Pending Zomato/Swiggy:* ₹28,500 expected this week.`,
+      text: `📊 *Today's Sales & Cash Summary*\n\n📅 Date: ${new Date().toLocaleDateString('en-IN')}\n\n💰 *Total Sales:* ₹${totalSales.toLocaleString('en-IN')} (${todaysOrders.length} order${todaysOrders.length === 1 ? '' : 's'})\n💵 *Cash:* ₹${cashSales.toLocaleString('en-IN')}\n⚡ *UPI:* ₹${upiSales.toLocaleString('en-IN')}\n💳 *Card:* ₹${cardSales.toLocaleString('en-IN')}\n\n📉 *Today's Expenses:* ₹${totalExpenses.toLocaleString('en-IN')}\n📈 *Net Profit:* ₹${netProfit.toLocaleString('en-IN')}`,
       status: 'read'
     };
     setMessages((prev) => [...prev, ownerMsg]);
@@ -133,7 +161,7 @@ export default function WhatsAppAlertModal({ order, theme, chef, onClose }) {
               <button
                 className="btn-secondary-pill"
                 style={{ flex: 1, padding: '7px 8px', fontSize: 11, background: '#FFFFFF' }}
-                onClick={() => handleSendUpdate('Your hot food is Ready to Serve at Table 04!')}
+                onClick={() => handleSendUpdate(`Your hot food is Ready to Serve at ${order?.table || 'your table'}!`)}
               >
                 Send "Order Ready"
               </button>

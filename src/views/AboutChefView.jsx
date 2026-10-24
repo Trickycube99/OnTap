@@ -15,8 +15,7 @@ import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 
 export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMenu }) {
   const [showVerifyModal, setShowVerifyModal] = useState(false);
-  const [selectedCert, setSelectedCert] = useState(null);
-  const [verifiedCount, setVerifiedCount] = useState(2450);
+  const [verifiedCount, setVerifiedCount] = useState(chef?.endorsedCount || 0);
   const [hasEndorsed, setHasEndorsed] = useState(false);
 
   const showVerifiedBadge = Boolean(chef?.showVerifiedBadge ?? (chef?.isVerified ?? true));
@@ -215,18 +214,22 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
           {chef.bio}
         </p>
 
-        {/* Bullet points adhering to design system */}
-        <ul className="body-subtask">
-          {chef.careerHighlights.map((hl, idx) => (
-            <li key={idx}>{hl}</li>
-          ))}
-        </ul>
+        {/* Highlights & Awards */}
+        {chef?.careerHighlights && chef.careerHighlights.length > 0 && (
+          <ul className="body-subtask">
+            {chef.careerHighlights.map((hl, idx) => (
+              <li key={idx}>{hl}</li>
+            ))}
+          </ul>
+        )}
 
-        <div className="card-badges-row">
-          <span className="status-pill tag">IHM Pusa Gold Medalist</span>
-          <span className="status-pill tag">ITC Bukhara Brigade</span>
-          <span className="status-pill done">A2 Gir Cow Ghee</span>
-        </div>
+        {chef?.awards && chef.awards.length > 0 && (
+          <div className="card-badges-row">
+            {chef.awards.map((award, idx) => (
+              <span key={idx} className="status-pill tag">{award}</span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Official Culinary Certifications Section - Accredited Diplomas & Audits */}

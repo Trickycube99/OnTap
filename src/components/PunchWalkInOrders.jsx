@@ -140,8 +140,8 @@ export default function PunchWalkInOrders({
     playTapSound();
 
     const subtotal = grid.items.reduce((acc, i) => acc + i.price * i.quantity, 0);
-    const tax = Number((subtotal * 0.05).toFixed(2));
-    const total = Number((subtotal + tax).toFixed(2));
+    const tax = 0; // Taxes are included in dish prices
+    const total = Number(subtotal.toFixed(2));
 
     const uniqueOrderId = `ORD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const newOrder = {
@@ -289,7 +289,7 @@ export default function PunchWalkInOrders({
         {grids.map((grid, index) => {
           const totalQty = grid.items.reduce((acc, i) => acc + i.quantity, 0);
           const subtotal = grid.items.reduce((acc, i) => acc + i.price * i.quantity, 0);
-          const total = (subtotal * 1.05).toFixed(0);
+          const total = subtotal.toFixed(0);
 
           const filteredMenu = (menu || []).filter((dish) => {
             if (dish.isAvailable === false) return false;
@@ -612,8 +612,8 @@ export default function PunchWalkInOrders({
                         alignItems: 'center'
                       }}
                     >
-                      <span style={{ fontSize: 11, color: '#64748B' }}>
-                        Subtotal: ₹{subtotal.toFixed(0)} + 5% GST
+                      <span style={{ fontSize: 11, color: '#16A34A', fontWeight: 600 }}>
+                        Taxes: Inclusive in dish prices
                       </span>
                       <span style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
                         Total: ₹{total}

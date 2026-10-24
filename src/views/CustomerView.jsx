@@ -251,9 +251,9 @@ export default function CustomerView({
     return matchesCat && matchesVeg && matchesSearch;
   });
 
-  // Calculate cart subtotal
+  // Calculate cart subtotal (GST is included in dish prices by restaurant owner)
   const cartSubtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const tax = Number((cartSubtotal * 0.05).toFixed(2)); // 5% GST (2.5% CGST + 2.5% SGST)
+  const tax = 0; // GST billing removed - included directly in dish prices
   const isPromoEligible = Boolean(appliedPromo && (!appliedPromo.minOrderAmount || cartSubtotal >= Number(appliedPromo.minOrderAmount)));
   const activePromo = isPromoEligible ? appliedPromo : null;
   const discountAmount = activePromo
@@ -266,7 +266,7 @@ export default function CustomerView({
         )
       : Number(Math.min(Number(appliedPromo.value), cartSubtotal).toFixed(2))
     : 0;
-  const cartTotal = Math.max(0, Number((cartSubtotal + tax - discountAmount).toFixed(2)));
+  const cartTotal = Math.max(0, Number((cartSubtotal - discountAmount).toFixed(2)));
   const totalItemCount = cart.reduce((acc, i) => acc + i.quantity, 0);
 
   // Suggestable item for upsell (FR-C8)
@@ -2095,9 +2095,9 @@ export default function CustomerView({
                 <span style={{ color: 'var(--text-muted)' }}>{t('subtotal')}</span>
                 <span>₹{cartSubtotal.toFixed(0)}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ color: 'var(--text-muted)' }}>{t('gstTax')}</span>
-                <span>₹{tax.toFixed(1)}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12 }}>
+                <span style={{ color: 'var(--text-muted)' }}>Taxes</span>
+                <span style={{ color: '#16A34A', fontWeight: 600 }}>Inclusive in dish prices</span>
               </div>
               {discountAmount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: '#16A34A' }}>

@@ -1105,7 +1105,7 @@ export default function CounterView({
                   <span>Live POS Orders Stack</span>
                 </div>
                 <div style={{ fontSize: 11, color: '#94A3B8' }}>
-                  {orders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length} Live Kitchen Prep Tickets • 80mm GST Thermal Receipt Ready
+                  {orders.filter((o) => o.status !== 'done' && o.status !== 'served' && o.status !== 'rejected').length} Live Kitchen Prep Tickets • 80mm Thermal Receipt Ready (Taxes Inclusive)
                 </div>
               </div>
             </div>
@@ -2627,6 +2627,8 @@ export default function CounterView({
       {selectedWhatsAppOrder && (
         <WhatsAppAlertModal
           order={selectedWhatsAppOrder}
+          orders={orders}
+          expenses={expenses}
           theme={theme}
           chef={chef}
           onClose={() => setSelectedWhatsAppOrder(null)}

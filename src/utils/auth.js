@@ -79,7 +79,7 @@ export const ROLE_CONFIGS = {
     shortName: 'Cashier POS',
     badge: 'POS Terminal Guard',
     securityLevel: 'Staff POS Credentials & Secret PIN Verification',
-    description: 'Accept live dining orders, apply custom item modifiers, print 80mm GST thermal receipts, and reconcile EOD cash.',
+    description: 'Accept live dining orders, apply custom item modifiers, print 80mm thermal receipts, and reconcile EOD cash.',
     demoCredentials: null,
     validate: (creds) => {
       const pin = (creds?.pin || '').toString().trim();

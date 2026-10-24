@@ -3,31 +3,38 @@ import {
   FileSpreadsheet,
   Upload,
   CheckCircle2,
-  Check
+  Check,
+  Building
 } from 'lucide-react';
 import { playTapSound, playSuccessChime } from '../utils/audio';
 
-export default function BankReconciliationView({ orders: _orders, theme: _theme }) {
-  // Mock Bank Statement Entries (from HDFC / ICICI Current Account)
-  const [bankEntries, setBankEntries] = useState([
-    { id: 'TXN-101', date: '2026-10-15', description: 'UPI SETTLEMENT - BHARATPE / PAYTM', credit: 11250, matchedId: 'POS-UPI-15OCT', status: 'matched' },
-    { id: 'TXN-102', date: '2026-10-15', description: 'POS CARD SETTLEMENT - PINE LABS HDFC (Less 1.5% MDR)', credit: 5122, expectedCredit: 5200, mdrDeduction: 78, matchedId: 'POS-CARD-15OCT', status: 'variance' },
-    { id: 'TXN-103', date: '2026-10-14', description: 'CASH DEPOSIT - SMART CDM CONNAUGHT PLACE', credit: 8400, matchedId: 'POS-CASH-14OCT', status: 'matched' },
-    { id: 'TXN-104', date: '2026-10-13', description: 'ZOMATO ONLINE PAYOUT - WEEKLY CYCLE', credit: 14200, matchedId: 'AGG-ZOM-13OCT', status: 'matched' },
-    { id: 'TXN-105', date: '2026-10-13', description: 'SWIGGY COMMERCE PAYOUT - NET PROCEEDS', credit: 12100, matchedId: 'AGG-SWG-13OCT', status: 'matched' }
-  ]);
-
+export default function BankReconciliationView({ orders = [], theme: _theme }) {
+  // Zero mock initial state - starts completely empty
+  const [bankEntries, setBankEntries] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
-  const handleSimulateCsvUpload = () => {
+  // Sync real-time settled orders into reconciliation ledger
+  const handleSyncFromOrders = () => {
     playTapSound();
     setIsUploading(true);
     setTimeout(() => {
+      const generated = (orders || [])
+        .filter((o) => o && o.status !== 'rejected' && o.status !== 'cancelled')
+        .slice(0, 15)
+        .map((o, idx) => ({
+          id: `TXN-${100 + idx}`,
+          date: (o.createdAt || new Date().toISOString()).slice(0, 10),
+          description: `${(o.paymentMode || 'POS Settled').toUpperCase()} - ${(o.customerName || 'Diner').toUpperCase()}`,
+          credit: Number(o.total || 0),
+          matchedId: o.id,
+          status: 'matched'
+        }));
+      setBankEntries(generated);
       setIsUploading(false);
       setUploadSuccess(true);
       playSuccessChime();
-    }, 1000);
+    }, 600);
   };
 
   const handleReconcileAll = () => {
@@ -38,7 +45,7 @@ export default function BankReconciliationView({ orders: _orders, theme: _theme 
     playSuccessChime();
   };
 
-  const totalBankCredits = bankEntries.reduce((s, e) => s + e.credit, 0);
+  const totalBankCredits = bankEntries.reduce((s, e) => s + (e.credit || 0), 0);
   const matchedCount = bankEntries.filter((e) => e.status === 'matched').length;
 
   return (
@@ -46,125 +53,135 @@ export default function BankReconciliationView({ orders: _orders, theme: _theme 
       {/* Title */}
       <div style={{ marginBottom: 14 }}>
         <div className="screen-title">Bank Statements & Matching</div>
-        <div className="screen-subtitle">Check your daily UPI, Card, and Cash deposits with your bank statement</div>
+        <div className="screen-subtitle">Reconcile real-time UPI, Card, and Cash deposits with your bank statement</div>
       </div>
 
       {/* Top Upload Card */}
       <div className="ios-card active-gradient" style={{ marginBottom: 16 }}>
         <div className="card-top-row">
           <div className="card-title-group">
-            <span className="card-heading">Upload Bank Statement</span>
-            <span className="card-meta-text">Upload your bank passbook / statement (Excel or CSV file)</span>
+            <span className="card-heading">Import Bank Statement</span>
+            <span className="card-meta-text">Reconcile current account deposits against live kitchen tickets</span>
           </div>
           <FileSpreadsheet size={20} color="#007AFF" />
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6 }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
           <button
             className="btn-primary-pill"
-            style={{ fontSize: 13, padding: '8px 16px' }}
-            onClick={handleSimulateCsvUpload}
+            style={{ flex: 1, padding: '8px 12px', fontSize: 12 }}
+            onClick={handleSyncFromOrders}
             disabled={isUploading}
           >
             <Upload size={14} />
-            <span>{isUploading ? 'Reading Statement...' : 'Upload Statement (Excel / CSV)'}</span>
-          </button>
-
-          <button
-            className="btn-secondary-pill"
-            style={{ fontSize: 13, padding: '8px 16px' }}
-            onClick={handleReconcileAll}
-          >
-            <CheckCircle2 size={14} color="#16A34A" />
-            <span>Match All Deposits</span>
+            <span>{isUploading ? 'Reconciling Live Tickets...' : 'Populate from Live Orders'}</span>
           </button>
         </div>
 
         {uploadSuccess && (
-          <div style={{ marginTop: 10, fontSize: 12, color: '#16A34A', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Check size={14} strokeWidth={3} />
-            <span>Successfully loaded 5 bank entries from ICICI_CurrentAccount_Oct2026.csv</span>
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, color: '#16A34A', fontSize: 11, fontWeight: 600 }}>
+            <CheckCircle2 size={14} />
+            <span>Live statement ledger synced with active POS orders!</span>
           </div>
         )}
       </div>
 
-      {/* Summary KPI Strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+      {/* Summary Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 16 }}>
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Money in Bank</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Bank Money Received</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#16A34A', marginTop: 2 }}>
             ₹{totalBankCredits.toLocaleString('en-IN')}
           </div>
+          <div style={{ fontSize: 10, color: '#6B7280' }}>Across {bankEntries.length} verified transactions</div>
         </div>
 
         <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Matched with Bills</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#16A34A', marginTop: 2 }}>
-            {((matchedCount / bankEntries.length) * 100).toFixed(0)}%
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Matched with POS</div>
+            {bankEntries.length > 0 && matchedCount < bankEntries.length && (
+              <button
+                type="button"
+                className="btn-secondary-pill"
+                style={{ fontSize: 9, padding: '2px 6px' }}
+                onClick={handleReconcileAll}
+              >
+                Match All
+              </button>
+            )}
           </div>
-        </div>
-
-        <div className="ios-card" style={{ padding: '10px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Card Machine Fees</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#D97706', marginTop: 2 }}>
-            ₹78.00 (Bank Charge)
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
+            {matchedCount} / {bankEntries.length}
+          </div>
+          <div style={{ fontSize: 10, color: '#6B7280' }}>
+            {bankEntries.length > 0 && matchedCount === bankEntries.length ? '100% Fully Matched' : 'Awaiting confirmation'}
           </div>
         </div>
       </div>
 
-      {/* Bank Statement Entries Table */}
+      {/* Bank Transactions Matching List */}
       <div className="ios-card">
         <div className="card-top-row">
           <div className="card-title-group">
-            <span className="card-heading">Bank Deposit History</span>
+            <span className="card-heading">Bank Transactions Log</span>
             <span className="card-meta-text">Compare money received in bank vs counter bills</span>
           </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {bankEntries.map((txn) => (
-            <div
-              key={txn.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '10px 12px',
-                background: '#F9FAFB',
-                border: '1px solid #E5E7EB',
-                borderRadius: 14
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13 }}>{txn.id}</span>
-                  <span className="status-pill tag" style={{ fontSize: 9 }}>
-                    {txn.date}
+          {bankEntries.length > 0 ? (
+            bankEntries.map((txn) => (
+              <div
+                key={txn.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px 12px',
+                  background: '#F9FAFB',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: 14
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>{txn.id}</span>
+                    <span className="status-pill tag" style={{ fontSize: 9 }}>
+                      {txn.date}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: '#1F2937', marginTop: 2 }}>
+                    {txn.description}
+                  </div>
+                  {txn.mdrDeduction && (
+                    <div style={{ fontSize: 10, color: '#D97706', marginTop: 2 }}>
+                      Bill was ₹{txn.expectedCredit} • ₹{txn.mdrDeduction} deducted as card swipe charge
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#16A34A' }}>
+                    +₹{txn.credit.toLocaleString('en-IN')}
+                  </div>
+                  <span
+                    className={`status-pill ${txn.status === 'matched' ? 'done' : 'tag'}`}
+                    style={{ fontSize: 9, padding: '2px 6px', marginTop: 4 }}
+                  >
+                    {txn.status === 'matched' ? '✓ Matched' : '⚠️ Fee Difference'}
                   </span>
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 500, color: '#1F2937', marginTop: 2 }}>
-                  {txn.description}
-                </div>
-                {txn.mdrDeduction && (
-                  <div style={{ fontSize: 10, color: '#D97706', marginTop: 2 }}>
-                    Bill was ₹{txn.expectedCredit} • ₹{txn.mdrDeduction} deducted as card swipe charge
-                  </div>
-                )}
               </div>
-
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#16A34A' }}>
-                  +₹{txn.credit.toLocaleString('en-IN')}
-                </div>
-                <span
-                  className={`status-pill ${txn.status === 'matched' ? 'done' : 'tag'}`}
-                  style={{ fontSize: 9, padding: '2px 6px', marginTop: 4 }}
-                >
-                  {txn.status === 'matched' ? '✓ Matched' : '⚠️ Fee Difference'}
-                </span>
+            ))
+          ) : (
+            <div style={{ padding: '36px 16px', textAlign: 'center', background: '#F8FAFC', borderRadius: 14, border: '1px dashed #CBD5E1', color: '#64748B' }}>
+              <Building size={32} color="#94A3B8" style={{ margin: '0 auto 8px' }} />
+              <div style={{ fontWeight: 600, fontSize: 13, color: '#334155' }}>No Bank Entries Imported Yet</div>
+              <div style={{ fontSize: 11, marginTop: 4 }}>
+                Click "Populate from Live Orders" above or upload an Excel bank passbook to reconcile incoming deposits.
               </div>
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>

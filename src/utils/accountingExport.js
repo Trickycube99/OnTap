@@ -13,13 +13,13 @@ export function exportToTallyPrimeXml(orders, theme) {
     const voucherNo = `POS-${order.id.replace('ORD-', '')}`;
     const voucherDate = currentDate;
     const narration = `QR Dine Order ${order.id} at ${order.table} - ${theme.restaurantName}`;
-    const cgstAmount = (order.tax / 2).toFixed(2);
-    const sgstAmount = (order.tax / 2).toFixed(2);
-    const taxableSales = order.subtotal.toFixed(2);
-    const totalAmount = order.total.toFixed(2);
-    const ledgerName = order.paymentMode.toLowerCase().includes('cash')
+    const cgstAmount = order.tax ? (order.tax / 2).toFixed(2) : '0.00';
+    const sgstAmount = order.tax ? (order.tax / 2).toFixed(2) : '0.00';
+    const taxableSales = Number(order.subtotal || order.total || 0).toFixed(2);
+    const totalAmount = Number(order.total || 0).toFixed(2);
+    const ledgerName = (order.paymentMode || '').toLowerCase().includes('cash')
       ? 'Cash-in-Hand'
-      : order.paymentMode.toLowerCase().includes('card')
+      : (order.paymentMode || '').toLowerCase().includes('card')
       ? 'HDFC POS Merchant Bank'
       : 'ICICI UPI BharatPe Current Account';
 
@@ -125,9 +125,9 @@ export function exportToZohoBooksCsv(orders, _theme) {
 
     order.items.forEach((item) => {
       const itemSubtotal = item.price * item.quantity;
-      const cgst = (itemSubtotal * 0.025).toFixed(2);
-      const sgst = (itemSubtotal * 0.025).toFixed(2);
-      const itemTotal = (itemSubtotal * 1.05).toFixed(2);
+      const cgst = order.tax ? (itemSubtotal * 0.025).toFixed(2) : '0.00';
+      const sgst = order.tax ? (itemSubtotal * 0.025).toFixed(2) : '0.00';
+      const itemTotal = itemSubtotal.toFixed(2);
 
       rows.push([
         invNo,

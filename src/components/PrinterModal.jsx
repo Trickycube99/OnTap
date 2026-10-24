@@ -170,16 +170,25 @@ export default function PrinterModal({ order, theme, chef, onClose }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Subtotal:</span>
-                  <span>₹{order.subtotal.toFixed(0)}</span>
+                  <span>₹{Number(order.subtotal || order.total || 0).toFixed(0)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>CGST (2.5%):</span>
-                  <span>₹{(order.tax / 2).toFixed(1)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>SGST (2.5%):</span>
-                  <span>₹{(order.tax / 2).toFixed(1)}</span>
-                </div>
+                {Number(order.tax) > 0 ? (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>CGST (2.5%):</span>
+                      <span>₹{(order.tax / 2).toFixed(1)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>SGST (2.5%):</span>
+                      <span>₹{(order.tax / 2).toFixed(1)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#444' }}>
+                    <span>Taxes:</span>
+                    <span>Inclusive in dish prices</span>
+                  </div>
+                )}
                 {order.discount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Discount:</span>

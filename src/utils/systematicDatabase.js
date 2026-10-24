@@ -350,8 +350,8 @@ export function createStatutoryComplianceTombstone(business, options = {}) {
     ? nonRejectedOrders.reduce((sum, o) => sum + (Number(o.total) || Number(o.price) || 0), 0)
     : (business.gmv || 0);
 
-  // Calculate estimated statutory GST liability (5% restaurant composite GST)
-  const estimatedGstInvoiced = Math.round(totalGmv * 0.05);
+  // GST is included directly in dish prices by restaurant owner (no separate tax billed)
+  const estimatedGstInvoiced = 0;
 
   const totalExpensesLogged = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 

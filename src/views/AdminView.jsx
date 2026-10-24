@@ -340,10 +340,10 @@ export default function AdminView({
 
   // Chef Customizer Draft State & Handlers
   const [chefDraft, setChefDraft] = useState(() => ({
-    name: chef?.name || 'Head Chef',
-    title: chef?.title || 'Executive Chef & Culinary Director',
+    name: chef?.name || 'Executive Chef',
+    title: chef?.title || 'Head of Culinary Operations',
     portrait: chef?.portrait || '/assets/chef_portrait.jpg',
-    experienceYears: chef?.experienceYears || 10,
+    experienceYears: chef?.experienceYears || 0,
     bio: chef?.bio || '',
     philosophy: chef?.philosophy || '',
     showVerifiedBadge: chef?.showVerifiedBadge ?? (chef?.isVerified ?? true),
@@ -363,7 +363,7 @@ export default function AdminView({
       welcomeMessage: theme?.welcomeMessage || 'Scan table QR, order effortlessly, and track your kitchen ticket in real time.',
       accentColor: theme?.accentColor || '#007AFF',
       menuLayout: theme?.menuLayout || 'grid',
-      upiId: theme?.upiId || '9119069179@nyes',
+      upiId: theme?.upiId || '',
       logo: theme?.logo || null,
       serviceType: theme?.serviceType || (theme?.tables?.length === 1 && theme?.tables[0].includes('Stand') ? 'stall' : 'dine_in'),
       tableCount: theme?.tableCount || (theme?.tables?.filter(t => t.toLowerCase().startsWith('table')).length || 6),
@@ -376,10 +376,10 @@ export default function AdminView({
   if (chef !== prevChef) {
     setPrevChef(chef);
     setChefDraft({
-      name: chef?.name || 'Rakesh Sharma',
-      title: chef?.title || 'Executive Chef & Master Director',
+      name: chef?.name || 'Executive Chef',
+      title: chef?.title || 'Head of Culinary Operations',
       portrait: chef?.portrait || '/assets/chef_portrait.jpg',
-      experienceYears: chef?.experienceYears || 18,
+      experienceYears: chef?.experienceYears || 0,
       bio: chef?.bio || '',
       philosophy: chef?.philosophy || '',
       showVerifiedBadge: chef?.showVerifiedBadge ?? (chef?.isVerified ?? true),
@@ -692,18 +692,18 @@ export default function AdminView({
   // CSV Export Handler (FR-A2)
   const handleExportCSV = () => {
     playTapSound();
-    const headers = ['Order ID', 'Customer', 'Table', 'Status', 'Payment Mode', 'Items', 'Subtotal (INR)', 'GST Tax (INR)', 'Total (INR)', 'Timestamp'];
+    const headers = ['Order ID', 'Customer', 'Table', 'Status', 'Payment Mode', 'Items', 'Subtotal (INR)', 'Tax (INR - Inclusive)', 'Total (INR)', 'Timestamp'];
     const rows = orders.map((o) => [
       o.id,
-      `"${o.customerName}"`,
-      `"${o.table}"`,
-      o.statusLabel,
-      `"${o.paymentMode}"`,
-      `"${o.items.map((i) => `${i.quantity}x ${i.name}`).join('; ')}"`,
-      o.subtotal.toFixed(0),
-      o.tax.toFixed(1),
-      o.total.toFixed(0),
-      `"${o.createdAt}"`
+      `"${o.customerName || 'Walk-in'}"`,
+      `"${o.table || 'Table'}"`,
+      o.statusLabel || o.status,
+      `"${o.paymentMode || 'Counter'}"`,
+      `"${(o.items || []).map((i) => `${i.quantity}x ${i.name}`).join('; ')}"`,
+      Number(o.subtotal || o.total || 0).toFixed(0),
+      Number(o.tax || 0).toFixed(1),
+      Number(o.total || 0).toFixed(0),
+      `"${o.createdAt || ''}"`
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
