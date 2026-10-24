@@ -585,7 +585,6 @@ export default function AuthModal({
                     {showPin ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
-                <span className="auth-hint">Platform Requirement: Exactly 6 numeric digits. Accounts remain suspended until email is verified.</span>
               </div>
             </>
           )}
