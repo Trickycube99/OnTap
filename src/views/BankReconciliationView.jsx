@@ -145,7 +145,7 @@ export default function BankReconciliationView({ orders = [], theme: _theme }) {
       </div>
 
       {/* Summary Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
         <div className="ios-card" style={{ padding: '10px' }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Bank Money Received</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#16A34A', marginTop: 2 }}>

@@ -143,7 +143,7 @@ export default function MultiBranchView({ theme, chef: _chef }) {
       </div>
 
       {/* Network KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+      <div className="responsive-kpi-grid-3" style={{ marginBottom: 16 }}>
         <div className="ios-card" style={{ padding: '10px' }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Sales (All Outlets)</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
@@ -282,10 +282,8 @@ export default function MultiBranchView({ theme, chef: _chef }) {
 
                 {/* Branch Performance Metrics Grid */}
                 <div
+                  className="responsive-kpi-grid-4"
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
-                    gap: 6,
                     marginTop: 12,
                     background: '#F9FAFB',
                     padding: '10px 8px',

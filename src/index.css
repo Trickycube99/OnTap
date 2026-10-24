@@ -86,6 +86,7 @@ html, body {
   color: var(--text-primary);
   font-family: var(--font-family);
   overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
 }
 
 /* App Outer Shell: True Full Viewport */
@@ -95,6 +96,7 @@ html, body {
   display: flex;
   flex-direction: column;
   background: var(--bg-app);
+  overflow-x: hidden;
 }
 
 .app-main-viewport {
@@ -102,6 +104,7 @@ html, body {
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
 }
 
 .app-content-container {
@@ -117,7 +120,8 @@ html, body {
 
 @media (max-width: 768px) {
   .app-content-container {
-    padding: 12px 14px 95px; /* Bottom space for mobile nav bar */
+    padding: 12px 14px calc(84px + env(safe-area-inset-bottom, 12px)); /* Bottom space for mobile nav bar */
+    max-width: 100%;
   }
 }
 
@@ -144,8 +148,52 @@ html, body {
 
 @media (max-width: 768px) {
   .production-header {
-    padding: 8px 14px;
+    padding: 8px 12px;
     gap: 8px;
+  }
+  .qr-pill-label {
+    display: none;
+  }
+  .reset-label {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .production-header {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+  .brand-title {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+  }
+  .brand-avatar-box {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+  .header-auth-profile-pill span {
+    max-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .customer-table-pill {
+    padding: 4px 8px;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .lang-toggle-pill {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .header-cart-pill {
+    padding: 5px 9px;
+    font-size: 11px;
+    gap: 4px;
   }
 }
 
@@ -593,7 +641,21 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   margin-bottom: 8px;
+}
+
+.card-top-row .card-title-group {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.card-top-row > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
 .card-heading {
@@ -720,8 +782,11 @@ html, body {
   align-items: center;
   gap: 8px;
   overflow-x: auto;
-  padding: 4px 0 14px;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 16px 14px 4px;
+  margin: 0 -4px;
   scrollbar-width: none;
+  scroll-behavior: smooth;
 }
 
 .filter-tabs-container::-webkit-scrollbar {
@@ -731,15 +796,19 @@ html, body {
 .capsule-tab {
   background: #FFFFFF;
   border: 1px solid var(--card-border);
-  padding: 6px 14px;
+  padding: 7px 14px;
   border-radius: 20px;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   transition: all 0.15s ease;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .capsule-tab:hover {
@@ -753,6 +822,61 @@ html, body {
   border-color: var(--primary-blue);
   font-weight: 600;
   box-shadow: 0 3px 10px rgba(0, 122, 255, 0.25);
+}
+
+/* Universal Responsive Mobile KPI & Action Grids */
+.responsive-kpi-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  .responsive-kpi-grid-3 {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px;
+  }
+}
+
+.responsive-kpi-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+@media (max-width: 768px) {
+  .responsive-kpi-grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+}
+@media (max-width: 380px) {
+  .responsive-kpi-grid-4 {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+.order-card-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+@media (max-width: 480px) {
+  .order-card-actions-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+}
+
+.table-responsive-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+  scrollbar-width: thin;
+}
+.table-responsive-wrapper > * {
+  min-width: 420px;
 }
 
 /* Verified Chef Banner */
@@ -955,7 +1079,24 @@ html, body {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 500;
-  padding: 4px 10px;
+  padding: 4px 6px;
+  max-width: 76px;
+  text-align: center;
+}
+
+.bottom-tab-item span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+@media (max-width: 380px) {
+  .bottom-tab-item {
+    padding: 4px 2px;
+    font-size: 10px;
+    max-width: 60px;
+  }
 }
 
 .bottom-tab-item.active {
@@ -990,9 +1131,9 @@ html, body {
 /* Floating Bottom Cart Bar (Mobile & Desktop) */
 .floating-cart-bar {
   position: fixed;
-  bottom: 80px;
-  right: 20px;
-  left: 20px;
+  bottom: calc(74px + env(safe-area-inset-bottom, 8px));
+  right: 12px;
+  left: 12px;
   max-width: 440px;
   margin: 0 auto;
   background: #0F172A;
@@ -1173,12 +1314,10 @@ html, body {
 }
 
 /* ==========================================================================
-   Admin Mobile Navigation: Top Tabs vs Footer Tabs Abstraction
+   Admin Mobile Navigation: Top Tabs Full Horizontal Scroll
    ========================================================================== */
-@media (max-width: 768px) {
-  .capsule-tab.admin-footer-tab-mobile-hidden {
-    display: none !important;
-  }
+.capsule-tab.admin-footer-tab-mobile-hidden {
+  display: inline-flex !important;
 }
 
 /* ==========================================================================
@@ -1441,6 +1580,28 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .auth-demo-box {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .auth-demo-hint {
+    text-align: left;
+    white-space: normal;
+  }
+  .auth-modal-card {
+    padding: 16px 14px;
+    border-radius: 20px;
+    max-height: 92vh;
+  }
+  .table-qr-modal-card {
+    padding: 16px 14px;
+    border-radius: 20px;
+    max-height: 92vh;
+  }
 }
 
 .auth-actions-row {
@@ -1810,6 +1971,13 @@ html, body {
   display: grid;
   grid-template-columns: 1fr 1fr 1.2fr;
   gap: 8px;
+}
+
+@media (max-width: 520px) {
+  .qr-actions-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
 .qr-action-btn {

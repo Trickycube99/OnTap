@@ -243,10 +243,8 @@ export default function LoyaltyView({ orders = [], theme: _theme }) {
 
             {/* Member Key Metrics Strip */}
             <div
+              className="responsive-kpi-grid-3"
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 8,
                 marginTop: 14,
                 background: 'rgba(255, 255, 255, 0.8)',
                 padding: 10,

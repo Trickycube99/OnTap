@@ -149,7 +149,7 @@ export default function AggregatorReconciliationView() {
       </div>
 
       {/* KPI Cards Strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+      <div className="responsive-kpi-grid-3" style={{ marginBottom: 16 }}>
         <div className="ios-card" style={{ padding: '10px' }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Pending Payouts</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#D97706', marginTop: 2 }}>
@@ -267,8 +267,8 @@ export default function AggregatorReconciliationView() {
                   borderRadius: 12,
                   fontSize: 11,
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: 6,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+                  gap: 8,
                   textAlign: 'center'
                 }}
               >

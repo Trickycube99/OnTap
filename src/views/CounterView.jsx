@@ -1464,14 +1464,7 @@ export default function CounterView({
 
                         return (
                           <div>
-                            <div
-                              style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(4, 1fr)',
-                                gap: 6,
-                                marginTop: 10
-                              }}
-                            >
+                            <div className="order-card-actions-grid">
                               {/* 1. Accept Button -> Transitions to Cooking */}
                               <button
                                 className="btn-secondary-pill"
@@ -2550,11 +2543,13 @@ export default function CounterView({
               style={{
                 border: '1px solid #E5E7EB',
                 borderRadius: 14,
-                overflow: 'hidden',
+                overflowX: 'auto',
+                WebkitOverflowScrolling: 'touch',
                 marginBottom: 14
               }}
             >
-              <div
+              <div style={{ minWidth: 420 }}>
+                <div
                 style={{
                   display: 'grid',
                   gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
@@ -2697,6 +2692,7 @@ export default function CounterView({
                 </span>
               </div>
             </div>
+          </div>
 
             {/* Variance Note if provided */}
             {closingPendingReport.varianceReason && (

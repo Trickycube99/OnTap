@@ -1702,21 +1702,19 @@ export default function AdminView({
       {/* Admin Tabs */}
       <div className="filter-tabs-container" style={{ padding: '0 0 12px' }}>
         {[
-          { id: 'sales', label: "Today's Sales", inFooter: true },
-          { id: 'orders', label: 'Order History', inFooter: true },
-          { id: 'punch', label: '+ New Order', inFooter: false },
-          { id: 'pnl', label: 'Profits & Expenses', inFooter: true },
-          { id: 'eod-checklists', label: hasEodSubmitted ? 'Daily Cash (Done)' : 'Daily Cash Check', inFooter: false },
-          { id: 'offers', label: 'Discount Offers', inFooter: true },
-          { id: 'payroll', label: 'Staff & Salaries', inFooter: true },
-          { id: 'menu', label: 'Edit Menu', inFooter: false },
-          { id: 'branding', label: 'Store Settings', inFooter: true }
+          { id: 'sales', label: "Today's Sales" },
+          { id: 'orders', label: 'Order History' },
+          { id: 'punch', label: '+ New Order' },
+          { id: 'pnl', label: 'Profits & Expenses' },
+          { id: 'eod-checklists', label: hasEodSubmitted ? 'Daily Cash (Done)' : 'Daily Cash Check' },
+          { id: 'offers', label: 'Discount Offers' },
+          { id: 'payroll', label: 'Staff & Salaries' },
+          { id: 'menu', label: 'Edit Menu' },
+          { id: 'branding', label: 'Store Settings' }
         ].map((tab) => (
           <button
             key={tab.id}
-            className={`capsule-tab ${activeAdminTab === tab.id ? 'active' : ''} ${
-              tab.inFooter ? 'admin-footer-tab-mobile-hidden' : ''
-            }`}
+            className={`capsule-tab ${activeAdminTab === tab.id ? 'active' : ''}`}
             onClick={() => {
               playTapSound();
               setActiveAdminTab(tab.id);
@@ -1855,14 +1853,7 @@ export default function AdminView({
             {hasEodSubmitted ? (
               <div>
                 {/* 3 Prominent Metrics Boxes */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(3, 1fr)',
-                    gap: 10,
-                    marginBottom: 14
-                  }}
-                >
+                <div className="responsive-kpi-grid-3" style={{ marginBottom: 14 }}>
                   <div
                     style={{
                       background: '#FFFFFF',
@@ -1947,11 +1938,13 @@ export default function AdminView({
                     background: '#FFFFFF',
                     border: '1px solid #E5E7EB',
                     borderRadius: 12,
-                    overflow: 'hidden',
+                    overflowX: 'auto',
+                    WebkitOverflowScrolling: 'touch',
                     marginBottom: latestEodReport.varianceReason ? 10 : 0
                   }}
                 >
-                  <div
+                  <div style={{ minWidth: 420 }}>
+                    <div
                     style={{
                       display: 'grid',
                       gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
@@ -2061,6 +2054,7 @@ export default function AdminView({
                     </span>
                   </div>
                 </div>
+              </div>
 
                 {/* Audit explanation note if provided */}
                 {latestEodReport.varianceReason && (
@@ -2114,7 +2108,7 @@ export default function AdminView({
           />
 
           {/* Top 3 KPI Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+          <div className="responsive-kpi-grid-3" style={{ marginBottom: 16 }}>
             <div className="ios-card active-gradient" style={{ padding: '12px 10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Today's Sales</div>
@@ -2203,20 +2197,20 @@ export default function AdminView({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4, fontSize: 12, marginBottom: 3 }}>
                   <span>Cash at Counter</span>
-                  <div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {hasStaffSubmittedToday ? (
-                      <span style={{ color: '#16A34A', fontWeight: 700, marginRight: 8 }}>
+                      <span style={{ color: '#16A34A', fontWeight: 700 }}>
                         Submitted: ₹{filledCash.toFixed(0)}
                       </span>
                     ) : (
-                      <span style={{ color: '#B45309', fontWeight: 600, marginRight: 8 }}>
+                      <span style={{ color: '#B45309', fontWeight: 600 }}>
                         Awaiting staff count
                       </span>
                     )}
                     <span style={{ color: 'var(--text-muted)' }}>
-                      Expected from bills: ₹{expectedCashSplit.toFixed(0)}
+                      Expected: ₹{expectedCashSplit.toFixed(0)}
                     </span>
                   </div>
                 </div>
@@ -2232,20 +2226,20 @@ export default function AdminView({
               </div>
 
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4, fontSize: 12, marginBottom: 3 }}>
                   <span>Card POS Swipe</span>
-                  <div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {hasStaffSubmittedToday ? (
-                      <span style={{ color: 'var(--primary-blue)', fontWeight: 700, marginRight: 8 }}>
+                      <span style={{ color: 'var(--primary-blue)', fontWeight: 700 }}>
                         Submitted: ₹{filledCard.toFixed(0)}
                       </span>
                     ) : (
-                      <span style={{ color: '#B45309', fontWeight: 600, marginRight: 8 }}>
+                      <span style={{ color: '#B45309', fontWeight: 600 }}>
                         Awaiting staff count
                       </span>
                     )}
                     <span style={{ color: 'var(--text-muted)' }}>
-                      Expected from bills: ₹{expectedCardSplit.toFixed(0)}
+                      Expected: ₹{expectedCardSplit.toFixed(0)}
                     </span>
                   </div>
                 </div>
@@ -2261,9 +2255,9 @@ export default function AdminView({
               </div>
 
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
-                  <span>Instant UPI QR (GPay / PhonePe / Paytm)</span>
-                  <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4, fontSize: 12, marginBottom: 3 }}>
+                  <span>Instant UPI QR</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {hasStaffSubmittedToday ? (
                       <span style={{ color: '#8B5CF6', fontWeight: 700, marginRight: 8 }}>
                         Submitted: ₹{filledUpi.toFixed(0)}
@@ -2344,7 +2338,7 @@ export default function AdminView({
                 <span className="card-heading">Complete Order History</span>
                 <span className="card-meta-text">Searchable register logs & instant CSV export</span>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button
                   className="btn-secondary-pill"
                   style={{
@@ -2583,10 +2577,8 @@ export default function AdminView({
             </div>
 
             <div
+              className="responsive-kpi-grid-3"
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 8,
                 background: 'rgba(255, 255, 255, 0.9)',
                 borderRadius: 14,
                 padding: '12px 8px',
@@ -2646,7 +2638,7 @@ export default function AdminView({
 
             {hasStaffSubmittedToday ? (
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+                <div className="responsive-kpi-grid-3" style={{ marginBottom: 10 }}>
                   <div style={{ background: '#F0FDF4', padding: '10px 12px', borderRadius: 12, border: '1px solid #86EFAC' }}>
                     <div style={{ fontSize: 11, color: '#15803D', fontWeight: 600 }}>Counted Drawer Cash</div>
                     <div style={{ fontSize: 17, fontWeight: 800, color: '#15803D', marginTop: 2 }}>
@@ -2849,7 +2841,7 @@ export default function AdminView({
                   ⏳ Resets Mon ({weekPeriodInfo.daysUntilReset}d left)
                 </span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
+              <div className="responsive-kpi-grid-4" style={{ marginTop: 8 }}>
                 <div>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Gross Sales</div>
                   <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--primary-blue)' }}>₹{weekSales.toFixed(0)}</div>
@@ -2956,7 +2948,7 @@ export default function AdminView({
                   ⏳ Resets on 30th ({monthPeriodInfo.daysUntilReset}d left)
                 </span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
+              <div className="responsive-kpi-grid-4" style={{ marginTop: 8 }}>
                 <div>
                   <div style={{ fontSize: 10, color: '#92400E' }}>Gross Sales</div>
                   <div style={{ fontSize: 15, fontWeight: 800, color: '#B45309' }}>₹{monthSales.toFixed(0)}</div>
@@ -3110,14 +3102,7 @@ export default function AdminView({
             </div>
 
             {/* Quick KPI stats */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: 8,
-                marginTop: 12
-              }}
-            >
+            <div className="responsive-kpi-grid-4" style={{ marginTop: 12 }}>
               <div style={{ background: '#FFFFFF', padding: '10px 12px', borderRadius: 12, border: '1px solid #E5E7EB' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Daily Reports</div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
@@ -3196,11 +3181,13 @@ export default function AdminView({
                       style={{
                         border: '1px solid #E5E7EB',
                         borderRadius: 12,
-                        overflow: 'hidden',
+                        overflowX: 'auto',
+                        WebkitOverflowScrolling: 'touch',
                         marginBottom: 10
                       }}
                     >
-                      <div
+                      <div style={{ minWidth: 420 }}>
+                        <div
                         style={{
                           display: 'grid',
                           gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
@@ -3336,6 +3323,7 @@ export default function AdminView({
                         </span>
                       </div>
                     </div>
+                  </div>
 
                     {/* Variance Note if present */}
                     {report.varianceReason && (

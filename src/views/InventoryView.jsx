@@ -154,7 +154,7 @@ export default function InventoryView({ menu: _menu }) {
       </div>
 
       {/* Top Inventory Metrics */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+      <div className="responsive-kpi-grid-3" style={{ marginBottom: 16 }}>
         <div className="ios-card" style={{ padding: '10px' }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total Stock Value</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
@@ -220,7 +220,7 @@ export default function InventoryView({ menu: _menu }) {
                 <option value="Beverages">Beverages</option>
               </select>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginBottom: 10 }}>
               <input
                 type="number"
                 step="0.1"

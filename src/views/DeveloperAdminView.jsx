@@ -3538,7 +3538,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                         </span>
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12, marginBottom: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, fontSize: 12, marginBottom: 10 }}>
                         <div style={{ color: '#94A3B8' }}>
                           Deletion Timestamp: <strong style={{ color: '#F8FAFC' }}>{new Date(rec.deletionTimestamp).toLocaleString('en-IN')}</strong>
                         </div>
@@ -3556,7 +3556,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       {/* Financial Tax Summary Grid */}
                       <div style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
                         gap: 8,
                         background: 'rgba(15, 23, 42, 0.6)',
                         padding: '10px 12px',

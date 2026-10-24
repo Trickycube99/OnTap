@@ -2063,7 +2063,7 @@ export default function CustomerView({
             </div>
 
             {/* Diner Name (DPDP Act Compliant: strictly optional, non-blocking) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 10 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
                   {t('yourName')} (Optional)
@@ -2133,7 +2133,7 @@ export default function CustomerView({
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6, display: 'block' }}>
                 {t('paymentMethod')}
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
                 <button
                   type="button"
                   className="ios-card"
@@ -2734,6 +2734,8 @@ export default function CustomerView({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 6,
                       marginTop: 8
                     }}
                   >
