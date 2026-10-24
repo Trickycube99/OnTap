@@ -39,6 +39,7 @@ import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/busin
 import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
 import { syncBusinessToCloud, resetAllOrdersAndFinancialData } from '../utils/systematicDatabase';
 import { syncMenuToCloud } from '../utils/firebaseSync';
+import { persistStaffSubmission } from '../utils/ownerDatabase';
 
 function checkUnacceptedOverdue(order) {
   if (!order || !order.createdAt) return { elapsedMins: 0, isUnacceptedOverdue: false };
@@ -834,6 +835,8 @@ export default function CounterView({
     if (setChecklists) {
       setChecklists((prev) => [report, ...(Array.isArray(prev) ? prev : [])]);
     }
+    // Store in IndexedDB and Cloud Firestore for permanent memory & fast indexed querying
+    persistStaffSubmission({ report, businessId: activeBusinessId });
     broadcastSyncEvent(SYNC_EVENTS.CHECKLIST_SUBMITTED, report, activeBusinessId);
     setShowClosingConfirmModal(false);
     setChecklistSubmitted(true);

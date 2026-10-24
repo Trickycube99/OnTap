@@ -40,6 +40,7 @@ import {
 import { playNewOrderChime, playTapSound } from './utils/audio';
 import { syncAllBusinessesToCloud, subscribeBusinessesFromCloud, fetchBusinessesFromCloud } from './utils/systematicDatabase';
 import { subscribeSyncEvents, SYNC_EVENTS } from './utils/sync';
+import { saveSubmittedReportToIndexedDB, fetchAllSubmittedReportsFromIndexedDB } from './utils/ownerDatabase';
 import confetti from 'canvas-confetti';
 import { Server, Building2, PlusCircle } from 'lucide-react';
 
@@ -502,6 +503,28 @@ export default function App() {
     }
   }, [checklists, activeBusinessId]);
 
+  // Fast IndexedDB retrieval on mount or tenant switch so checklists memory is never lost
+  useEffect(() => {
+    let isMounted = true;
+    if (activeBusinessId) {
+      fetchAllSubmittedReportsFromIndexedDB(activeBusinessId).then((reports) => {
+        if (isMounted && Array.isArray(reports) && reports.length > 0) {
+          setChecklists((prev) => {
+            const list = Array.isArray(prev) ? prev : [];
+            const merged = [...reports];
+            list.forEach((item) => {
+              if (!merged.some((m) => m.id === item.id)) {
+                merged.push(item);
+              }
+            });
+            return merged;
+          });
+        }
+      });
+    }
+    return () => { isMounted = false; };
+  }, [activeBusinessId]);
+
   // Dynamic CSS variables for tenant branding (strictly isolated from developer superadmin console)
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -601,6 +624,7 @@ export default function App() {
         setExpenses((prev) => [msg.payload, ...prev]);
       } else if (msg.type === SYNC_EVENTS.CHECKLIST_SUBMITTED) {
         if (msg.payload && msg.payload.id) {
+          saveSubmittedReportToIndexedDB(msg.payload);
           setChecklists((prev) => {
             const list = Array.isArray(prev) ? prev : [];
             if (list.some((c) => c.id === msg.payload.id)) {

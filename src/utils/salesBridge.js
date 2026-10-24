@@ -373,7 +373,7 @@ export function buildDailyArchives({ orders, checklists = [] }) {
  * Build Weekly Archives for Profit & Expense Section
  * Cycles: Monday 00:00:00 to Sunday 23:59:59 (Resetting every Monday)
  */
-export function buildWeeklyArchives({ orders, expenses = [] }) {
+export function buildWeeklyArchives({ orders, expenses = [], checklists = [] }) {
   const validOrders = getValidOrders(orders);
   const now = new Date();
   const { startOfWeek: currentWeekStart, endOfWeek: currentWeekEnd } = getWeekDateRange(now);
@@ -425,7 +425,16 @@ export function buildWeeklyArchives({ orders, expenses = [] }) {
 
   return Array.from(weeksMap.values())
     .map((w) => {
-      const grossSales = w.orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+      // Prioritize staff-submitted checklist reports for owner verification
+      const periodChecklists = (checklists || []).filter((c) => {
+        if (!c) return false;
+        const d = c.createdAt ? new Date(c.createdAt) : new Date(c.date);
+        return !isNaN(d.getTime()) && d >= w.startOfWeek && d <= w.endOfWeek;
+      });
+      const submittedSales = periodChecklists.reduce((s, c) => s + (Number(c?.actual?.total) || 0), 0);
+      const kitchenGrossOrders = w.orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+      const grossSales = periodChecklists.length > 0 ? submittedSales : (w.isCurrent ? 0 : kitchenGrossOrders);
+
       const servedSales = w.orders
         .filter((o) => o.status === 'served' || o.status === 'done')
         .reduce((s, o) => s + (Number(o.total) || 0), 0);
@@ -443,11 +452,16 @@ export function buildWeeklyArchives({ orders, expenses = [] }) {
         endOfWeek: w.endOfWeek,
         isCurrent: w.isCurrent,
         orderCount: w.orders.length,
+        submissionsCount: periodChecklists.length,
+        hasStaffSubmissions: periodChecklists.length > 0,
         grossSales,
+        kitchenGrossOrders,
         servedSales,
         totalExpenses,
         netProfit,
-        status: w.isCurrent ? 'Active (Adding till Monday)' : 'Archived & Settled'
+        status: w.isCurrent
+          ? (periodChecklists.length > 0 ? 'Active (Staff Count Verified)' : 'Active (Awaiting Staff)')
+          : 'Archived & Settled'
       };
     })
     .sort((a, b) => b.startOfWeek.getTime() - a.startOfWeek.getTime());
@@ -457,7 +471,7 @@ export function buildWeeklyArchives({ orders, expenses = [] }) {
  * Build Monthly Archives for Profit & Expense Section
  * Cycles: 30th to 29th of each month (Resetting every 30th)
  */
-export function buildMonthlyArchives({ orders, expenses = [] }) {
+export function buildMonthlyArchives({ orders, expenses = [], checklists = [] }) {
   const validOrders = getValidOrders(orders);
   const now = new Date();
   const { startOfCycle: currentCycleStart, endOfCycle: currentCycleEnd } = get30thMonthDateRange(now);
@@ -509,7 +523,16 @@ export function buildMonthlyArchives({ orders, expenses = [] }) {
 
   return Array.from(monthsMap.values())
     .map((m) => {
-      const grossSales = m.orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+      // Prioritize staff-submitted checklist reports for owner verification
+      const periodChecklists = (checklists || []).filter((c) => {
+        if (!c) return false;
+        const d = c.createdAt ? new Date(c.createdAt) : new Date(c.date);
+        return !isNaN(d.getTime()) && d >= m.startOfCycle && d <= m.endOfCycle;
+      });
+      const submittedSales = periodChecklists.reduce((s, c) => s + (Number(c?.actual?.total) || 0), 0);
+      const kitchenGrossOrders = m.orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+      const grossSales = periodChecklists.length > 0 ? submittedSales : (m.isCurrent ? 0 : kitchenGrossOrders);
+
       const servedSales = m.orders
         .filter((o) => o.status === 'served' || o.status === 'done')
         .reduce((s, o) => s + (Number(o.total) || 0), 0);
@@ -523,11 +546,16 @@ export function buildMonthlyArchives({ orders, expenses = [] }) {
         endOfCycle: m.endOfCycle,
         isCurrent: m.isCurrent,
         orderCount: m.orders.length,
+        submissionsCount: periodChecklists.length,
+        hasStaffSubmissions: periodChecklists.length > 0,
         grossSales,
+        kitchenGrossOrders,
         servedSales,
         totalExpenses,
         netProfit,
-        status: m.isCurrent ? 'Active (Adding till 30th)' : 'Archived & Settled'
+        status: m.isCurrent
+          ? (periodChecklists.length > 0 ? 'Active (Staff Count Verified)' : 'Active (Awaiting Staff)')
+          : 'Archived & Settled'
       };
     })
     .sort((a, b) => b.startOfCycle.getTime() - a.startOfCycle.getTime());

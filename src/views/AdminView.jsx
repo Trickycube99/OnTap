@@ -59,6 +59,16 @@ import {
   exportWeeklyDataCsv,
   exportMonthlyDataCsv
 } from '../utils/salesBridge';
+import {
+  fetchAllSubmittedReportsFromIndexedDB,
+  fetchSubmittedReportByDateFromIndexedDB,
+  saveDashboardSnapshotToIndexedDB,
+  getDashboardSnapshotFromIndexedDB,
+  syncCloudSubmissionsToIndexedDB,
+  saveSubmittedReportToIndexedDB,
+  persistStaffSubmission,
+  calculateStaffSubmittedAmounts
+} from '../utils/ownerDatabase';
 
 // Coupons & Offers Helpers (placed outside component for purity)
 const isOfferExpired = (offer) => {
@@ -97,6 +107,11 @@ export default function AdminView({
   const [showWalkInPunch, setShowWalkInPunch] = useState(false);
   const [payrollDisbursed, setPayrollDisbursed] = useState(false);
   const [liveEodToast, setLiveEodToast] = useState('');
+
+  // IndexedDB & Cloud Database Submitted Sales Engine
+  const [dbSubmittedReports, setDbSubmittedReports] = useState(() => Array.isArray(checklists) ? checklists : []);
+  const [isDbLoading, setIsDbLoading] = useState(false);
+  const [lastDbSyncTimestamp, setLastDbSyncTimestamp] = useState('');
 
   // Owner Credentials Vault State
   const [showOwnerCredentialsModal, setShowOwnerCredentialsModal] = useState(false);
@@ -189,6 +204,74 @@ export default function AdminView({
     setTimeout(() => setCopiedOwnerKey(null), 2000);
   };
 
+  // Database Loading & Multi-Device Synchronization Engine
+  // Fetches from IndexedDB (<5ms indexed query) and syncs from Cloud Firestore
+  // Guarantees accurate data across reloads, new tabs, and different devices
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSubmittedSalesFromDatabase() {
+      try {
+        setIsDbLoading(true);
+        // 1. Fast indexed retrieval from IndexedDB (<5ms)
+        const localIndexedReports = await fetchAllSubmittedReportsFromIndexedDB(activeBusinessId);
+        if (isMounted && Array.isArray(localIndexedReports) && localIndexedReports.length > 0) {
+          setDbSubmittedReports(localIndexedReports);
+          if (setChecklists) {
+            setChecklists((prev) => {
+              const prevList = Array.isArray(prev) ? prev : [];
+              const merged = [...localIndexedReports];
+              prevList.forEach((item) => {
+                if (!merged.some((m) => m.id === item.id)) {
+                  merged.push(item);
+                }
+              });
+              return merged;
+            });
+          }
+        }
+
+        // 2. Cross-device and cloud sync from Cloud Firestore
+        const cloudReports = await syncCloudSubmissionsToIndexedDB(activeBusinessId);
+        if (isMounted && Array.isArray(cloudReports) && cloudReports.length > 0) {
+          setDbSubmittedReports((prev) => {
+            const list = Array.isArray(prev) ? [...prev] : [];
+            cloudReports.forEach((cr) => {
+              const idx = list.findIndex((x) => x.id === cr.id);
+              if (idx >= 0) list[idx] = cr;
+              else list.unshift(cr);
+            });
+            return list;
+          });
+          if (setChecklists) {
+            setChecklists((prev) => {
+              const list = Array.isArray(prev) ? [...prev] : [];
+              cloudReports.forEach((cr) => {
+                const idx = list.findIndex((x) => x.id === cr.id);
+                if (idx >= 0) list[idx] = cr;
+                else list.unshift(cr);
+              });
+              return list;
+            });
+          }
+        }
+        if (isMounted) {
+          setLastDbSyncTimestamp(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        }
+      } catch (err) {
+        console.warn('⚠️ [Owner DB Fetch Error]:', err);
+      } finally {
+        if (isMounted) setIsDbLoading(false);
+      }
+    }
+
+    loadSubmittedSalesFromDatabase();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeBusinessId, setChecklists]);
+
   // Real-time synchronization: listen for live EOD checklist submissions from Counter Staff (Tenant Scoped)
   useEffect(() => {
     const unsubscribe = subscribeSyncEvents((msg) => {
@@ -196,20 +279,33 @@ export default function AdminView({
       if (msg.businessId && msg.businessId !== activeBusinessId) return;
 
       if (msg.type === SYNC_EVENTS.CHECKLIST_SUBMITTED && msg.payload) {
+        const report = msg.payload;
+        // Save to IndexedDB immediately for instant indexed persistence
+        saveSubmittedReportToIndexedDB(report);
+
+        setDbSubmittedReports((prev) => {
+          const list = Array.isArray(prev) ? prev : [];
+          const exists = list.some((item) => item.id === report.id);
+          if (exists) {
+            return list.map((item) => (item.id === report.id ? report : item));
+          }
+          return [report, ...list];
+        });
+
         if (setChecklists) {
           setChecklists((prev) => {
             const list = Array.isArray(prev) ? prev : [];
-            const exists = list.some((item) => item.id === msg.payload.id);
+            const exists = list.some((item) => item.id === report.id);
             if (exists) {
-              return list.map((item) => (item.id === msg.payload.id ? msg.payload : item));
+              return list.map((item) => (item.id === report.id ? report : item));
             }
-            return [msg.payload, ...list];
+            return [report, ...list];
           });
         }
-        const filledAmt = msg.payload.actual?.total ?? 0;
-        const submitter = msg.payload.submittedBy || 'Counter Staff';
+        const filledAmt = report.actual?.total ?? 0;
+        const submitter = report.submittedBy || 'Counter Staff';
         setLiveEodToast(
-          `✅ Today's Cash Received: ${submitter} submitted ₹${Number(filledAmt).toLocaleString('en-IN')} for closing`
+          `✅ Submitted by Staff: ${submitter} submitted ₹${Number(filledAmt).toLocaleString('en-IN')} into Owner Dashboard`
         );
         playSuccessChime();
         setTimeout(() => setLiveEodToast(''), 7000);
@@ -217,6 +313,7 @@ export default function AdminView({
         if (setOrders) setOrders([]);
         if (setExpenses) setExpenses([]);
         if (setChecklists) setChecklists([]);
+        setDbSubmittedReports([]);
       }
     }, activeBusinessId);
     return () => unsubscribe();
@@ -616,47 +713,125 @@ export default function AdminView({
     });
   }, [validOrders]);
 
-  // Real Sales KPIs calculation in ₹ (starts at 0 and increments with real order data)
+  // Kitchen Placed Orders (Audit baseline for kitchen tickets)
   const totalOrdersCount = todayOrders.length;
-  const todayGrossSales = useMemo(() => {
+  const todayKitchenGrossOrders = useMemo(() => {
     return todayOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
   }, [todayOrders]);
 
-  const weekSales = useMemo(() => {
+  const weekKitchenGrossOrders = useMemo(() => {
     return weekOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
   }, [weekOrders]);
 
-  const monthSales = useMemo(() => {
+  const monthKitchenGrossOrders = useMemo(() => {
     return monthOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
   }, [monthOrders]);
 
-  const cashSplit = todayOrders.filter((o) => (o.paymentMode || '').toLowerCase().includes('cash') || (o.paymentMode || '').toLowerCase().includes('counter')).reduce((s, o) => s + (Number(o.total) || 0), 0);
-  const cardSplit = todayOrders.filter((o) => (o.paymentMode || '').toLowerCase().includes('card')).reduce((s, o) => s + (Number(o.total) || 0), 0);
-  const upiSplit = todayOrders.filter((o) => (o.paymentMode || '').toLowerCase().includes('upi')).reduce((s, o) => s + (Number(o.total) || 0), 0);
+  const expectedCashSplit = todayOrders.filter((o) => (o.paymentMode || '').toLowerCase().includes('cash') || (o.paymentMode || '').toLowerCase().includes('counter')).reduce((s, o) => s + (Number(o.total) || 0), 0);
+  const expectedCardSplit = todayOrders.filter((o) => (o.paymentMode || '').toLowerCase().includes('card')).reduce((s, o) => s + (Number(o.total) || 0), 0);
+  const expectedUpiSplit = todayOrders.filter((o) => (o.paymentMode || '').toLowerCase().includes('upi')).reduce((s, o) => s + (Number(o.total) || 0), 0);
 
-  // EOD Closing Reconciliation & Staff Calculated Filled Amounts
-  const todayDateStr = new Date().toLocaleDateString();
-  const latestEodReport = useMemo(() => {
-    if (!Array.isArray(checklists) || checklists.length === 0) return null;
-    const todayReport = checklists.find((c) => c.date === todayDateStr);
-    return todayReport || checklists[0] || null;
-  }, [checklists, todayDateStr]);
+  // Combined Active Submitted Reports (State Checklists + IndexedDB Records)
+  const activeSubmittedReports = useMemo(() => {
+    const mergedMap = new Map();
+    (Array.isArray(checklists) ? checklists : []).forEach((c) => {
+      if (c && c.id) mergedMap.set(c.id, c);
+    });
+    (Array.isArray(dbSubmittedReports) ? dbSubmittedReports : []).forEach((c) => {
+      if (c && c.id) mergedMap.set(c.id, c);
+    });
+    return Array.from(mergedMap.values()).sort((a, b) => {
+      const timeA = new Date(a.createdAt || a.date).getTime() || 0;
+      const timeB = new Date(b.createdAt || b.date).getTime() || 0;
+      return timeB - timeA;
+    });
+  }, [checklists, dbSubmittedReports]);
 
-  const hasEodSubmitted = Boolean(latestEodReport);
-  const filledCash = latestEodReport?.actual?.cash ?? null;
-  const filledCard = latestEodReport?.actual?.card ?? null;
-  const filledUpi = latestEodReport?.actual?.upi ?? null;
-  const filledTotalRevenue = latestEodReport?.actual?.total ?? null;
-  const expectedTotalReport = latestEodReport?.expected?.total ?? todayGrossSales;
-  const eodVariance = latestEodReport?.variance ?? (hasEodSubmitted && filledTotalRevenue !== null ? filledTotalRevenue - expectedTotalReport : 0);
+  // STAFF-SUBMITTED ENGINE:
+  // Scratches real-time live order updates on Owner Dashboard.
+  // Any amount on the Owner Dashboard ONLY updates when submitted by staff in Daily Cash Check.
+  const staffSubmittedData = useMemo(() => {
+    return calculateStaffSubmittedAmounts({
+      submittedReports: activeSubmittedReports,
+      todayDateStr: new Date().toLocaleDateString('en-IN'),
+      startOfWeek: weekPeriodInfo.startOfWeek,
+      endOfWeek: weekPeriodInfo.endOfWeek,
+      startOfMonth: monthPeriodInfo.startOfCycle,
+      endOfMonth: monthPeriodInfo.endOfCycle,
+      todayOrdersCount: totalOrdersCount
+    });
+  }, [activeSubmittedReports, weekPeriodInfo, monthPeriodInfo, totalOrdersCount]);
 
-  // Effective revenue reflecting staff-calculated filled amounts if submitted
-  const effectiveGrossSales = hasEodSubmitted && filledTotalRevenue !== null ? filledTotalRevenue : todayGrossSales;
+  const {
+    hasStaffSubmittedToday,
+    todaySubmittedSales,
+    todaySubmittedCash,
+    todaySubmittedCard,
+    todaySubmittedUpi,
+    todayVariance,
+    todayVarianceReason,
+    submittedBy: todayStaffSubmitter,
+    submittedAt: todayStaffSubmitTime,
+    todayReport: latestEodReport,
+    weekSubmittedSales,
+    weekSubmissionsCount,
+    monthSubmittedSales,
+    monthSubmissionsCount,
+    statusLabel: staffSubmissionStatusLabel,
+    ordersStatusNote: staffOrdersStatusNote
+  } = staffSubmittedData;
+
+  const hasEodSubmitted = hasStaffSubmittedToday;
+  const filledCash = todaySubmittedCash;
+  const filledCard = todaySubmittedCard;
+  const filledUpi = todaySubmittedUpi;
+  const filledTotalRevenue = todaySubmittedSales;
+  const expectedTotalReport = latestEodReport?.expected?.total ?? todayKitchenGrossOrders;
+  const eodVariance = todayVariance;
+
+  // Real Owner Dashboard Displayed Amounts (STRICTLY FROM STAFF SUBMISSION)
+  // Scratches real-time increments; shows ₹0 or awaiting status until staff submits!
+  const todayGrossSales = todaySubmittedSales;
+  const weekSales = weekSubmittedSales;
+  const monthSales = monthSubmittedSales;
+  const cashSplit = hasStaffSubmittedToday ? todaySubmittedCash : 0;
+  const cardSplit = hasStaffSubmittedToday ? todaySubmittedCard : 0;
+  const upiSplit = hasStaffSubmittedToday ? todaySubmittedUpi : 0;
+  const effectiveGrossSales = todaySubmittedSales;
+
+  // Persist dashboard snapshot into IndexedDB for instant reload
+  useEffect(() => {
+    if (activeBusinessId) {
+      saveDashboardSnapshotToIndexedDB(activeBusinessId, {
+        todayGrossSales,
+        weekSales,
+        monthSales,
+        cashSplit,
+        cardSplit,
+        upiSplit,
+        hasStaffSubmittedToday,
+        todayStaffSubmitter,
+        todayStaffSubmitTime,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  }, [
+    activeBusinessId,
+    todayGrossSales,
+    weekSales,
+    monthSales,
+    cashSplit,
+    cardSplit,
+    upiSplit,
+    hasStaffSubmittedToday,
+    todayStaffSubmitter,
+    todayStaffSubmitTime
+  ]);
 
   // P&L Calculations (FR-A3 & 5.4) in ₹
   const totalRecordedExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const netDailyProfit = effectiveGrossSales - totalRecordedExpenses;
-  const expectedNetProfit = todayGrossSales - totalRecordedExpenses;
+  const expectedNetProfit = todayKitchenGrossOrders - totalRecordedExpenses;
 
   // Real-Time Verification Bridge between Counter Served Orders and Owner Expected Orders
   const bridgeData = useMemo(() => {
@@ -666,20 +841,20 @@ export default function AdminView({
     });
   }, [orders, latestEodReport]);
 
-  // Daily Cash Check Archives (automatically preserving all historical days)
+  // Daily Cash Check Archives (automatically preserving all historical days from database)
   const dailyArchives = useMemo(() => {
-    return buildDailyArchives({ orders, checklists });
-  }, [orders, checklists]);
+    return buildDailyArchives({ orders, checklists: activeSubmittedReports });
+  }, [orders, activeSubmittedReports]);
 
   // Weekly Sales & P&L Archives (Monday to Sunday Cycles, Resetting on Monday)
   const weeklyArchives = useMemo(() => {
-    return buildWeeklyArchives({ orders, expenses });
-  }, [orders, expenses]);
+    return buildWeeklyArchives({ orders, expenses, checklists: activeSubmittedReports });
+  }, [orders, expenses, activeSubmittedReports]);
 
   // Monthly Sales & P&L Archives (30th to 29th Cycles, Resetting on 30th)
   const monthlyArchives = useMemo(() => {
-    return buildMonthlyArchives({ orders, expenses });
-  }, [orders, expenses]);
+    return buildMonthlyArchives({ orders, expenses, checklists: activeSubmittedReports });
+  }, [orders, expenses, activeSubmittedReports]);
 
   // Cash vs Obligations in ₹ (Section 5.4)
   const totalUpcomingObligations =
@@ -1805,7 +1980,7 @@ export default function AdminView({
             <div className="ios-card active-gradient" style={{ padding: '12px 10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Today's Sales</div>
-                {hasEodSubmitted && (
+                {hasStaffSubmittedToday ? (
                   <span
                     style={{
                       fontSize: 9,
@@ -1816,17 +1991,30 @@ export default function AdminView({
                       color: '#15803D'
                     }}
                   >
-                    Cash Counted
+                    Staff Submitted
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: 6,
+                      background: '#FEF3C7',
+                      color: '#B45309'
+                    }}
+                  >
+                    Awaiting Staff
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--primary-blue)', marginTop: 2 }}>
-                ₹{(hasEodSubmitted ? filledTotalRevenue : todayGrossSales).toFixed(0)}
+              <div style={{ fontSize: 18, fontWeight: 700, color: hasStaffSubmittedToday ? 'var(--primary-blue)' : '#64748B', marginTop: 2 }}>
+                ₹{todayGrossSales.toFixed(0)}
               </div>
-              <div style={{ fontSize: 10, color: hasEodSubmitted ? '#15803D' : '#16A34A', marginTop: 4 }}>
-                {hasEodSubmitted
-                  ? `Filled (Expected: ₹${todayGrossSales.toFixed(0)})`
-                  : `${totalOrdersCount} orders (Resets Midnight)`}
+              <div style={{ fontSize: 10, color: hasStaffSubmittedToday ? '#15803D' : '#64748B', marginTop: 4 }}>
+                {hasStaffSubmittedToday
+                  ? `Submitted by ${todayStaffSubmitter || 'Staff'} (${todayStaffSubmitTime || 'Counted'})`
+                  : `${totalOrdersCount} kitchen orders • Awaiting staff submission`}
               </div>
             </div>
 
@@ -1837,11 +2025,11 @@ export default function AdminView({
                   Resets Mon
                 </span>
               </div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2, color: weekSales > 0 ? 'var(--text-primary)' : '#64748B' }}>
                 ₹{weekSales.toFixed(0)}
               </div>
-              <div style={{ fontSize: 10, color: '#16A34A', marginTop: 4 }}>
-                {weekOrders.length} {weekOrders.length === 1 ? 'order' : 'orders'} • {weekPeriodInfo.daysUntilReset}d left
+              <div style={{ fontSize: 10, color: weekSales > 0 ? '#16A34A' : '#64748B', marginTop: 4 }}>
+                {weekSales > 0 ? `${weekSubmissionsCount} staff submissions • ${weekPeriodInfo.daysUntilReset}d left` : `Awaiting staff count • ${weekPeriodInfo.daysUntilReset}d left`}
               </div>
             </div>
 
@@ -1852,11 +2040,11 @@ export default function AdminView({
                   Resets 30th
                 </span>
               </div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2, color: monthSales > 0 ? 'var(--text-primary)' : '#64748B' }}>
                 ₹{monthSales.toFixed(0)}
               </div>
-              <div style={{ fontSize: 10, color: '#16A34A', marginTop: 4 }}>
-                {monthOrders.length} {monthOrders.length === 1 ? 'order' : 'orders'} • {monthPeriodInfo.daysUntilReset}d left
+              <div style={{ fontSize: 10, color: monthSales > 0 ? '#16A34A' : '#64748B', marginTop: 4 }}>
+                {monthSales > 0 ? `${monthSubmissionsCount} staff submissions • ${monthPeriodInfo.daysUntilReset}d left` : `Awaiting staff count • ${monthPeriodInfo.daysUntilReset}d left`}
               </div>
             </div>
           </div>
@@ -1867,9 +2055,9 @@ export default function AdminView({
               <div className="card-title-group">
                 <span className="card-heading">Payment Channel Split</span>
                 <span className="card-meta-text">
-                  {hasEodSubmitted
-                    ? 'Comparing Staff Filled Actuals vs System Expected Orders'
-                    : 'Settlements distribution for today'}
+                  {hasStaffSubmittedToday
+                    ? `Staff Submitted Amounts (Counted by ${todayStaffSubmitter || 'Staff'})`
+                    : 'Awaiting Staff Submission • Live Settlements'}
                 </span>
               </div>
               <Receipt size={18} color="#007AFF" />
@@ -1880,13 +2068,17 @@ export default function AdminView({
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                   <span>Cash at Counter</span>
                   <div>
-                    {hasEodSubmitted && (
+                    {hasStaffSubmittedToday ? (
                       <span style={{ color: '#16A34A', fontWeight: 700, marginRight: 8 }}>
-                        Filled: ₹{filledCash.toFixed(0)}
+                        Submitted: ₹{filledCash.toFixed(0)}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#B45309', fontWeight: 600, marginRight: 8 }}>
+                        Awaiting staff count
                       </span>
                     )}
                     <span style={{ color: 'var(--text-muted)' }}>
-                      Expected: ₹{cashSplit.toFixed(0)} ({todayGrossSales ? ((cashSplit / todayGrossSales) * 100).toFixed(0) : 0}%)
+                      Expected from bills: ₹{expectedCashSplit.toFixed(0)}
                     </span>
                   </div>
                 </div>
@@ -1895,7 +2087,7 @@ export default function AdminView({
                     style={{
                       height: '100%',
                       background: '#10B981',
-                      width: `${todayGrossSales ? (cashSplit / todayGrossSales) * 100 : 0}%`
+                      width: `${todayKitchenGrossOrders ? (expectedCashSplit / todayKitchenGrossOrders) * 100 : 0}%`
                     }}
                   />
                 </div>
@@ -1905,13 +2097,17 @@ export default function AdminView({
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                   <span>Card POS Swipe</span>
                   <div>
-                    {hasEodSubmitted && (
+                    {hasStaffSubmittedToday ? (
                       <span style={{ color: 'var(--primary-blue)', fontWeight: 700, marginRight: 8 }}>
-                        Filled: ₹{filledCard.toFixed(0)}
+                        Submitted: ₹{filledCard.toFixed(0)}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#B45309', fontWeight: 600, marginRight: 8 }}>
+                        Awaiting staff count
                       </span>
                     )}
                     <span style={{ color: 'var(--text-muted)' }}>
-                      Expected: ₹{cardSplit.toFixed(0)} ({todayGrossSales ? ((cardSplit / todayGrossSales) * 100).toFixed(0) : 0}%)
+                      Expected from bills: ₹{expectedCardSplit.toFixed(0)}
                     </span>
                   </div>
                 </div>
@@ -1920,7 +2116,7 @@ export default function AdminView({
                     style={{
                       height: '100%',
                       background: '#007AFF',
-                      width: `${todayGrossSales ? (cardSplit / todayGrossSales) * 100 : 0}%`
+                      width: `${todayKitchenGrossOrders ? (expectedCardSplit / todayKitchenGrossOrders) * 100 : 0}%`
                     }}
                   />
                 </div>
@@ -1930,13 +2126,17 @@ export default function AdminView({
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                   <span>Instant UPI QR (GPay / PhonePe / Paytm)</span>
                   <div>
-                    {hasEodSubmitted && (
+                    {hasStaffSubmittedToday ? (
                       <span style={{ color: '#8B5CF6', fontWeight: 700, marginRight: 8 }}>
-                        Filled: ₹{filledUpi.toFixed(0)}
+                        Submitted: ₹{filledUpi.toFixed(0)}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#B45309', fontWeight: 600, marginRight: 8 }}>
+                        Awaiting staff count
                       </span>
                     )}
                     <span style={{ color: 'var(--text-muted)' }}>
-                      Expected: ₹{upiSplit.toFixed(0)} ({todayGrossSales ? ((upiSplit / todayGrossSales) * 100).toFixed(0) : 0}%)
+                      Expected from bills: ₹{expectedUpiSplit.toFixed(0)}
                     </span>
                   </div>
                 </div>
@@ -1945,7 +2145,7 @@ export default function AdminView({
                     style={{
                       height: '100%',
                       background: '#8B5CF6',
-                      width: `${todayGrossSales ? (upiSplit / todayGrossSales) * 100 : 0}%`
+                      width: `${todayKitchenGrossOrders ? (expectedUpiSplit / todayKitchenGrossOrders) * 100 : 0}%`
                     }}
                   />
                 </div>
@@ -2187,13 +2387,13 @@ export default function AdminView({
             >
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  {hasEodSubmitted ? 'Calculated Gross Revenue' : 'Gross Revenue'}
+                  {hasStaffSubmittedToday ? 'Staff Submitted Revenue' : 'Gross Revenue (Awaiting Staff)'}
                 </div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary-blue)' }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: hasStaffSubmittedToday ? 'var(--primary-blue)' : '#64748B' }}>
                   +₹{effectiveGrossSales.toFixed(0)}
                 </div>
-                <div style={{ fontSize: 9, color: hasEodSubmitted ? '#15803D' : 'var(--text-muted)', marginTop: 2 }}>
-                  {hasEodSubmitted ? `Cash Counted (Bills: ₹${todayGrossSales.toFixed(0)})` : '(From Bills)'}
+                <div style={{ fontSize: 9, color: hasStaffSubmittedToday ? '#15803D' : 'var(--text-muted)', marginTop: 2 }}>
+                  {hasStaffSubmittedToday ? `Counted & Submitted by ${todayStaffSubmitter || 'Staff'}` : `(Awaiting Staff Submission • Bills: ₹${todayKitchenGrossOrders.toFixed(0)})`}
                 </div>
               </div>
               <div>
@@ -2211,7 +2411,7 @@ export default function AdminView({
                   ₹{netDailyProfit.toFixed(0)}
                 </div>
                 <div style={{ fontSize: 9, color: netDailyProfit >= 0 ? '#15803D' : '#DC2626', marginTop: 2 }}>
-                  {hasEodSubmitted ? 'Reconciled from count' : `(Expected: ₹${expectedNetProfit.toFixed(0)})`}
+                  {hasStaffSubmittedToday ? 'Reconciled from staff count' : 'Awaiting staff submission'}
                 </div>
               </div>
             </div>
@@ -2227,15 +2427,15 @@ export default function AdminView({
               <div className="card-title-group">
                 <span className="card-heading">Daily Cash & Payment Matching</span>
                 <span className="card-meta-text">
-                  {hasEodSubmitted
+                  {hasStaffSubmittedToday
                     ? `Counted by ${latestEodReport.submittedBy || 'Counter Staff'} on ${latestEodReport.date} at ${latestEodReport.timestamp || ''}`
                     : 'Physical cash in drawer & digital money status'}
                 </span>
               </div>
-              <DollarSign size={18} color={hasEodSubmitted ? '#16A34A' : '#64748B'} />
+              <DollarSign size={18} color={hasStaffSubmittedToday ? '#16A34A' : '#64748B'} />
             </div>
 
-            {hasEodSubmitted ? (
+            {hasStaffSubmittedToday ? (
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
                   <div style={{ background: '#F0FDF4', padding: '10px 12px', borderRadius: 12, border: '1px solid #86EFAC' }}>
@@ -2244,7 +2444,7 @@ export default function AdminView({
                       ₹{(filledCash ?? 0).toLocaleString('en-IN')}
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                      Expected: ₹{(latestEodReport.expected?.cash ?? cashSplit).toFixed(0)}
+                      Expected from bills: ₹{expectedCashSplit.toFixed(0)}
                     </div>
                   </div>
 
@@ -2276,8 +2476,25 @@ export default function AdminView({
                 )}
               </div>
             ) : (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                ⏳ Waiting for cashier to count drawer cash and submit. Once submitted at the counter, cash in drawer and verified bank money will appear here.
+              <div
+                style={{
+                  background: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  borderRadius: 12,
+                  padding: '14px 16px',
+                  color: '#92400E'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13 }}>
+                  <Clock size={16} color="#B45309" />
+                  <span>Awaiting Staff Submission</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#78350F', marginTop: 4, lineHeight: 1.4 }}>
+                  Amounts on the Owner Dashboard update only when counter staff submits today&apos;s physical cash and digital payment count in the <strong>Daily Cash Check</strong> terminal.
+                </div>
+                <div style={{ marginTop: 8, fontSize: 11, color: '#B45309', fontWeight: 600 }}>
+                  Kitchen Bills Recorded: ₹{todayKitchenGrossOrders.toFixed(0)} ({todayOrders.length} orders)
+                </div>
               </div>
             )}
           </div>
