@@ -673,6 +673,69 @@ export default function CustomerView({
     }
   };
 
+  // Session Notice Banner (Alerts diner if session was wiped due to inactivity or fresh QR re-scan)
+  const renderSessionNotice = () => {
+    if (!sessionNotice) return null;
+    const isWarning = sessionNotice.type === 'warning';
+    return (
+      <div
+        style={{
+          marginBottom: 14,
+          padding: '12px 16px',
+          borderRadius: 16,
+          background: isWarning
+            ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(245, 158, 11, 0.12))'
+            : 'linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(16, 185, 129, 0.12))',
+          border: isWarning ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(59, 130, 246, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: isWarning ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+              color: isWarning ? '#ef4444' : '#3b82f6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}
+          >
+            {isWarning ? <AlertTriangle size={18} /> : <RotateCcw size={18} />}
+          </div>
+          <div style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: 600, lineHeight: 1.4 }}>
+            {sessionNotice.text}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setSessionNotice(null)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#64748b',
+            cursor: 'pointer',
+            padding: 6,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '50%'
+          }}
+          aria-label="Dismiss notice"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    );
+  };
+
   // Diner Name Pop-up Modal Component (Customer table ordering only)
   const renderNameModal = () => {
     if (!showNameModal) return null;
