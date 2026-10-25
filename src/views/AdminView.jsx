@@ -52,6 +52,8 @@ import DmcaModal from '../components/DmcaModal';
 import LegalModal from '../components/LegalModal';
 import LegalFooter from '../components/LegalFooter';
 import SlideModal from '../components/SlideModal';
+import EditDishModal from '../components/EditDishModal';
+import MenuScannerModal from '../components/MenuScannerModal';
 import { submitDataErasureRequest } from '../utils/privacyCompliance';
 import {
   calculateVerificationBridge,
@@ -431,6 +433,8 @@ export default function AdminView({
 
   // Menu Management Modal State
   const [showAddDishModal, setShowAddDishModal] = useState(false);
+  const [showMenuScannerModal, setShowMenuScannerModal] = useState(false);
+  const [editingDish, setEditingDish] = useState(null);
   const [newDishName, setNewDishName] = useState('');
   const [newDishCategory, setNewDishCategory] = useState('Signatures');
   const [newDishPrice, setNewDishPrice] = useState('');
@@ -1179,6 +1183,47 @@ export default function AdminView({
       broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated, bizId);
       playAlertChime();
     }
+  };
+
+  // Edit & Update Existing Dish
+  const handleUpdateDish = (updatedDish) => {
+    if (!updatedDish || !updatedDish.id) return;
+    const activeBiz = getActiveBusiness();
+    const bizId = activeBiz?.id || activeBusinessId || '';
+
+    const updated = (menu || []).map((d) => (d.id === updatedDish.id ? updatedDish : d));
+    setMenu(updated);
+    if (bizId) {
+      saveData(getScopedKey(STORAGE_KEYS.MENU, bizId), updated);
+      updateBusiness(bizId, { menu: updated });
+      const freshBiz = getBusinesses().find((b) => b.id === bizId);
+      if (freshBiz) syncBusinessToCloud(freshBiz).catch(() => {});
+      syncMenuToCloud(updated, bizId).catch(() => {});
+    }
+    saveData(STORAGE_KEYS.MENU, updated);
+    broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated, bizId);
+    setEditingDish(null);
+    playSuccessChime();
+  };
+
+  // Batch Import Dishes from AI Menu Scanner
+  const handleBatchImportDishes = (importedDishes, replaceExisting = false) => {
+    if (!Array.isArray(importedDishes) || importedDishes.length === 0) return;
+    const activeBiz = getActiveBusiness();
+    const bizId = activeBiz?.id || activeBusinessId || '';
+
+    const updated = replaceExisting ? importedDishes : [...importedDishes, ...(menu || [])];
+    setMenu(updated);
+    if (bizId) {
+      saveData(getScopedKey(STORAGE_KEYS.MENU, bizId), updated);
+      updateBusiness(bizId, { menu: updated });
+      const freshBiz = getBusinesses().find((b) => b.id === bizId);
+      if (freshBiz) syncBusinessToCloud(freshBiz).catch(() => {});
+      syncMenuToCloud(updated, bizId).catch(() => {});
+    }
+    saveData(STORAGE_KEYS.MENU, updated);
+    broadcastSyncEvent(SYNC_EVENTS.MENU_UPDATED, updated, bizId);
+    playSuccessChime();
   };
 
   // Helper to persist staff to active business record & scoped localStorage, and broadcast live
@@ -4730,68 +4775,189 @@ export default function AdminView({
           </div>
 
           <div className="ios-card" style={{ marginBottom: 16 }}>
-            <div className="card-top-row">
+            <div className="card-top-row" style={{ flexWrap: 'wrap', gap: 10 }}>
               <div className="card-title-group">
                 <span className="card-heading">Restaurant Menu Items</span>
-                <span className="card-meta-text">Create, edit & manage restaurant items</span>
+                <span className="card-meta-text">{menu.length} active dishes • Auto-synced across customer QR menus &amp; POS</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  className="btn-secondary-pill"
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 12,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
+                    color: '#1D4ED8',
+                    border: '1.5px solid #93C5FD',
+                    fontWeight: 700
+                  }}
+                  onClick={() => {
+                    playTapSound();
+                    setShowMenuScannerModal(true);
+                  }}
+                >
+                  <Sparkles size={14} color="#2563EB" />
+                  <span>Scan Menu (PDF / Image)</span>
+                </button>
+                <button
+                  className="btn-primary-pill"
+                  style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => {
+                    playTapSound();
+                    setShowAddDishModal(true);
+                  }}
+                >
+                  <Plus size={14} />
+                  <span>Add New Dish</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Onboarding Banner */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 14px',
+                background: '#F8FAFC',
+                border: '1px dashed #93C5FD',
+                borderRadius: 12,
+                margin: '12px 0',
+                gap: 12,
+                flexWrap: 'wrap'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    background: '#DBEAFE',
+                    color: '#1D4ED8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <Sparkles size={16} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Quick Onboarding via PDF or Photo
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748B' }}>
+                    Upload your printed menu card, Canva design or PDF file to auto-import all your dishes in seconds!
+                  </div>
+                </div>
               </div>
               <button
+                type="button"
                 className="btn-primary-pill"
-                style={{ padding: '6px 12px', fontSize: 12 }}
+                style={{ padding: '6px 14px', fontSize: 11 }}
                 onClick={() => {
                   playTapSound();
-                  setShowAddDishModal(true);
+                  setShowMenuScannerModal(true);
                 }}
               >
-                <Plus size={14} />
-                <span>Add New Dish</span>
+                Launch Menu Scanner
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {menu.map((dish) => (
-                <div
-                  key={dish.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '10px 12px',
-                    background: '#F9FAFB',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: 14
-                  }}
+            {menu.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No dishes on your menu yet</div>
+                <div style={{ fontSize: 12, marginBottom: 12 }}>Upload a menu PDF/photo or add items manually to begin serving customers.</div>
+                <button
+                  className="btn-primary-pill"
+                  style={{ padding: '8px 18px', fontSize: 12 }}
+                  onClick={() => setShowMenuScannerModal(true)}
                 >
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <img
-                      src={dish.image || DEFAULT_CUTLERY_IMAGE}
-                      alt={dish.name}
-                      style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover' }}
-                      onError={(e) => {
-                        e.target.src = DEFAULT_CUTLERY_IMAGE;
-                      }}
-                    />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{dish.name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--primary-blue)', fontWeight: 600 }}>
-                        ₹{dish.price.toFixed(0)} • {dish.category}
+                  Upload &amp; Scan Menu
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {menu.map((dish) => (
+                  <div
+                    key={dish.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 12px',
+                      background: '#F9FAFB',
+                      border: '1px solid #E5E7EB',
+                      borderRadius: 14
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+                      <img
+                        src={dish.image || DEFAULT_CUTLERY_IMAGE}
+                        alt={dish.name}
+                        style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
+                        onError={(e) => {
+                          e.target.src = DEFAULT_CUTLERY_IMAGE;
+                        }}
+                      />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              background: dish.isVeg !== false ? '#16A34A' : '#DC2626',
+                              display: 'inline-block',
+                              flexShrink: 0
+                            }}
+                            title={dish.isVeg !== false ? 'Vegetarian' : 'Non-Vegetarian'}
+                          />
+                          <span style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {dish.name}
+                          </span>
+                          {dish.isAvailable === false && (
+                            <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#FEE2E2', color: '#DC2626' }}>
+                              Out of Stock
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--primary-blue)', fontWeight: 600, marginTop: 2 }}>
+                          ₹{Number(dish.price || 0).toFixed(0)} • <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{dish.category || 'General'}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <button
-                      className="nav-icon-btn"
-                      style={{ width: 30, height: 30, color: '#DC2626' }}
-                      onClick={() => handleDeleteDish(dish.id)}
-                      title="Delete Dish"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <button
+                        className="nav-icon-btn"
+                        style={{ width: 32, height: 32, color: 'var(--primary-blue)', background: '#EFF6FF', borderRadius: 8 }}
+                        onClick={() => {
+                          playTapSound();
+                          setEditingDish(dish);
+                        }}
+                        title="Edit Dish (Name, Price, Category, Photo)"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        className="nav-icon-btn"
+                        style={{ width: 32, height: 32, color: '#DC2626', background: '#FEE2E2', borderRadius: 8 }}
+                        onClick={() => handleDeleteDish(dish.id)}
+                        title="Delete Dish"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -6217,6 +6383,26 @@ export default function AdminView({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Edit Dish Modal (Edit photo, name, price, category, etc.) */}
+      {editingDish && (
+        <EditDishModal
+          dish={editingDish}
+          menu={menu}
+          onSave={handleUpdateDish}
+          onClose={() => setEditingDish(null)}
+        />
+      )}
+
+      {/* AI Smart Menu Scanner Modal */}
+      {showMenuScannerModal && (
+        <MenuScannerModal
+          isOpen={showMenuScannerModal}
+          currentMenuCount={(menu || []).length}
+          onImportDishes={handleBatchImportDishes}
+          onClose={() => setShowMenuScannerModal(false)}
+        />
       )}
 
       {/* Payslip Modal (INR) without attendance */}
