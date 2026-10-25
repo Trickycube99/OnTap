@@ -393,11 +393,14 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
                   ₹{item.price.toFixed(0)}
                 </div>
                 <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                  {item.tags.slice(0, 2).map((tag, i) => (
-                    <span key={i} className="status-pill tag" style={{ fontSize: 9, padding: '1px 6px' }}>
-                      {tag}
-                    </span>
-                  ))}
+                  {(item.tags || [])
+                    .filter((tag) => tag && !['scanned', 'manual', 'new', 'unassigned'].includes(String(tag).toLowerCase().trim()))
+                    .slice(0, 2)
+                    .map((tag, i) => (
+                      <span key={i} className="status-pill tag" style={{ fontSize: 9, padding: '1px 6px' }}>
+                        {tag}
+                      </span>
+                    ))}
                 </div>
               </div>
               <button

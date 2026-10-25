@@ -194,13 +194,13 @@ export default function MenuScannerModal({
     playTapSound();
     const newItem = {
       id: Date.now() + Math.floor(Math.random() * 1000),
-      name: 'New Scanned Dish',
+      name: 'New Menu Item',
       category: 'Main Course',
       price: 200,
       isVeg: true,
       isAvailable: true,
       bullets: ['Freshly prepared with authentic ingredients'],
-      tags: ['Manual'],
+      tags: [],
       image: null
     };
     setScannedItems((prev) => [newItem, ...prev]);
@@ -254,7 +254,16 @@ export default function MenuScannerModal({
       return;
     }
 
-    onImportDishes(itemsToImport, importMode === 'replace');
+    const cleanedItems = itemsToImport.map((item) => ({
+      ...item,
+      tags: Array.isArray(item.tags)
+        ? item.tags.filter(
+            (t) => t && !['scanned', 'manual', 'new', 'unassigned'].includes(String(t).toLowerCase().trim())
+          )
+        : []
+    }));
+
+    onImportDishes(cleanedItems, importMode === 'replace');
 
     confetti({
       particleCount: 90,
@@ -753,7 +762,7 @@ export default function MenuScannerModal({
                   ✓ {scannedItems.length} Dishes Detected!
                 </div>
                 <div style={{ fontSize: 11, color: '#166534', marginTop: 2 }}>
-                  {vegCount} Vegetarian • {nonVegCount} Non-Veg • {uniqueCategories} Categories • via {engineUsed}
+                  {vegCount} Vegetarian • {nonVegCount} Non-Veg • {uniqueCategories} Categories
                 </div>
               </div>
 

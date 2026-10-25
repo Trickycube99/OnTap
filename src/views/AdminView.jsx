@@ -4778,7 +4778,7 @@ export default function AdminView({
             <div className="card-top-row" style={{ flexWrap: 'wrap', gap: 10 }}>
               <div className="card-title-group">
                 <span className="card-heading">Restaurant Menu Items</span>
-                <span className="card-meta-text">{menu.length} active dishes • Auto-synced across customer QR menus &amp; POS</span>
+                <span className="card-meta-text">{menu.length} active dishes • Live on customer QR menus &amp; POS</span>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button

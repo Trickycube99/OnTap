@@ -261,7 +261,7 @@ export default function EditDishModal({
                   )}
                 </div>
                 <div style={{ fontSize: 10, color: '#64748B', marginTop: 6 }}>
-                  Auto-optimized for instant 4G/5G mobile dining menus
+                  PNG, JPG, or WebP format
                 </div>
               </div>
             </div>

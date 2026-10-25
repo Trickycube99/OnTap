@@ -221,7 +221,7 @@ export function parseRawMenuText(text) {
           isVeg,
           isAvailable: true,
           bullets: ['Freshly prepared with authentic ingredients'],
-          tags: ['Scanned'],
+          tags: [],
           image: null
         });
       }
@@ -361,7 +361,9 @@ Rules:
             isVeg: d.isVeg !== false,
             isAvailable: true,
             bullets: Array.isArray(d.bullets) && d.bullets.length > 0 ? d.bullets : ['Freshly prepared with authentic ingredients'],
-            tags: Array.isArray(d.tags) ? d.tags : ['New'],
+            tags: Array.isArray(d.tags)
+              ? d.tags.filter((t) => t && !['scanned', 'manual', 'new', 'unassigned'].includes(String(t).toLowerCase().trim()))
+              : [],
             image: null
           }));
 

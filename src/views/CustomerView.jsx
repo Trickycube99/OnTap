@@ -146,13 +146,13 @@ export default function CustomerView({
     if (reason === 'inactivity') {
       setSessionNotice({
         type: 'warning',
-        text: 'Customer session wiped after 2 hours of inactivity. Fresh menu loaded.'
+        text: 'Session refreshed after inactivity. Fresh menu loaded.'
       });
       setTimeout(() => setSessionNotice(null), 8000);
     } else if (reason === 'qr_rescan') {
       setSessionNotice({
         type: 'info',
-        text: 'Table QR scanned again: Previous customer session wiped. Fresh dining session started.'
+        text: 'Welcome! A fresh dining session has started.'
       });
       setTimeout(() => setSessionNotice(null), 8000);
     }
@@ -2804,11 +2804,13 @@ export default function CustomerView({
                     }}
                   >
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      {item.tags && item.tags.map((tag, idx) => (
-                        <span key={idx} className="status-pill tag" style={{ fontSize: 10, padding: '2px 8px' }}>
-                          {tag}
-                        </span>
-                      ))}
+                      {item.tags && item.tags
+                        .filter((tag) => tag && !['scanned', 'manual', 'new', 'unassigned'].includes(String(tag).toLowerCase().trim()))
+                        .map((tag, idx) => (
+                          <span key={idx} className="status-pill tag" style={{ fontSize: 10, padding: '2px 8px' }}>
+                            {tag}
+                          </span>
+                        ))}
                     </div>
 
                     {isItemInStock ? (

@@ -117,7 +117,9 @@ Extraction Rules:
         bullets: Array.isArray(it.bullets) && it.bullets.length > 0
           ? it.bullets
           : ['Freshly prepared with authentic ingredients'],
-        tags: Array.isArray(it.tags) ? it.tags : ['New'],
+        tags: Array.isArray(it.tags)
+          ? it.tags.filter((t) => t && !['scanned', 'manual', 'new', 'unassigned'].includes(String(t).toLowerCase().trim()))
+          : [],
         image: null
       }));
 
