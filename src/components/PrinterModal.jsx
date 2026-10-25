@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Printer, X, QrCode } from 'lucide-react';
+import { Printer, X } from 'lucide-react';
 import { playTapSound } from '../utils/audio';
 
 export default function PrinterModal({ order, theme, chef, onClose }) {
@@ -203,15 +203,11 @@ export default function PrinterModal({ order, theme, chef, onClose }) {
                 <div>================================</div>
               </div>
 
-              {/* Payment Mode & UPI QR */}
+              {/* Payment Mode & Status */}
               <div style={{ textAlign: 'center', marginTop: 8 }}>
                 <div>Mode: {order.paymentMode}</div>
                 <div style={{ fontSize: '10px', marginTop: 2 }}>{order.paymentStatus}</div>
-                <div style={{ margin: '8px auto', width: 64, height: 64, border: '1px solid #111', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <QrCode size={48} />
-                </div>
-                <div style={{ fontSize: '10px' }}>Scan with GPay / PhonePe / Paytm</div>
-                <div style={{ fontSize: '10px', marginTop: 4 }}>Thank you for dining with us!</div>
+                <div style={{ fontSize: '10px', marginTop: 8 }}>Thank you for dining with us!</div>
                 <div style={{ fontSize: '9px', color: '#6B7280' }}>Verified by Chef {chef.name}</div>
               </div>
             </>

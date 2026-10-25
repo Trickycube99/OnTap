@@ -30,7 +30,6 @@ import {
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime, playNewOrderChime } from '../utils/audio';
 import PrinterModal from '../components/PrinterModal';
-import WhatsAppAlertModal from '../components/WhatsAppAlertModal';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
 import LegalFooter from '../components/LegalFooter';
 import { buildDailyArchives, exportDailyDataCsv } from '../utils/salesBridge';
@@ -129,9 +128,8 @@ export default function CounterView({
   const [rejectReason, setRejectReason] = useState('Item ingredient out of stock');
   const [customRejectReason, setCustomRejectReason] = useState('');
 
-  // Hardware & Alert Modals State (Phase 2)
+  // Hardware Print Modal State
   const [selectedPrintOrder, setSelectedPrintOrder] = useState(null);
-  const [selectedWhatsAppOrder, setSelectedWhatsAppOrder] = useState(null);
 
   // Daily Closing Checklist State (FR-P8 & 5.4)
   const [actualCash, setActualCash] = useState('');
@@ -1555,18 +1553,17 @@ export default function CounterView({
                       </div>
                     )}
 
-                    {/* Hardware Print & WhatsApp Alert Triggers (Phase 2) */}
-                    <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                    {/* Hardware Print Trigger */}
+                    <div style={{ marginTop: 10 }}>
                       <button
-                        className="btn-secondary-pill"
+                        className="btn-secondary-pill full-width"
                         style={{
-                          flex: 1,
-                          padding: '6px 8px',
+                          padding: '7px 10px',
                           fontSize: 11,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: 5
+                          gap: 6
                         }}
                         onClick={() => {
                           playTapSound();
@@ -1574,31 +1571,8 @@ export default function CounterView({
                         }}
                         title="Print 80mm/58mm Guest Tax Invoice or Kitchen KOT"
                       >
-                        <Printer size={12} />
+                        <Printer size={13} />
                         <span>Print Bill / KOT</span>
-                      </button>
-
-                      <button
-                        className="btn-secondary-pill"
-                        style={{
-                          flex: 1,
-                          padding: '6px 8px',
-                          fontSize: 11,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 5,
-                          color: '#059669',
-                          borderColor: '#A7F3D0'
-                        }}
-                        onClick={() => {
-                          playTapSound();
-                          setSelectedWhatsAppOrder(order);
-                        }}
-                        title="Dispatch WhatsApp Milestone Notification"
-                      >
-                        <MessageSquare size={12} color="#059669" />
-                        <span>WhatsApp Alert</span>
                       </button>
                     </div>
 
@@ -3081,17 +3055,6 @@ export default function CounterView({
         />
       )}
 
-      {/* Phase 2: WhatsApp Alerts Simulator Modal */}
-      {selectedWhatsAppOrder && (
-        <WhatsAppAlertModal
-          order={selectedWhatsAppOrder}
-          orders={orders}
-          expenses={expenses}
-          theme={theme}
-          chef={chef}
-          onClose={() => setSelectedWhatsAppOrder(null)}
-        />
-      )}
 
       {/* Compliance & Legal Documents Footer */}
       <LegalFooter

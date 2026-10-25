@@ -57,6 +57,7 @@ export function wipeAllCustomerData(bizId) {
     'flowscape_guest_scanned_qr',
     'flowscape_guest_scanned_biz',
     'flowscape_guest_active_tab',
+    'ontap_order_status_tip_seen',
     SESSION_KEYS.SESSION_START,
     SESSION_KEYS.LAST_ACTIVITY,
     SESSION_KEYS.LAST_SCANNED_QR

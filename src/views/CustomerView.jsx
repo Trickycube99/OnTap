@@ -99,6 +99,7 @@ export default function CustomerView({
     return '';
   });
   const [showNameModal, setShowNameModal] = useState(false);
+  const [showOrderStatusTipModal, setShowOrderStatusTipModal] = useState(false);
   const [customerNameInput, setCustomerNameInput] = useState(() => {
     if (typeof window !== 'undefined') {
       return sessionStorage.getItem(dinerNameKey) || sessionStorage.getItem('ontap_diner_name') || '';
@@ -141,6 +142,10 @@ export default function CustomerView({
     setItemNoteInput('');
     setSelectedCategory('All');
     setVegOnly(false);
+    setShowOrderStatusTipModal(false);
+    try {
+      sessionStorage.removeItem('ontap_order_status_tip_seen');
+    } catch (e) {}
     if (typeof setActiveTab === 'function') setActiveTab('menu');
 
     if (reason === 'inactivity') {
@@ -618,6 +623,23 @@ export default function CustomerView({
     setShowUpiModal(false);
     playSuccessChime();
 
+    // Notify customer to keep an eye on live order status (shows strictly once per customer dining session)
+    let hasSeenTip = false;
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        hasSeenTip = sessionStorage.getItem('ontap_order_status_tip_seen') === 'true';
+      }
+    } catch (e) {}
+
+    if (!hasSeenTip) {
+      setShowOrderStatusTipModal(true);
+      try {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          sessionStorage.setItem('ontap_order_status_tip_seen', 'true');
+        }
+      } catch (e) {}
+    }
+
     if (setActiveTab) {
       setActiveTab('track');
     }
@@ -959,6 +981,75 @@ export default function CustomerView({
     );
   };
 
+  // First-time Order Status Reminder Popup (Shows once per customer)
+  const renderOrderStatusTipModal = () => {
+    if (!showOrderStatusTipModal) return null;
+    return (
+      <div
+        className="modal-overlay"
+        style={{ zIndex: 9999 }}
+        onClick={() => {
+          playTapSound();
+          setShowOrderStatusTipModal(false);
+        }}
+      >
+        <div
+          className="modal-content-sheet"
+          style={{ maxWidth: 380, textAlign: 'center', padding: '28px 22px 24px' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="modal-drag-pill" />
+
+          <div
+            style={{
+              width: 58,
+              height: 58,
+              borderRadius: '50%',
+              background: '#EFF6FF',
+              border: '2px solid #BFDBFE',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              color: '#2563EB'
+            }}
+          >
+            <Bell size={28} />
+          </div>
+
+          <div className="card-heading" style={{ fontSize: 18, marginBottom: 8 }}>
+            {language === 'hi' ? 'ऑर्डर दर्ज हो गया है!' : 'Order Placed!'}
+          </div>
+
+          <div
+            style={{
+              fontSize: 13.5,
+              lineHeight: 1.55,
+              color: 'var(--text-secondary, #475569)',
+              marginBottom: 22
+            }}
+          >
+            {language === 'hi'
+              ? 'कृपया अपने ऑर्डर की स्थिति पर नज़र रखें ताकि भोजन तैयार होते ही आपको तुरंत सूचित किया जा सके।'
+              : 'Please keep an eye on your live order status here to get notified as soon as your order is ready!'}
+          </div>
+
+          <button
+            type="button"
+            className="btn-primary-pill full-width"
+            style={{ padding: '12px 20px', fontSize: 14, fontWeight: 700 }}
+            onClick={() => {
+              playTapSound();
+              setShowOrderStatusTipModal(false);
+            }}
+          >
+            <span>{language === 'hi' ? 'ठीक है (OK)' : 'OK'}</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   // VIEW 1: LIVE ORDER TRACKING TAB (FR-C6)
   if (activeTab === 'track') {
     // Final Bill Calculations:
@@ -991,6 +1082,7 @@ export default function CustomerView({
     return (
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 110 }}>
         {renderNameModal()}
+        {renderOrderStatusTipModal()}
         {renderSessionNotice()}
 
         {/* Screen Title & Live Pulse Header */}
@@ -1857,6 +1949,7 @@ export default function CustomerView({
     return (
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 95 }}>
         {renderNameModal()}
+        {renderOrderStatusTipModal()}
         {renderSessionNotice()}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
@@ -2426,6 +2519,7 @@ export default function CustomerView({
   return (
     <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 95 }}>
       {renderNameModal()}
+      {renderOrderStatusTipModal()}
       {sessionNotice && (
         <div style={{ padding: '12px 18px 0' }}>
           {renderSessionNotice()}
