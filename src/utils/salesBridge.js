@@ -433,7 +433,7 @@ export function buildWeeklyArchives({ orders, expenses = [], checklists = [] }) 
       });
       const submittedSales = periodChecklists.reduce((s, c) => s + (Number(c?.actual?.total) || 0), 0);
       const kitchenGrossOrders = w.orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
-      const grossSales = periodChecklists.length > 0 ? submittedSales : (w.isCurrent ? 0 : kitchenGrossOrders);
+      const grossSales = periodChecklists.length > 0 ? Math.max(submittedSales, kitchenGrossOrders) : kitchenGrossOrders;
 
       const servedSales = w.orders
         .filter((o) => o.status === 'served' || o.status === 'done')
@@ -531,7 +531,7 @@ export function buildMonthlyArchives({ orders, expenses = [], checklists = [] })
       });
       const submittedSales = periodChecklists.reduce((s, c) => s + (Number(c?.actual?.total) || 0), 0);
       const kitchenGrossOrders = m.orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
-      const grossSales = periodChecklists.length > 0 ? submittedSales : (m.isCurrent ? 0 : kitchenGrossOrders);
+      const grossSales = periodChecklists.length > 0 ? Math.max(submittedSales, kitchenGrossOrders) : kitchenGrossOrders;
 
       const servedSales = m.orders
         .filter((o) => o.status === 'served' || o.status === 'done')

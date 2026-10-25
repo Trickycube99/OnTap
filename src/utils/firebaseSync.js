@@ -392,6 +392,50 @@ export function subscribeToCloudOrders(businessId, onOrdersUpdated, onStatusUpda
 }
 
 /**
+ * Fetch all historical and current orders for a specific business from Cloud Firestore
+ * Ensures orders and revenue are always preserved across days, browser restarts, and devices.
+ */
+export async function fetchOrdersFromCloud(businessId) {
+  if (isQuotaExhausted()) return [];
+  const database = initFirebase();
+  if (!database) return [];
+
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return [];
+
+  try {
+    const ordersCol = collection(database, 'restaurant_orders');
+    const q = query(ordersCol, where('businessId', '==', targetBizId), limit(500));
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) return [];
+
+    const orders = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data && (!data.businessId || data.businessId === targetBizId)) {
+        orders.push({
+          ...data,
+          id: data.originalOrderId || data.id
+        });
+      }
+    });
+
+    // Sort newest first
+    orders.sort((a, b) => {
+      const timeA = new Date(a.createdAt || a.timestamp || 0).getTime();
+      const timeB = new Date(b.createdAt || b.timestamp || 0).getTime();
+      return timeB - timeA;
+    });
+
+    return orders;
+  } catch (err) {
+    if (import.meta.env?.DEV) console.warn('🔥 [Cloud Sync] Error fetching orders from Firestore:', err);
+    return [];
+  }
+}
+
+/**
  * Sync coupons & offers to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
 export async function syncOffersToCloud(offers, businessId = null) {

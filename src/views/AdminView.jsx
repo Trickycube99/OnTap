@@ -812,15 +812,15 @@ export default function AdminView({
   const expectedTotalReport = latestEodReport?.expected?.total ?? todayKitchenGrossOrders;
   const eodVariance = todayVariance;
 
-  // Real Owner Dashboard Displayed Amounts (STRICTLY FROM STAFF SUBMISSION)
-  // Scratches real-time increments; shows ₹0 or awaiting status until staff submits!
-  const todayGrossSales = todaySubmittedSales;
-  const weekSales = weekSubmittedSales;
-  const monthSales = monthSubmittedSales;
-  const cashSplit = hasStaffSubmittedToday ? todaySubmittedCash : 0;
-  const cardSplit = hasStaffSubmittedToday ? todaySubmittedCard : 0;
-  const upiSplit = hasStaffSubmittedToday ? todaySubmittedUpi : 0;
-  const effectiveGrossSales = todaySubmittedSales;
+  // Real Owner Dashboard Displayed Amounts:
+  // Retains actual kitchen orders revenue, prioritized with verified staff submissions when available
+  const todayGrossSales = hasStaffSubmittedToday ? Math.max(todaySubmittedSales, todayKitchenGrossOrders) : todayKitchenGrossOrders;
+  const weekSales = weekSubmittedSales > 0 ? Math.max(weekSubmittedSales, weekKitchenGrossOrders) : weekKitchenGrossOrders;
+  const monthSales = monthSubmittedSales > 0 ? Math.max(monthSubmittedSales, monthKitchenGrossOrders) : monthKitchenGrossOrders;
+  const cashSplit = hasStaffSubmittedToday ? todaySubmittedCash : expectedCashSplit;
+  const cardSplit = hasStaffSubmittedToday ? todaySubmittedCard : expectedCardSplit;
+  const upiSplit = hasStaffSubmittedToday ? todaySubmittedUpi : expectedUpiSplit;
+  const effectiveGrossSales = todayGrossSales;
 
   // Persist dashboard snapshot into IndexedDB for instant reload
   useEffect(() => {
@@ -2213,7 +2213,7 @@ export default function AdminView({
                 ₹{weekSales.toFixed(0)}
               </div>
               <div style={{ fontSize: 10, color: weekSales > 0 ? '#16A34A' : '#64748B', marginTop: 4 }}>
-                {weekSales > 0 ? `${weekSubmissionsCount} staff submissions • ${weekPeriodInfo.daysUntilReset}d left` : `Awaiting staff count • ${weekPeriodInfo.daysUntilReset}d left`}
+                {weekSubmissionsCount > 0 ? `${weekSubmissionsCount} staff submissions • ${weekPeriodInfo.daysUntilReset}d left` : (weekSales > 0 ? `${weekOrders.length} orders recorded • ${weekPeriodInfo.daysUntilReset}d left` : `Awaiting orders • ${weekPeriodInfo.daysUntilReset}d left`)}
               </div>
             </div>
 
@@ -2228,7 +2228,7 @@ export default function AdminView({
                 ₹{monthSales.toFixed(0)}
               </div>
               <div style={{ fontSize: 10, color: monthSales > 0 ? '#16A34A' : '#64748B', marginTop: 4 }}>
-                {monthSales > 0 ? `${monthSubmissionsCount} staff submissions • ${monthPeriodInfo.daysUntilReset}d left` : `Awaiting staff count • ${monthPeriodInfo.daysUntilReset}d left`}
+                {monthSubmissionsCount > 0 ? `${monthSubmissionsCount} staff submissions • ${monthPeriodInfo.daysUntilReset}d left` : (monthSales > 0 ? `${monthOrders.length} orders recorded • ${monthPeriodInfo.daysUntilReset}d left` : `Awaiting orders • ${monthPeriodInfo.daysUntilReset}d left`)}
               </div>
             </div>
           </div>
@@ -2452,48 +2452,60 @@ export default function AdminView({
 
             {/* Filtered Table */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {orders
-                .filter(
-                  (o) =>
-                    o.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
-                    o.customerName.toLowerCase().includes(orderSearch.toLowerCase()) ||
-                    o.table.toLowerCase().includes(orderSearch.toLowerCase())
-                )
-                .map((ord) => (
-                  <div
-                    key={ord.id}
-                    style={{
-                      padding: '10px 12px',
-                      background: '#F9FAFB',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: 12,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontWeight: 700, fontSize: 13 }}>{ord.id}</span>
-                        <span className="status-pill tag" style={{ fontSize: 9 }}>
-                          {ord.table}
+              {(orders || [])
+                .filter((o) => {
+                  if (!o) return false;
+                  const search = (orderSearch || '').trim().toLowerCase();
+                  if (!search) return true;
+                  const orderId = String(o.id || '').toLowerCase();
+                  const custName = String(o.customerName || o.customer || o.dinerName || 'Guest').toLowerCase();
+                  const tableNum = String(o.table || o.tableNumber || '').toLowerCase();
+                  return orderId.includes(search) || custName.includes(search) || tableNum.includes(search);
+                })
+                .map((ord) => {
+                  const custName = ord.customerName || ord.customer || ord.dinerName || 'Guest';
+                  const tableStr = ord.table || ord.tableNumber || 'Table -';
+                  const itemsCount = Array.isArray(ord.items) ? ord.items.length : 0;
+                  const payMode = ord.paymentMode || 'Counter';
+                  const orderTotal = Number(ord.total) || 0;
+                  const statusLbl = ord.statusLabel || ord.status || 'Completed';
+
+                  return (
+                    <div
+                      key={ord.id}
+                      style={{
+                        padding: '10px 12px',
+                        background: '#F9FAFB',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: 12,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontWeight: 700, fontSize: 13 }}>{ord.id}</span>
+                          <span className="status-pill tag" style={{ fontSize: 9 }}>
+                            {tableStr}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {custName} • {itemsCount} items • {payMode}
+                        </div>
+                      </div>
+
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary-blue)' }}>
+                          ₹{orderTotal.toFixed(0)}
+                        </div>
+                        <span className="status-pill done" style={{ fontSize: 9, padding: '2px 6px' }}>
+                          {statusLbl}
                         </span>
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                        {ord.customerName} • {ord.items.length} items • {ord.paymentMode}
-                      </div>
                     </div>
-
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary-blue)' }}>
-                        ₹{ord.total.toFixed(0)}
-                      </div>
-                      <span className="status-pill done" style={{ fontSize: 9, padding: '2px 6px' }}>
-                        {ord.statusLabel}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
 

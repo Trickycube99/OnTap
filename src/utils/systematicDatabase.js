@@ -894,13 +894,4 @@ if (typeof window !== 'undefined') {
   try {
     purgeAllPreMadeMockAccountsAndData().catch(() => {});
   } catch {}
-
-  // One-time automatic reset of orders & financial data across dashboards & database
-  const RESET_FLAG_KEY = 'ontap_financials_reset_executed_v20261024_01';
-  try {
-    if (localStorage.getItem(RESET_FLAG_KEY) !== 'done') {
-      localStorage.setItem(RESET_FLAG_KEY, 'done');
-      resetAllOrdersAndFinancialData().catch(() => {});
-    }
-  } catch {}
 }

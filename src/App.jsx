@@ -43,6 +43,7 @@ import { playNewOrderChime, playTapSound } from './utils/audio';
 import { syncAllBusinessesToCloud, subscribeBusinessesFromCloud, fetchBusinessesFromCloud } from './utils/systematicDatabase';
 import { subscribeSyncEvents, SYNC_EVENTS } from './utils/sync';
 import { saveSubmittedReportToIndexedDB, fetchAllSubmittedReportsFromIndexedDB } from './utils/ownerDatabase';
+import { fetchOrdersFromCloud, syncOrderToCloud } from './utils/firebaseSync';
 import confetti from 'canvas-confetti';
 import { Server, Building2, PlusCircle } from 'lucide-react';
 
@@ -530,6 +531,31 @@ export default function App() {
     return () => { isMounted = false; };
   }, [activeBusinessId]);
 
+  // Fast Cloud Orders retrieval on mount or tenant switch so order history & revenue are always retained
+  useEffect(() => {
+    let isMounted = true;
+    if (activeBusinessId) {
+      fetchOrdersFromCloud(activeBusinessId).then((cloudOrders) => {
+        if (isMounted && Array.isArray(cloudOrders) && cloudOrders.length > 0) {
+          setOrders((prev) => {
+            const orderKey = getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId);
+            const map = new Map();
+            cloudOrders.forEach((o) => { if (o && o.id) map.set(o.id, o); });
+            (Array.isArray(prev) ? prev : []).forEach((o) => { if (o && o.id) map.set(o.id, o); });
+            const merged = Array.from(map.values()).sort((a, b) => {
+              const timeA = new Date(a.createdAt || a.timestamp || 0).getTime();
+              const timeB = new Date(b.createdAt || b.timestamp || 0).getTime();
+              return timeB - timeA;
+            });
+            saveData(orderKey, merged);
+            return merged;
+          });
+        }
+      }).catch(() => {});
+    }
+    return () => { isMounted = false; };
+  }, [activeBusinessId]);
+
   // Dynamic CSS variables for tenant branding (strictly isolated from developer superadmin console)
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -923,6 +949,8 @@ export default function App() {
           saveData(orderKey, [orderWithBiz, ...existing]);
         }
       } catch {}
+      // Ensure sync to cloud
+      syncOrderToCloud(orderWithBiz, activeBusinessId).catch(() => {});
     }
 
     setOrders((prev) => {
@@ -1000,6 +1028,23 @@ export default function App() {
     setMenu(loadedMenu);
     setChef(loadData(getScopedKey(STORAGE_KEYS.CHEF, bizId), verifiedChefData));
     setOrders(loadedOrders);
+    // Fetch cloud orders to recover historical orders if local storage is missing them
+    fetchOrdersFromCloud(bizId).then((cloudOrders) => {
+      if (Array.isArray(cloudOrders) && cloudOrders.length > 0) {
+        setOrders((prev) => {
+          const map = new Map();
+          cloudOrders.forEach((o) => { if (o && o.id) map.set(o.id, o); });
+          (Array.isArray(prev) ? prev : []).forEach((o) => { if (o && o.id) map.set(o.id, o); });
+          const merged = Array.from(map.values()).sort((a, b) => {
+            const timeA = new Date(a.createdAt || a.timestamp || 0).getTime();
+            const timeB = new Date(b.createdAt || b.timestamp || 0).getTime();
+            return timeB - timeA;
+          });
+          saveData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), merged);
+          return merged;
+        });
+      }
+    }).catch(() => {});
     setExpenses(loadedExpenses);
     setStaff(loadedStaff);
     setOffers(loadedOffers);

@@ -32,21 +32,44 @@ export function getScopedKey(baseKey, bizId) {
 export function purgeLegacyStorage() {
   try {
     if (typeof localStorage === 'undefined') return;
+    const activeKeysWhitelist = [
+      'flowscape_businesses_v1',
+      'flowscape_active_business_id_v1',
+      'flowscape_auth_sessions_v3',
+      'flowscape_dev_credentials_v2',
+      'flowscape_dev_session_v1',
+      'flowscape_dev_reset_code_v1',
+      'flowscape_firebase_config',
+      'flowscape_sync_event_ping'
+    ];
+
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
+      if (!k) continue;
+
+      // Strictly preserve active businesses, sessions, developer credentials, and ontap_v5 data
       if (
-        k && (
-          k.startsWith('flowscape_') ||
-          k.startsWith('ontap_v1_') ||
-          k.startsWith('ontap_v2_') ||
-          k.startsWith('ontap_v3_') ||
-          k.startsWith('ontap_v4_') ||
-          k.includes('biz_advait') ||
-          k.includes('biz_copper_chimney') ||
-          k.includes('biz_chai_point') ||
-          k.includes('advait_')
-        )
+        activeKeysWhitelist.includes(k) ||
+        k.startsWith('flowscape_order_ping_') ||
+        k.startsWith('flowscape_staff_inr_v2_') ||
+        k.startsWith('flowscape_diner_') ||
+        k.startsWith('ontap_v5_')
+      ) {
+        continue;
+      }
+
+      if (
+        k.startsWith('ontap_v1_') ||
+        k.startsWith('ontap_v2_') ||
+        k.startsWith('ontap_v3_') ||
+        k.startsWith('ontap_v4_') ||
+        k.includes('biz_advait') ||
+        k.includes('biz_copper_chimney') ||
+        k.includes('biz_chai_point') ||
+        k.includes('advait_') ||
+        k.startsWith('flowscape_legacy_') ||
+        k.startsWith('flowscape_v0_')
       ) {
         keysToRemove.push(k);
       }
