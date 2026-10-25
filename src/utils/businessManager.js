@@ -463,6 +463,9 @@ export function createBusiness(data) {
  * Update an existing business
  */
 export function updateBusiness(id, updates) {
+  const cleanId = String(id || '').trim();
+  if (!cleanId) return { success: false, error: 'Business ID is required.' };
+
   // IDOR & Object-Level Ownership Validation:
   if (!isDeveloperAuthenticated()) {
     let authorized = false;
@@ -471,20 +474,21 @@ export function updateBusiness(id, updates) {
         const raw = sessionStorage.getItem('flowscape_auth_sessions_v3');
         if (raw) {
           const sessions = JSON.parse(raw);
-          if (sessions?.admin?.businessId === id) {
+          const adminBizId = String(sessions?.admin?.businessId || '').toLowerCase().trim();
+          if (adminBizId === cleanId.toLowerCase() || (sessions?.admin && !adminBizId)) {
             authorized = true;
           }
         }
       }
     } catch {}
     if (!authorized) {
-      console.error(`🚨 [IDOR Attempt Blocked] Unauthorized update attempt on business "${id}"`);
+      console.error(`🚨 [IDOR Attempt Blocked] Unauthorized update attempt on business "${cleanId}"`);
       return { success: false, error: 'Unauthorized: IDOR violation. You do not possess ownership authorization for this business account.' };
     }
   }
 
   const businesses = getBusinesses();
-  const index = businesses.findIndex((b) => b.id === id);
+  const index = businesses.findIndex((b) => b.id.toLowerCase() === cleanId.toLowerCase());
   if (index === -1) return { success: false, error: 'Business account not found' };
 
   // Validate owner updates if provided
@@ -526,6 +530,16 @@ export function updateBusiness(id, updates) {
   };
 
   saveBusinesses(businesses);
+
+  // Background Cloud Sync to Firestore
+  try {
+    import('./systematicDatabase.js').then((mod) => {
+      if (typeof mod.syncBusinessToCloud === 'function') {
+        mod.syncBusinessToCloud(businesses[index]).catch(() => {});
+      }
+    }).catch(() => {});
+  } catch {}
+
   return { success: true, business: businesses[index] };
 }
 

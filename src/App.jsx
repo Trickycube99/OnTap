@@ -196,13 +196,16 @@ export default function App() {
     const isStall = activeBiz?.serviceType === 'stall' || (activeBiz?.tables?.length === 1 && activeBiz.tables[0].includes('Stand'));
     const bizOverride = activeBiz ? {
       restaurantName: activeBiz.name,
-      tagline: activeBiz.tagline || loaded?.tagline || initialBizTheme.tagline,
-      upiId: activeBiz.upiId || loaded?.upiId || initialBizTheme.upiId,
+      tagline: activeBiz.tagline !== undefined ? activeBiz.tagline : (loaded?.tagline || initialBizTheme.tagline),
+      upiId: activeBiz.upiId !== undefined ? activeBiz.upiId : (loaded?.upiId || initialBizTheme.upiId),
       accentColor: activeBiz.accentColor || loaded?.accentColor || initialBizTheme.accentColor,
       logo: activeBiz.logo !== undefined ? activeBiz.logo : (loaded?.logo || null),
       tables: Array.isArray(activeBiz.tables) && activeBiz.tables.length > 0 ? activeBiz.tables : (loaded?.tables || initialBizTheme.tables),
       serviceType: activeBiz.serviceType || loaded?.serviceType || (isStall ? 'stall' : 'dine_in'),
-      tableCount: activeBiz.tableCount !== undefined ? activeBiz.tableCount : (loaded?.tableCount || 6)
+      tableCount: activeBiz.tableCount !== undefined ? activeBiz.tableCount : (loaded?.tableCount || 6),
+      welcomeMessage: activeBiz.welcomeMessage || loaded?.welcomeMessage || initialBizTheme.welcomeMessage,
+      menuLayout: activeBiz.menuLayout || loaded?.menuLayout || initialBizTheme.menuLayout,
+      showAboutChef: activeBiz.showAboutChef !== undefined ? activeBiz.showAboutChef : (loaded?.showAboutChef !== false)
     } : {};
     return {
       ...initialBizTheme,
@@ -474,12 +477,20 @@ export default function App() {
           setTheme((prev) => ({
             ...prev,
             restaurantName: currentBiz.name || prev.restaurantName,
-            tagline: currentBiz.tagline || prev.tagline,
-            upiId: currentBiz.upiId || prev.upiId,
+            tagline: currentBiz.tagline !== undefined ? currentBiz.tagline : prev.tagline,
+            upiId: currentBiz.upiId !== undefined ? currentBiz.upiId : prev.upiId,
             accentColor: currentBiz.accentColor || prev.accentColor,
             logo: currentBiz.logo !== undefined ? currentBiz.logo : prev.logo,
-            tables: Array.isArray(currentBiz.tables) && currentBiz.tables.length > 0 ? currentBiz.tables : prev.tables
+            tables: Array.isArray(currentBiz.tables) && currentBiz.tables.length > 0 ? currentBiz.tables : prev.tables,
+            serviceType: currentBiz.serviceType || prev.serviceType || 'dine_in',
+            tableCount: currentBiz.tableCount !== undefined ? currentBiz.tableCount : prev.tableCount,
+            welcomeMessage: currentBiz.welcomeMessage !== undefined ? currentBiz.welcomeMessage : prev.welcomeMessage,
+            menuLayout: currentBiz.menuLayout || prev.menuLayout,
+            showAboutChef: currentBiz.showAboutChef !== undefined ? currentBiz.showAboutChef : prev.showAboutChef
           }));
+          if (currentBiz.chef) {
+            setChef((prev) => ({ ...prev, ...currentBiz.chef }));
+          }
           if (Array.isArray(currentBiz.menu) && currentBiz.menu.length > 0) {
             setMenu((prev) => (prev.length === 0 ? currentBiz.menu : prev));
           }
@@ -502,6 +513,12 @@ export default function App() {
       saveData(getScopedKey(STORAGE_KEYS.THEME, activeBusinessId), theme);
     }
   }, [theme, activeBusinessId]);
+
+  useEffect(() => {
+    if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
+      saveData(getScopedKey(STORAGE_KEYS.CHEF, activeBusinessId), chef);
+    }
+  }, [chef, activeBusinessId]);
 
   useEffect(() => {
     if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {

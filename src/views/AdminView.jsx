@@ -610,7 +610,7 @@ export default function AdminView({
   };
 
   // Save Customizer Settings & Broadcast to all screens in real-time
-  const handleSaveCustomizer = () => {
+  const handleSaveCustomizer = async () => {
     playTapSound();
     setIsSavingCustomizer(true);
 
@@ -645,12 +645,16 @@ export default function AdminView({
     setTheme(updatedTheme);
     if (setChef) setChef(updatedChef);
 
-    // 2. Persist in active business record
+    // 2. Persist in active business record and cloud database
     const activeBiz = getActiveBusiness();
-    if (activeBiz?.id) {
-      updateBusiness(activeBiz.id, {
+    const targetBizId = activeBiz?.id || activeBusinessId || '';
+
+    if (targetBizId) {
+      updateBusiness(targetBizId, {
         name: customizerDraft.restaurantName,
         tagline: customizerDraft.tagline,
+        welcomeMessage: customizerDraft.welcomeMessage,
+        menuLayout: customizerDraft.menuLayout,
         upiId: customizerDraft.upiId,
         accentColor: customizerDraft.accentColor,
         logo: customizerDraft.logo,
@@ -658,26 +662,35 @@ export default function AdminView({
         tableCount,
         tables: computedTables,
         showAboutChef: isChefVisible,
-        chef: updatedChef
+        chef: updatedChef,
+        theme: updatedTheme
       });
+
+      // 3. Save scoped theme and chef to localStorage using correct ontap_v5 prefix
+      saveData(getScopedKey(STORAGE_KEYS.THEME, targetBizId), updatedTheme);
+      saveData(getScopedKey(STORAGE_KEYS.CHEF, targetBizId), updatedChef);
+
+      // 4. Synchronize immediately to Firebase Firestore
+      const freshBiz = getBusinesses().find((b) => b.id.toLowerCase() === targetBizId.toLowerCase());
+      if (freshBiz) {
+        try {
+          await syncBusinessToCloud(freshBiz);
+        } catch (err) {
+          console.warn('Failed to sync updated store settings to cloud:', err);
+        }
+      }
     }
 
-    // 3. Save scoped theme and chef to localStorage
-    const scopedThemeKey = activeBiz?.id
-      ? `${STORAGE_KEYS.THEME}_${activeBiz.id}`
-      : STORAGE_KEYS.THEME;
-    saveData(scopedThemeKey, updatedTheme);
+    // Fallback base storage for single-tenant consistency
+    saveData(STORAGE_KEYS.THEME, updatedTheme);
+    saveData(STORAGE_KEYS.CHEF, updatedChef);
 
-    const scopedChefKey = activeBiz?.id
-      ? `${STORAGE_KEYS.CHEF}_${activeBiz.id}`
-      : STORAGE_KEYS.CHEF;
-    saveData(scopedChefKey, updatedChef);
+    // 5. Real-time broadcast to all open windows/tabs (customer devices, POS terminals)
+    broadcastSyncEvent(SYNC_EVENTS.THEME_UPDATED, updatedTheme, targetBizId);
+    broadcastSyncEvent(SYNC_EVENTS.CHEF_UPDATED, updatedChef, targetBizId);
+    broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, { businessId: targetBizId }, targetBizId);
 
-    // 4. Real-time broadcast to all open windows/tabs (customer devices, POS terminals)
-    broadcastSyncEvent(SYNC_EVENTS.THEME_UPDATED, updatedTheme);
-    broadcastSyncEvent(SYNC_EVENTS.CHEF_UPDATED, updatedChef);
-
-    // 5. Success chime & UI feedback
+    // 6. Success chime & UI feedback
     playSuccessChime();
     setIsSavingCustomizer(false);
     setCustomizerSaveSuccess(true);

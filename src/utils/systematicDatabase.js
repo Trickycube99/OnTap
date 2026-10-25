@@ -89,6 +89,14 @@ export async function syncBusinessToCloud(business) {
       upiId: business.upiId || '',
       tables: Array.isArray(business.tables) ? business.tables : [],
       accentColor: business.accentColor || '#007AFF',
+      logo: business.logo !== undefined ? business.logo : null,
+      serviceType: business.serviceType || 'dine_in',
+      tableCount: business.tableCount !== undefined ? business.tableCount : 6,
+      showAboutChef: business.showAboutChef !== false,
+      chef: business.chef || null,
+      welcomeMessage: business.welcomeMessage || '',
+      menuLayout: business.menuLayout || 'grid',
+      theme: business.theme || null,
       totalOrders: business.totalOrders || 0,
       gmv: business.gmv || 0,
       createdAt: business.createdAt || new Date().toISOString(),
@@ -162,6 +170,14 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
       const updated = {
         ...local,
         ...cloudBiz,
+        logo: cloudBiz.logo !== undefined ? cloudBiz.logo : local.logo,
+        serviceType: cloudBiz.serviceType || local.serviceType || 'dine_in',
+        tableCount: cloudBiz.tableCount !== undefined ? cloudBiz.tableCount : local.tableCount,
+        showAboutChef: cloudBiz.showAboutChef !== undefined ? cloudBiz.showAboutChef : local.showAboutChef,
+        chef: cloudBiz.chef || local.chef,
+        welcomeMessage: cloudBiz.welcomeMessage || local.welcomeMessage,
+        menuLayout: cloudBiz.menuLayout || local.menuLayout,
+        theme: cloudBiz.theme || local.theme,
         staff: mergedStaff,
         menu: mergedMenu,
         status: cloudBiz.status || local.status,
@@ -183,6 +199,12 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
       }
       if (Array.isArray(cloudBiz.menu) && cloudBiz.menu.length > 0) {
         saveData(getScopedKey(STORAGE_KEYS.MENU, cloudBiz.id), cloudBiz.menu);
+      }
+      if (cloudBiz.theme) {
+        saveData(getScopedKey(STORAGE_KEYS.THEME, cloudBiz.id), cloudBiz.theme);
+      }
+      if (cloudBiz.chef) {
+        saveData(getScopedKey(STORAGE_KEYS.CHEF, cloudBiz.id), cloudBiz.chef);
       }
 
       if (JSON.stringify(updated) !== JSON.stringify(local)) {
