@@ -1,8 +1,8 @@
 // Server-Side Developer Superadmin Login API Handler
 // Provides constant-time master credential evaluation, rate-limiting, and issues HttpOnly cookies
 
-const ALLOWED_DEVELOPER_EMAIL = 'dev@platform.com';
-const DEVELOPER_MASTER_SECRET = 'OnTap@RootDev2026!Secured';
+const ALLOWED_DEVELOPER_EMAIL = (process.env.DEVELOPER_EMAIL || 'pranjalmk62@gmail.com').trim().toLowerCase();
+const DEVELOPER_MASTER_SECRET = process.env.DEVELOPER_MASTER_SECRET || process.env.DEVELOPER_PASSWORD || '';
 
 function timingSafeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
@@ -36,6 +36,13 @@ export default async function handler(req, res) {
   const { email, password } = req.body || {};
   const cleanEmail = (email || '').trim().toLowerCase();
   const cleanPass = (password || '').trim();
+
+  if (!DEVELOPER_MASTER_SECRET) {
+    return res.status(500).json({
+      error: 'SERVER_NOT_CONFIGURED',
+      message: 'Developer master secret is not set in server environment variables.'
+    });
+  }
 
   const isEmailMatch = cleanEmail === ALLOWED_DEVELOPER_EMAIL;
   const isPassMatch = timingSafeEqual(cleanPass, DEVELOPER_MASTER_SECRET);

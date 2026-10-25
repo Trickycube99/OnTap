@@ -6,11 +6,11 @@
 //    Firestore cloud collections, and local storage partitions.
 // 4. Statutory Non-PII Compliance Retention (7-year tax & accounting ledger under GST Act & DPDP Act 2023)
 
-import { doc, setDoc, deleteDoc, collection, query, where, getDocs, writeBatch, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, writeBatch, onSnapshot } from 'firebase/firestore';
 import { initFirebase, deleteCloudOrdersForBusiness, purgeAllCloudOrdersAndFinancials, isQuotaExhausted, handleFirestoreError } from './firebaseSync.js';
 import { deleteOwnerAccountFromFirebase, getFirebaseAuth } from './firebaseAuth.js';
 import { signOut, deleteUser } from 'firebase/auth';
-import { getBusinesses, saveBusinesses, getActiveBusiness, setActiveBusiness } from './businessManager.js';
+import { getBusinesses, saveBusinesses, getActiveBusiness, setActiveBusiness, DEV_CREDENTIALS_STORAGE_KEY, getDeveloperCredentials } from './businessManager.js';
 import { loadData, saveData, getScopedKey, STORAGE_KEYS } from './storage.js';
 import { getStoredSessions, saveStoredSessions, logoutRole } from './auth.js';
 import { broadcastSyncEvent, SYNC_EVENTS } from './sync.js';
@@ -263,6 +263,110 @@ export function subscribeBusinessesFromCloud(onUpdate) {
     return () => {};
   }
 }
+
+/**
+ * Synchronize developer superadmin credentials to cloud database
+ */
+export async function syncDeveloperCredentialsToCloud(credentials) {
+  if (isQuotaExhausted()) return false;
+  const database = initFirebase();
+  if (!database || !credentials) return false;
+
+  try {
+    const devDocRef = doc(database, 'system_config', 'developer_credentials');
+    const payload = {
+      email: (credentials.email || 'pranjalmk62@gmail.com').trim().toLowerCase(),
+      password: credentials.password ? String(credentials.password).trim() : '',
+      name: credentials.name || 'Platform Lead Developer',
+      role: 'developer',
+      updatedAt: credentials.updatedAt || new Date().toISOString()
+    };
+    await setDoc(devDocRef, payload, { merge: true });
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, 'sync developer credentials');
+    return false;
+  }
+}
+
+/**
+ * Fetch developer superadmin credentials from cloud database and retain locally
+ */
+export async function fetchDeveloperCredentialsFromCloud() {
+  if (isQuotaExhausted()) return null;
+  const database = initFirebase();
+  if (!database) return null;
+
+  try {
+    const devDocRef = doc(database, 'system_config', 'developer_credentials');
+    const docSnap = await getDoc(devDocRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      if (data && data.password) {
+        if (typeof localStorage !== 'undefined') {
+          const current = getDeveloperCredentials();
+          const updated = {
+            ...current,
+            email: data.email || current.email || 'pranjalmk62@gmail.com',
+            password: data.password,
+            updatedAt: data.updatedAt || new Date().toISOString()
+          };
+          localStorage.setItem(DEV_CREDENTIALS_STORAGE_KEY, JSON.stringify(updated));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('flowscape_dev_credentials_updated', { detail: updated }));
+          }
+        }
+        return data;
+      }
+    }
+    return null;
+  } catch (err) {
+    handleFirestoreError(err, 'fetch developer credentials');
+    return null;
+  }
+}
+
+/**
+ * Real-time listener for developer credentials in cloud database
+ */
+export function subscribeDeveloperCredentialsFromCloud(onUpdate) {
+  if (isQuotaExhausted()) return () => {};
+  const database = initFirebase();
+  if (!database) return () => {};
+
+  try {
+    const devDocRef = doc(database, 'system_config', 'developer_credentials');
+    const unsubscribe = onSnapshot(devDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data && data.password && typeof localStorage !== 'undefined') {
+          const current = getDeveloperCredentials();
+          const updated = {
+            ...current,
+            email: data.email || current.email || 'pranjalmk62@gmail.com',
+            password: data.password,
+            updatedAt: data.updatedAt || new Date().toISOString()
+          };
+          localStorage.setItem(DEV_CREDENTIALS_STORAGE_KEY, JSON.stringify(updated));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('flowscape_dev_credentials_updated', { detail: updated }));
+          }
+          if (typeof onUpdate === 'function') {
+            onUpdate(updated);
+          }
+        }
+      }
+    }, (err) => {
+      handleFirestoreError(err, 'developer credentials subscribe');
+    });
+
+    return unsubscribe;
+  } catch (err) {
+    handleFirestoreError(err, 'developer credentials subscribe');
+    return () => {};
+  }
+}
+
 
 /**
  * Look up a business account by owner email directly from Firestore

@@ -44,7 +44,9 @@ import {
   getLegalComplianceRecords,
   syncBusinessToCloud,
   subscribeBusinessesFromCloud,
-  fetchBusinessesFromCloud
+  fetchBusinessesFromCloud,
+  fetchDeveloperCredentialsFromCloud,
+  subscribeDeveloperCredentialsFromCloud
 } from '../utils/systematicDatabase';
 import {
   provisionOwnerAccountWithVerification,
@@ -61,15 +63,47 @@ import {
   setActiveBusiness,
   authenticateDeveloper,
   isDeveloperAuthenticated,
-  logoutDeveloper
+  logoutDeveloper,
+  getDeveloperCredentials,
+  getDeveloperPassword,
+  hasDeveloperPassword,
+  updateDeveloperPassword,
+  requestDeveloperPasswordReset,
+  confirmDeveloperPasswordReset
 } from '../utils/businessManager';
 
 export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
   const [isAuthenticated, setIsAuthenticated] = useState(() => isDeveloperAuthenticated());
-  const [loginEmail, setLoginEmail] = useState('');
+  const [hasDbPassword, setHasDbPassword] = useState(() => hasDeveloperPassword());
+  const [loginEmail, setLoginEmail] = useState(() => getDeveloperCredentials().email);
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Authentication View Mode: 'login' | 'forgot' | 'change_password'
+  const [devAuthMode, setDevAuthMode] = useState('login');
+
+  // Forgot Password Workflow States
+  const [forgotEmail, setForgotEmail] = useState(() => getDeveloperCredentials().email);
+  const [forgotStep, setForgotStep] = useState(1); // 1: Request, 2: Confirm
+  const [forgotCode, setForgotCode] = useState('');
+  const [dispatchedRecoveryCode, setDispatchedRecoveryCode] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+  const [showForgotPass, setShowForgotPass] = useState(false);
+  const [forgotStatus, setForgotStatus] = useState({ loading: false, error: '', success: '' });
+
+  // Direct Change Password States (usable whenever logged out or in modal)
+  const [changeEmail, setChangeEmail] = useState(() => getDeveloperCredentials().email);
+  const [changeCurrentPassword, setChangeCurrentPassword] = useState('');
+  const [changeNewPassword, setChangeNewPassword] = useState('');
+  const [changeConfirmPassword, setChangeConfirmPassword] = useState('');
+  const [showChangeCurrentPass, setShowChangeCurrentPass] = useState(false);
+  const [showChangeNewPass, setShowChangeNewPass] = useState(false);
+  const [changeStatus, setChangeStatus] = useState({ loading: false, error: '', success: '' });
+
+  // Authenticated Developer Change Password Modal
+  const [showDevPasswordModal, setShowDevPasswordModal] = useState(false);
 
   // Dashboard States
   const [activeTab, setActiveTab] = useState('tenants'); // 'tenants' | 'health' | 'logs' | 'settings'
@@ -192,6 +226,13 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     });
     fetchBusinessesFromCloud().catch(() => {});
 
+    const unsubscribeDevCreds = subscribeDeveloperCredentialsFromCloud(() => {
+      setHasDbPassword(hasDeveloperPassword());
+    });
+    fetchDeveloperCredentialsFromCloud().then(() => {
+      setHasDbPassword(hasDeveloperPassword());
+    }).catch(() => {});
+
     const unsubscribe = subscribeSyncEvents((event) => {
       if (event?.type === SYNC_EVENTS.EMAIL_VERIFIED) {
         try {
@@ -230,6 +271,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       window.removeEventListener('flowscape_businesses_updated', handleSync);
       window.removeEventListener('ontap_email_verified', handleEmailVerifiedNotice);
       if (unsubscribeCloud) unsubscribeCloud();
+      if (unsubscribeDevCreds) unsubscribeDevCreds();
       if (unsubscribe) unsubscribe();
     };
   }, []);
@@ -241,6 +283,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
 
     const res = authenticateDeveloper(loginEmail, loginPassword);
     if (res.success) {
+      setHasDbPassword(true);
       playSuccessChime();
       setIsAuthenticated(true);
       setLogs((prev) => [
@@ -257,8 +300,126 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     playTapSound();
     logoutDeveloper();
     setIsAuthenticated(false);
-    setLoginEmail('');
+    setLoginEmail(getDeveloperCredentials().email);
     setLoginPassword('');
+    setDevAuthMode('login');
+  };
+
+  // Handle Forgot Password: Step 1 (Request Code)
+  const handleRequestForgot = async (e) => {
+    e.preventDefault();
+    playTapSound();
+    setForgotStatus({ loading: true, error: '', success: '' });
+    try {
+      const res = await requestDeveloperPasswordReset(forgotEmail);
+      if (res.success) {
+        playSuccessChime();
+        setDispatchedRecoveryCode(res.recoveryCode);
+        setForgotStep(2);
+        setForgotStatus({
+          loading: false,
+          error: '',
+          success: res.message
+        });
+      } else {
+        playAlertChime();
+        setForgotStatus({ loading: false, error: res.error, success: '' });
+      }
+    } catch (err) {
+      playAlertChime();
+      setForgotStatus({ loading: false, error: err.message, success: '' });
+    }
+  };
+
+  // Handle Forgot Password: Step 2 (Confirm Code & Set Password)
+  const handleConfirmForgot = (e) => {
+    e.preventDefault();
+    playTapSound();
+    setForgotStatus({ loading: true, error: '', success: '' });
+
+    if (!forgotCode.trim()) {
+      setForgotStatus({ loading: false, error: 'Please enter the 6-digit verification code.', success: '' });
+      return;
+    }
+    if (!forgotNewPassword.trim() || forgotNewPassword.length < 6) {
+      setForgotStatus({ loading: false, error: 'New password must be at least 6 characters long.', success: '' });
+      return;
+    }
+    if (forgotNewPassword !== forgotConfirmPassword) {
+      setForgotStatus({ loading: false, error: 'New password and confirm password do not match.', success: '' });
+      return;
+    }
+
+    const res = confirmDeveloperPasswordReset(forgotEmail, forgotCode, forgotNewPassword);
+    if (res.success) {
+      playSuccessChime();
+      setForgotStatus({ loading: false, error: '', success: 'Password reset successfully! Returning to login...' });
+      setLoginPassword(forgotNewPassword);
+      setTimeout(() => {
+        setDevAuthMode('login');
+        setForgotStep(1);
+        setForgotCode('');
+        setDispatchedRecoveryCode('');
+        setForgotNewPassword('');
+        setForgotConfirmPassword('');
+        setForgotStatus({ loading: false, error: '', success: '' });
+      }, 1600);
+    } else {
+      playAlertChime();
+      setForgotStatus({ loading: false, error: res.error, success: '' });
+    }
+  };
+
+  // Handle Direct Change Password (When logged out or in modal)
+  const handleChangePassword = (e) => {
+    e.preventDefault();
+    playTapSound();
+    setChangeStatus({ loading: true, error: '', success: '' });
+
+    const cleanEmail = (changeEmail || '').trim().toLowerCase();
+    const currentCreds = getDeveloperCredentials();
+    if (cleanEmail !== currentCreds.email.toLowerCase()) {
+      setChangeStatus({ loading: false, error: `Developer Email must match "${currentCreds.email}".`, success: '' });
+      return;
+    }
+
+    if (hasDbPassword && !changeCurrentPassword) {
+      setChangeStatus({ loading: false, error: 'Please enter your current master password.', success: '' });
+      return;
+    }
+
+    if (!changeNewPassword || changeNewPassword.length < 6) {
+      setChangeStatus({ loading: false, error: 'New master password must be at least 6 characters long.', success: '' });
+      return;
+    }
+
+    if (changeNewPassword !== changeConfirmPassword) {
+      setChangeStatus({ loading: false, error: 'New password and confirmation do not match.', success: '' });
+      return;
+    }
+
+    const res = updateDeveloperPassword(changeNewPassword, changeCurrentPassword);
+    if (res.success) {
+      setHasDbPassword(true);
+      playSuccessChime();
+      setChangeStatus({ loading: false, error: '', success: 'Password retained in database successfully! Returning to login...' });
+      setLoginPassword(changeNewPassword);
+      setLogs((prev) => [
+        { id: Date.now(), time: 'Just now', type: 'system', text: 'Developer superadmin password updated and retained in database' },
+        ...prev
+      ]);
+      setTimeout(() => {
+        setDevAuthMode('login');
+        setShowDevPasswordModal(false);
+        setChangeCurrentPassword('');
+        setChangeNewPassword('');
+        setChangeConfirmPassword('');
+        setChangeStatus({ loading: false, error: '', success: '' });
+      }, 1500);
+    } else {
+      playAlertChime();
+      setChangeStatus({ loading: false, error: res.error, success: '' });
+    }
   };
 
   const handleCreateBusiness = async (e) => {
@@ -704,7 +865,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
   const totalOrders = businesses.reduce((acc, b) => acc + (b.totalOrders || 0), 0);
 
   // -------------------------------------------------------------
-  // DEVELOPER AUTHENTICATION LOGIN VIEW (Zero Autofill Button)
+  // DEVELOPER AUTHENTICATION LOGIN VIEW (With Forgot & Change Password)
   // -------------------------------------------------------------
   if (!isAuthenticated) {
     return (
@@ -720,7 +881,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       }}>
         <div style={{
           width: '100%',
-          maxWidth: '440px',
+          maxWidth: '460px',
           background: 'rgba(17, 24, 39, 0.85)',
           backdropFilter: 'blur(20px)',
           border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -728,158 +889,920 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
           padding: '36px 32px',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 40px rgba(6, 182, 212, 0.15)'
         }}>
-          {/* Brand Header */}
-          <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <div style={{
-              width: 56,
-              height: 56,
-              borderRadius: 16,
-              background: 'linear-gradient(135deg, #06B6D4 0%, #3B82F6 100%)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: 16,
-              boxShadow: '0 8px 24px rgba(6, 182, 212, 0.4)'
-            }}>
-              <Server size={28} color="#FFFFFF" />
-            </div>
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'rgba(6, 182, 212, 0.12)',
-              border: '1px solid rgba(6, 182, 212, 0.3)',
-              borderRadius: 20,
-              padding: '3px 10px',
-              fontSize: 11,
-              fontWeight: 700,
-              color: '#38BDF8',
-              marginBottom: 8,
-              letterSpacing: '0.04em'
-            }}>
-              <Lock size={11} />
-              <span>SUPERADMIN INFRASTRUCTURE</span>
-            </div>
-            <h1 style={{ fontSize: 24, fontWeight: 800, color: '#F8FAFC', margin: '4px 0', letterSpacing: '-0.02em' }}>
-              Developer Admin Dashboard
-            </h1>
-            <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
-              Master multi-tenant platform control & business provisioning
-            </p>
-          </div>
 
-          {loginError && (
-            <div style={{
-              background: 'rgba(239, 68, 68, 0.15)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              borderRadius: 12,
-              padding: '10px 14px',
-              fontSize: 12,
-              color: '#FCA5A5',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              marginBottom: 20
-            }}>
-              <AlertTriangle size={15} color="#EF4444" />
-              <span>{loginError}</span>
+          {/* ======================================================== */}
+          {/* MODE 1: STANDARD DEVELOPER LOGIN                         */}
+          {/* ======================================================== */}
+          {devAuthMode === 'login' && (
+            <>
+              {/* Brand Header */}
+              <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                <div style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  background: 'linear-gradient(135deg, #06B6D4 0%, #3B82F6 100%)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 16,
+                  boxShadow: '0 8px 24px rgba(6, 182, 212, 0.4)'
+                }}>
+                  <Server size={28} color="#FFFFFF" />
+                </div>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: 'rgba(6, 182, 212, 0.12)',
+                  border: '1px solid rgba(6, 182, 212, 0.3)',
+                  borderRadius: 20,
+                  padding: '4px 12px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: '#38BDF8',
+                  marginBottom: 8,
+                  letterSpacing: '0.04em'
+                }}>
+                  <Lock size={11} />
+                  <span>DEVELOPER SUPERADMIN • {getDeveloperCredentials().email}</span>
+                </div>
+                <h1 style={{ fontSize: 24, fontWeight: 800, color: '#F8FAFC', margin: '4px 0', letterSpacing: '-0.02em' }}>
+                  Developer Admin Dashboard
+                </h1>
+                <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
+                  Master multi-tenant platform control & business provisioning
+                </p>
+              </div>
+
+              {loginError && (
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: 12,
+                  padding: '10px 14px',
+                  fontSize: 12,
+                  color: '#FCA5A5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 20
+                }}>
+                  <AlertTriangle size={15} color="#EF4444" />
+                  <span>{loginError}</span>
+                </div>
+              )}
+
+              {/* Form strictly manual - zero autofill */}
+              <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
+                    Developer Email
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="pranjalmk62@gmail.com"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      background: 'rgba(15, 23, 42, 0.8)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      color: '#F8FAFC',
+                      fontSize: 14,
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#CBD5E1' }}>
+                      Master Access Key / Password
+                    </label>
+                    {hasDbPassword && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTapSound();
+                          setDevAuthMode('forgot');
+                          setForgotStep(1);
+                          setForgotEmail(loginEmail || getDeveloperCredentials().email);
+                          setForgotStatus({ loading: false, error: '', success: '' });
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#38BDF8',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                      >
+                        Forgot Password?
+                      </button>
+                    )}
+                  </div>
+
+                  {!hasDbPassword && (
+                    <div style={{
+                      background: 'rgba(6, 182, 212, 0.1)',
+                      border: '1px solid rgba(6, 182, 212, 0.25)',
+                      borderRadius: 10,
+                      padding: '8px 12px',
+                      fontSize: 12,
+                      color: '#67E8F9',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 10
+                    }}>
+                      <Sparkles size={14} color="#06B6D4" />
+                      <span>First-Time Setup: Enter your password (min 6 chars) to retain it in the database.</span>
+                    </div>
+                  )}
+
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder={hasDbPassword ? '••••••••••••' : 'Enter password to retain in database'}
+                      style={{
+                        width: '100%',
+                        padding: '12px 42px 12px 14px',
+                        borderRadius: 12,
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        color: '#F8FAFC',
+                        fontSize: 14,
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#64748B',
+                        cursor: 'pointer',
+                        padding: 4
+                      }}
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  style={{
+                    marginTop: 8,
+                    padding: '13px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #06B6D4 0%, #0284C7 100%)',
+                    color: '#FFFFFF',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    boxShadow: '0 4px 16px rgba(6, 182, 212, 0.35)',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <span>{hasDbPassword ? 'Authenticate & Enter Console' : 'Set Password & Enter Console'}</span>
+                  <ArrowRight size={16} />
+                </button>
+              </form>
+
+              {/* Direct Change Password Option - Usable anytime even when logged out */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapSound();
+                    setDevAuthMode('change_password');
+                    setChangeEmail(loginEmail || getDeveloperCredentials().email);
+                    setChangeCurrentPassword('');
+                    setChangeNewPassword('');
+                    setChangeConfirmPassword('');
+                    setChangeStatus({ loading: false, error: '', success: '' });
+                  }}
+                  style={{
+                    background: 'rgba(6, 182, 212, 0.08)',
+                    border: '1px solid rgba(6, 182, 212, 0.25)',
+                    borderRadius: 10,
+                    padding: '8px 16px',
+                    color: '#38BDF8',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    transition: 'all 0.2s'
+                  }}
+                  title="Change master developer password anytime, even while logged out"
+                >
+                  <KeyRound size={13} />
+                  <span>Change Password (Whenever You Want)</span>
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ======================================================== */}
+          {/* MODE 2: FORGOT PASSWORD (SECURITY CODE RECOVERY)         */}
+          {/* ======================================================== */}
+          {devAuthMode === 'forgot' && (
+            <div>
+              {/* Header */}
+              <div style={{ textAlign: 'center', marginBottom: 24 }}>
+                <div style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 16,
+                  boxShadow: '0 8px 24px rgba(245, 158, 11, 0.35)'
+                }}>
+                  <KeyRound size={28} color="#FFFFFF" />
+                </div>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  borderRadius: 20,
+                  padding: '4px 12px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: '#FBBF24',
+                  marginBottom: 8,
+                  letterSpacing: '0.04em'
+                }}>
+                  <ShieldCheck size={12} />
+                  <span>DEVELOPER RECOVERY PROTOCOL</span>
+                </div>
+                <h2 style={{ fontSize: 22, fontWeight: 800, color: '#F8FAFC', margin: '4px 0' }}>
+                  {forgotStep === 1 ? 'Forgot Developer Password?' : 'Verify & Set New Password'}
+                </h2>
+                <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
+                  {forgotStep === 1
+                    ? 'Enter your registered Developer Dashboard email to receive a recovery code.'
+                    : `Enter the 6-digit verification code sent for ${forgotEmail}`}
+                </p>
+              </div>
+
+              {/* Status messages */}
+              {forgotStatus.error && (
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: 12,
+                  padding: '10px 14px',
+                  fontSize: 12,
+                  color: '#FCA5A5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 16
+                }}>
+                  <AlertTriangle size={15} color="#EF4444" />
+                  <span>{forgotStatus.error}</span>
+                </div>
+              )}
+
+              {forgotStatus.success && (
+                <div style={{
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  borderRadius: 12,
+                  padding: '10px 14px',
+                  fontSize: 12,
+                  color: '#6EE7B7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 16
+                }}>
+                  <CheckCircle2 size={15} color="#10B981" />
+                  <span>{forgotStatus.success}</span>
+                </div>
+              )}
+
+              {/* Step 1: Request Code */}
+              {forgotStep === 1 && (
+                <form onSubmit={handleRequestForgot} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
+                      Developer Dashboard Email ID
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="pranjalmk62@gmail.com"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        color: '#F8FAFC',
+                        fontSize: 14,
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <span style={{ fontSize: 11, color: '#64748B', display: 'block', marginTop: 4 }}>
+                      Authorized Platform ID: {getDeveloperCredentials().email}
+                    </span>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={forgotStatus.loading}
+                    style={{
+                      marginTop: 4,
+                      padding: '13px',
+                      borderRadius: 12,
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                      color: '#FFFFFF',
+                      fontSize: 14,
+                      fontWeight: 700,
+                      cursor: forgotStatus.loading ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      boxShadow: '0 4px 16px rgba(245, 158, 11, 0.35)',
+                      opacity: forgotStatus.loading ? 0.7 : 1
+                    }}
+                  >
+                    {forgotStatus.loading ? (
+                      <>
+                        <RefreshCw size={16} className="spin" />
+                        <span>Dispatched Security Code...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send size={16} />
+                        <span>Send Password Reset Code</span>
+                      </>
+                    )}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTapSound();
+                        setDevAuthMode('login');
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#94A3B8',
+                        fontSize: 12,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ← Back to Developer Login
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Step 2: Enter Code & New Password */}
+              {forgotStep === 2 && (
+                <form onSubmit={handleConfirmForgot} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Emergency on-screen code banner for instant seamless reset */}
+                  {dispatchedRecoveryCode && (
+                    <div style={{
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      background: 'rgba(6, 182, 212, 0.12)',
+                      border: '1px dashed rgba(6, 182, 212, 0.4)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#38BDF8', fontWeight: 700 }}>6-Digit Security Code:</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: '#FFFFFF', letterSpacing: 3, fontFamily: 'monospace' }}>
+                          {dispatchedRecoveryCode}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTapSound();
+                          setForgotCode(dispatchedRecoveryCode);
+                        }}
+                        style={{
+                          background: '#0284C7',
+                          border: 'none',
+                          color: '#FFFFFF',
+                          borderRadius: 8,
+                          padding: '6px 12px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Auto-Fill
+                      </button>
+                    </div>
+                  )}
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
+                      Enter 6-Digit Verification Code
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={6}
+                      value={forgotCode}
+                      onChange={(e) => setForgotCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="123456"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        color: '#F8FAFC',
+                        fontSize: 16,
+                        letterSpacing: 4,
+                        fontFamily: 'monospace',
+                        textAlign: 'center',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
+                      New Master Password
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showForgotPass ? 'text' : 'password'}
+                        required
+                        minLength={6}
+                        value={forgotNewPassword}
+                        onChange={(e) => setForgotNewPassword(e.target.value)}
+                        placeholder="At least 6 characters"
+                        style={{
+                          width: '100%',
+                          padding: '12px 42px 12px 14px',
+                          borderRadius: 12,
+                          background: 'rgba(15, 23, 42, 0.8)',
+                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          color: '#F8FAFC',
+                          fontSize: 14,
+                          outline: 'none',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowForgotPass(!showForgotPass)}
+                        style={{
+                          position: 'absolute',
+                          right: 12,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#64748B',
+                          cursor: 'pointer',
+                          padding: 4
+                        }}
+                      >
+                        {showForgotPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
+                      Confirm New Master Password
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={forgotConfirmPassword}
+                      onChange={(e) => setForgotConfirmPassword(e.target.value)}
+                      placeholder="Repeat new password"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        color: '#F8FAFC',
+                        fontSize: 14,
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={forgotStatus.loading}
+                    style={{
+                      marginTop: 6,
+                      padding: '13px',
+                      borderRadius: 12,
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                      color: '#FFFFFF',
+                      fontSize: 14,
+                      fontWeight: 700,
+                      cursor: forgotStatus.loading ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      boxShadow: '0 4px 16px rgba(16, 185, 129, 0.35)'
+                    }}
+                  >
+                    <CheckCircle2 size={16} />
+                    <span>Confirm & Save New Password</span>
+                  </button>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={handleRequestForgot}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#38BDF8',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        padding: 0
+                      }}
+                    >
+                      Resend Code
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTapSound();
+                        setDevAuthMode('login');
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#94A3B8',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        padding: 0
+                      }}
+                    >
+                      ← Back to Login
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
 
-          {/* Form strictly manual - zero autofill button as requested */}
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* ======================================================== */}
+          {/* MODE 3: DIRECT CHANGE PASSWORD (WHENEVER YOU WANT)       */}
+          {/* ======================================================== */}
+          {devAuthMode === 'change_password' && (
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
-                Developer Email
-              </label>
-              <input
-                type="email"
-                required
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder="Enter developer email"
-                style={{
-                  width: '100%',
-                  padding: '12px 14px',
-                  borderRadius: 12,
-                  background: 'rgba(15, 23, 42, 0.8)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  color: '#F8FAFC',
-                  fontSize: 14,
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
-                Master Access Key / Password
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  style={{
-                    width: '100%',
-                    padding: '12px 42px 12px 14px',
-                    borderRadius: 12,
-                    background: 'rgba(15, 23, 42, 0.8)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    color: '#F8FAFC',
-                    fontSize: 14,
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: 12,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#64748B',
-                    cursor: 'pointer',
-                    padding: 4
-                  }}
-                  title={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+              {/* Header */}
+              <div style={{ textAlign: 'center', marginBottom: 24 }}>
+                <div style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  background: 'linear-gradient(135deg, #06B6D4 0%, #3B82F6 100%)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 16,
+                  boxShadow: '0 8px 24px rgba(6, 182, 212, 0.4)'
+                }}>
+                  <KeyRound size={28} color="#FFFFFF" />
+                </div>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: 'rgba(6, 182, 212, 0.12)',
+                  border: '1px solid rgba(6, 182, 212, 0.3)',
+                  borderRadius: 20,
+                  padding: '4px 12px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: '#38BDF8',
+                  marginBottom: 8,
+                  letterSpacing: '0.04em'
+                }}>
+                  <ShieldCheck size={12} />
+                  <span>DEVELOPER CREDENTIAL MANAGER</span>
+                </div>
+                <h2 style={{ fontSize: 22, fontWeight: 800, color: '#F8FAFC', margin: '4px 0' }}>
+                  Change Master Password
+                </h2>
+                <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
+                  Change your Developer Dashboard password whenever you want (even when logged out)
+                </p>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              style={{
-                marginTop: 8,
-                padding: '13px',
-                borderRadius: 12,
-                border: 'none',
-                background: 'linear-gradient(135deg, #06B6D4 0%, #0284C7 100%)',
-                color: '#FFFFFF',
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                boxShadow: '0 4px 16px rgba(6, 182, 212, 0.35)',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              <span>Authenticate & Enter Console</span>
-              <ArrowRight size={16} />
-            </button>
-          </form>
+              {/* Status messages */}
+              {changeStatus.error && (
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: 12,
+                  padding: '10px 14px',
+                  fontSize: 12,
+                  color: '#FCA5A5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 16
+                }}>
+                  <AlertTriangle size={15} color="#EF4444" />
+                  <span>{changeStatus.error}</span>
+                </div>
+              )}
+
+              {changeStatus.success && (
+                <div style={{
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  borderRadius: 12,
+                  padding: '10px 14px',
+                  fontSize: 12,
+                  color: '#6EE7B7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 16
+                }}>
+                  <CheckCircle2 size={15} color="#10B981" />
+                  <span>{changeStatus.success}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
+                    Developer Dashboard Email ID
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={changeEmail}
+                    onChange={(e) => setChangeEmail(e.target.value)}
+                    placeholder="pranjalmk62@gmail.com"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      background: 'rgba(15, 23, 42, 0.8)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      color: '#F8FAFC',
+                      fontSize: 14,
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {hasDbPassword ? (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#CBD5E1' }}>
+                        Current Master Password
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTapSound();
+                          setDevAuthMode('forgot');
+                          setForgotStep(1);
+                          setForgotEmail(changeEmail);
+                          setForgotStatus({ loading: false, error: '', success: '' });
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#38BDF8',
+                          fontSize: 11,
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                      >
+                        Forgot current password?
+                      </button>
+                    </div>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showChangeCurrentPass ? 'text' : 'password'}
+                        required
+                        value={changeCurrentPassword}
+                        onChange={(e) => setChangeCurrentPassword(e.target.value)}
+                        placeholder="Enter current password"
+                        style={{
+                          width: '100%',
+                          padding: '12px 42px 12px 14px',
+                          borderRadius: 12,
+                          background: 'rgba(15, 23, 42, 0.8)',
+                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          color: '#F8FAFC',
+                          fontSize: 14,
+                          outline: 'none',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowChangeCurrentPass(!showChangeCurrentPass)}
+                        style={{
+                          position: 'absolute',
+                          right: 12,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#64748B',
+                          cursor: 'pointer',
+                          padding: 4
+                        }}
+                      >
+                        {showChangeCurrentPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{
+                    background: 'rgba(6, 182, 212, 0.1)',
+                    border: '1px solid rgba(6, 182, 212, 0.25)',
+                    borderRadius: 10,
+                    padding: '8px 12px',
+                    fontSize: 12,
+                    color: '#67E8F9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}>
+                    <Sparkles size={14} color="#06B6D4" />
+                    <span>No master password stored in database yet. Set your new password directly below.</span>
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
+                    New Master Password
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showChangeNewPass ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      value={changeNewPassword}
+                      onChange={(e) => setChangeNewPassword(e.target.value)}
+                      placeholder="At least 6 characters"
+                      style={{
+                        width: '100%',
+                        padding: '12px 42px 12px 14px',
+                        borderRadius: 12,
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        color: '#F8FAFC',
+                        fontSize: 14,
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowChangeNewPass(!showChangeNewPass)}
+                      style={{
+                        position: 'absolute',
+                        right: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#64748B',
+                        cursor: 'pointer',
+                        padding: 4
+                      }}
+                    >
+                      {showChangeNewPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
+                    Confirm New Master Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={changeConfirmPassword}
+                    onChange={(e) => setChangeConfirmPassword(e.target.value)}
+                    placeholder="Repeat new master password"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      background: 'rgba(15, 23, 42, 0.8)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      color: '#F8FAFC',
+                      fontSize: 14,
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={changeStatus.loading}
+                  style={{
+                    marginTop: 6,
+                    padding: '13px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #06B6D4 0%, #0284C7 100%)',
+                    color: '#FFFFFF',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: changeStatus.loading ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    boxShadow: '0 4px 16px rgba(6, 182, 212, 0.35)'
+                  }}
+                >
+                  <CheckCircle2 size={16} />
+                  <span>Update Master Password Now</span>
+                </button>
+
+                <div style={{ textAlign: 'center', marginTop: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapSound();
+                      setDevAuthMode('login');
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#94A3B8',
+                      fontSize: 12,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ← Back to Developer Login
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
 
           {/* Direct Return to Restaurant View */}
           <div style={{ textAlign: 'center', marginTop: 24, paddingTop: 18, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
@@ -1041,6 +1964,35 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
 
         {/* Right: Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => {
+              playTapSound();
+              setShowDevPasswordModal(true);
+              setChangeEmail(getDeveloperCredentials().email);
+              setChangeCurrentPassword('');
+              setChangeNewPassword('');
+              setChangeConfirmPassword('');
+              setChangeStatus({ loading: false, error: '', success: '' });
+            }}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              background: 'rgba(6, 182, 212, 0.15)',
+              border: '1px solid rgba(6, 182, 212, 0.3)',
+              color: '#38BDF8',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+            title="Change Developer Dashboard Master Password"
+          >
+            <KeyRound size={13} />
+            <span>Change Password</span>
+          </button>
+
           <button
             onClick={exportPlatformBackup}
             style={{
@@ -3614,6 +4566,280 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
             >
               Close Compliance Ledger
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Authenticated Developer Change Password Modal */}
+      {showDevPasswordModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20,
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: '#111827',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            borderRadius: 20,
+            maxWidth: 440,
+            width: '100%',
+            padding: '28px 24px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  background: 'linear-gradient(135deg, #06B6D4 0%, #0284C7 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <KeyRound size={20} color="#FFFFFF" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#F8FAFC' }}>
+                    Change Master Password
+                  </h3>
+                  <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>
+                    Developer ID: {getDeveloperCredentials().email}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDevPasswordModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94A3B8',
+                  cursor: 'pointer',
+                  padding: 4
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {changeStatus.error && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: 10,
+                padding: '10px 12px',
+                fontSize: 12,
+                color: '#FCA5A5',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                marginBottom: 16
+              }}>
+                <AlertTriangle size={15} color="#EF4444" />
+                <span>{changeStatus.error}</span>
+              </div>
+            )}
+
+            {changeStatus.success && (
+              <div style={{
+                background: 'rgba(16, 185, 129, 0.15)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                borderRadius: 10,
+                padding: '10px 12px',
+                fontSize: 12,
+                color: '#6EE7B7',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                marginBottom: 16
+              }}>
+                <CheckCircle2 size={15} color="#10B981" />
+                <span>{changeStatus.success}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {hasDbPassword ? (
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
+                    Current Master Password
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showChangeCurrentPass ? 'text' : 'password'}
+                      required
+                      value={changeCurrentPassword}
+                      onChange={(e) => setChangeCurrentPassword(e.target.value)}
+                      placeholder="Enter current password"
+                      style={{
+                        width: '100%',
+                        padding: '10px 38px 10px 12px',
+                        borderRadius: 10,
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        color: '#F8FAFC',
+                        fontSize: 13,
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowChangeCurrentPass(!showChangeCurrentPass)}
+                      style={{
+                        position: 'absolute',
+                        right: 10,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#64748B',
+                        cursor: 'pointer',
+                        padding: 2
+                      }}
+                    >
+                      {showChangeCurrentPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  background: 'rgba(6, 182, 212, 0.1)',
+                  border: '1px solid rgba(6, 182, 212, 0.25)',
+                  borderRadius: 10,
+                  padding: '8px 12px',
+                  fontSize: 12,
+                  color: '#67E8F9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}>
+                  <Sparkles size={14} color="#06B6D4" />
+                  <span>No password stored in database yet. Set your new password below.</span>
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
+                  New Master Password
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showChangeNewPass ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={changeNewPassword}
+                    onChange={(e) => setChangeNewPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                    style={{
+                      width: '100%',
+                      padding: '10px 38px 10px 12px',
+                      borderRadius: 10,
+                      background: 'rgba(15, 23, 42, 0.8)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      color: '#F8FAFC',
+                      fontSize: 13,
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowChangeNewPass(!showChangeNewPass)}
+                    style={{
+                      position: 'absolute',
+                      right: 10,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#64748B',
+                      cursor: 'pointer',
+                      padding: 2
+                    }}
+                  >
+                    {showChangeNewPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>
+                  Confirm New Master Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={changeConfirmPassword}
+                  onChange={(e) => setChangeConfirmPassword(e.target.value)}
+                  placeholder="Repeat new password"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    background: 'rgba(15, 23, 42, 0.8)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    color: '#F8FAFC',
+                    fontSize: 13,
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDevPasswordModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '11px',
+                    borderRadius: 10,
+                    background: 'rgba(30, 41, 59, 0.8)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    color: '#94A3B8',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={changeStatus.loading}
+                  style={{
+                    flex: 2,
+                    padding: '11px',
+                    borderRadius: 10,
+                    background: 'linear-gradient(135deg, #06B6D4 0%, #0284C7 100%)',
+                    border: 'none',
+                    color: '#FFFFFF',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: changeStatus.loading ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
+                  }}
+                >
+                  <CheckCircle2 size={16} />
+                  <span>Save New Password</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

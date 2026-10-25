@@ -16,7 +16,8 @@ service cloud.firestore {
       return isAuthenticated() && (
         request.auth.token.role == 'developer' ||
         request.auth.token.admin == true ||
-        request.auth.token.email == 'manj@ontap.app'
+        request.auth.token.email == 'manj@ontap.app' ||
+        request.auth.token.email == 'pranjalmk62@gmail.com'
       );
     }
 
@@ -148,6 +149,13 @@ service cloud.firestore {
           (resource != null && isTenantOwner(resource.data.businessId)) ||
           (request.resource != null && isTenantOwner(request.resource.data.businessId))
         )
+      );
+    }
+
+    // 7. Platform Settings & Developer System Credentials
+    match /system_config/{configDocId} {
+      allow read, write: if isDeveloper() || (
+        isAuthenticated() && request.auth.token.email == 'pranjalmk62@gmail.com'
       );
     }
   }

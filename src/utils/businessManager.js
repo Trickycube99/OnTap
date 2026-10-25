@@ -10,13 +10,248 @@ import { validateEmail, validatePin } from './securityValidator';
 export const BUSINESSES_STORAGE_KEY = 'flowscape_businesses_v1';
 export const ACTIVE_BUSINESS_ID_KEY = 'flowscape_active_business_id_v1';
 export const DEV_SESSION_STORAGE_KEY = 'flowscape_dev_session_v1';
+export const DEV_CREDENTIALS_STORAGE_KEY = 'flowscape_dev_credentials_v2';
+export const DEV_RESET_CODE_STORAGE_KEY = 'flowscape_dev_reset_code_v1';
+
+export const DEFAULT_DEVELOPER_EMAIL = 'pranjalmk62@gmail.com';
 
 // Developer Superadmin Credentials (strictly manual login, zero autofill)
 export const DEVELOPER_CREDENTIALS = {
-  email: 'dev@platform.com',
+  get email() {
+    return getDeveloperCredentials().email;
+  },
   name: 'Platform Lead Developer',
   role: 'developer'
 };
+
+/**
+ * Check whether a master developer password has been retained in the database
+ */
+export function hasDeveloperPassword() {
+  const pass = getDeveloperPassword();
+  return Boolean(pass && pass.length >= 6);
+}
+
+/**
+ * Retrieve saved developer superadmin credentials or default
+ */
+export function getDeveloperCredentials() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(DEV_CREDENTIALS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            email: parsed.email || DEFAULT_DEVELOPER_EMAIL,
+            name: parsed.name || 'Platform Lead Developer',
+            role: 'developer'
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error loading developer credentials:', err);
+  }
+  return {
+    email: DEFAULT_DEVELOPER_EMAIL,
+    name: 'Platform Lead Developer',
+    role: 'developer'
+  };
+}
+
+/**
+ * Retrieve current master developer password from database (returns empty string if none set yet)
+ */
+export function getDeveloperPassword() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(DEV_CREDENTIALS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.password) {
+          return String(parsed.password).trim();
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error loading developer password from database:', err);
+  }
+  return '';
+}
+
+/**
+ * Update and retain the developer superadmin password in the database (local + cloud sync)
+ * Supports both authenticated updates and verified reset/recovery updates
+ */
+export function updateDeveloperPassword(newPassword, oldPassword = null, options = {}) {
+  const cleanNew = String(newPassword || '').trim();
+  if (!cleanNew || cleanNew.length < 6) {
+    return { success: false, error: 'New password must be at least 6 characters long.' };
+  }
+
+  const currentPass = getDeveloperPassword();
+
+  // If oldPassword is required (only when a current password exists in database, and not resetting)
+  if (currentPass && !options.isReset && !options.bypassOldCheck) {
+    const cleanOld = String(oldPassword || '').trim();
+    if (!cleanOld) {
+      return { success: false, error: 'Current master password is required.' };
+    }
+    if (!timingSafeEqual(cleanOld, currentPass)) {
+      return { success: false, error: 'Current master password does not match database record.' };
+    }
+  }
+
+  try {
+    const creds = getDeveloperCredentials();
+    const updated = {
+      ...creds,
+      password: cleanNew,
+      updatedAt: new Date().toISOString()
+    };
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(DEV_CREDENTIALS_STORAGE_KEY, JSON.stringify(updated));
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('flowscape_dev_credentials_updated', { detail: updated }));
+      try {
+        if ('BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('flowscape_pos_sync_channel_v1');
+          bc.postMessage({
+            type: 'DEV_CREDENTIALS_UPDATED',
+            payload: { email: updated.email, timestamp: Date.now() },
+            timestamp: Date.now()
+          });
+          bc.close();
+        }
+      } catch {}
+    }
+
+    // Persist to cloud Firestore database as well if initialized
+    try {
+      import('./systematicDatabase.js').then((mod) => {
+        if (typeof mod.syncDeveloperCredentialsToCloud === 'function') {
+          mod.syncDeveloperCredentialsToCloud(updated).catch(() => {});
+        }
+      }).catch(() => {});
+    } catch {}
+
+    return {
+      success: true,
+      message: 'Developer Dashboard password retained in database successfully.'
+    };
+  } catch (err) {
+    console.error('Error saving developer password to database:', err);
+    return { success: false, error: 'Failed to update developer password: ' + err.message };
+  }
+}
+
+/**
+ * Request Developer Password Reset (Forgot Password)
+ * Generates an instant 6-digit recovery code and attempts Firebase Auth dispatch
+ */
+export async function requestDeveloperPasswordReset(email) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const currentCreds = getDeveloperCredentials();
+
+  if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+    return { success: false, error: 'Please enter a valid developer email address.' };
+  }
+
+  if (cleanEmail !== currentCreds.email.toLowerCase()) {
+    return {
+      success: false,
+      error: `Access Denied: Email "${cleanEmail}" does not match the authorized Developer Dashboard ID (${currentCreds.email}).`
+    };
+  }
+
+  // Generate a secure 6-digit verification code
+  const recoveryCode = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = Date.now() + 15 * 60 * 1000; // 15-minute validity window
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(DEV_RESET_CODE_STORAGE_KEY, JSON.stringify({
+        code: recoveryCode,
+        email: cleanEmail,
+        expiresAt
+      }));
+    }
+  } catch (e) {
+    console.error('Error saving developer reset code:', e);
+  }
+
+  // Also attempt Firebase Auth reset email if available
+  let firebaseDispatched = false;
+  try {
+    const { getFirebaseAuth } = await import('./firebaseAuth.js');
+    const auth = getFirebaseAuth();
+    if (auth) {
+      const { sendPasswordResetEmail } = await import('firebase/auth');
+      await sendPasswordResetEmail(auth, cleanEmail);
+      firebaseDispatched = true;
+    }
+  } catch (fbErr) {
+    console.log('Firebase Auth dev reset notice:', fbErr?.message || fbErr);
+  }
+
+  return {
+    success: true,
+    email: cleanEmail,
+    recoveryCode,
+    expiresInMinutes: 15,
+    firebaseDispatched,
+    message: `Password reset verification code dispatched for ${cleanEmail}! Enter the 6-digit verification code to set a new password.`
+  };
+}
+
+/**
+ * Confirm Developer Password Reset using the 6-digit verification code
+ */
+export function confirmDeveloperPasswordReset(email, recoveryCode, newPassword) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanCode = String(recoveryCode || '').trim();
+  const cleanNew = String(newPassword || '').trim();
+
+  if (!cleanNew || cleanNew.length < 6) {
+    return { success: false, error: 'New password must be at least 6 characters long.' };
+  }
+
+  let storedReset = null;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(DEV_RESET_CODE_STORAGE_KEY);
+      if (raw) storedReset = JSON.parse(raw);
+    }
+  } catch {}
+
+  if (!storedReset || !storedReset.code) {
+    return { success: false, error: 'No active reset request found. Please request a new verification code.' };
+  }
+
+  if (Date.now() > storedReset.expiresAt) {
+    return { success: false, error: 'Verification code has expired. Please request a new verification code.' };
+  }
+
+  if (cleanEmail !== storedReset.email.toLowerCase()) {
+    return { success: false, error: 'Email does not match the active reset request.' };
+  }
+
+  if (!timingSafeEqual(cleanCode, String(storedReset.code))) {
+    return { success: false, error: 'Invalid 6-digit verification code. Please check and try again.' };
+  }
+
+  // Update password with bypassOldCheck
+  const updateRes = updateDeveloperPassword(cleanNew, null, { isReset: true, bypassOldCheck: true });
+  if (updateRes.success) {
+    try {
+      localStorage.removeItem(DEV_RESET_CODE_STORAGE_KEY);
+    } catch {}
+  }
+  return updateRes;
+}
 
 // Initial default business accounts configured on platform (Clean Zero-State for real use)
 export const DEFAULT_BUSINESSES = [];
@@ -416,33 +651,46 @@ export function deleteBusiness(id) {
 export function authenticateDeveloper(email, password) {
   const cleanEmail = (email || '').trim().toLowerCase();
   const cleanPass = (password || '').trim();
+  const currentCreds = getDeveloperCredentials();
+  const currentPassword = getDeveloperPassword();
 
-  if (cleanEmail !== DEVELOPER_CREDENTIALS.email.toLowerCase()) {
-    return { success: false, error: 'Invalid Developer credentials. Enter authorized developer email and master access key.' };
+  if (cleanEmail !== currentCreds.email.toLowerCase()) {
+    return { success: false, error: `Invalid Developer ID. Enter authorized developer email (${currentCreds.email}) and master access key.` };
   }
 
-  // Constant-time cryptographic verification of master credentials
-  const isMatch = timingSafeEqual(cleanPass, 'OnTap@RootDev2026!Secured');
-  if (isMatch) {
-    const session = {
-      role: 'developer',
-      name: DEVELOPER_CREDENTIALS.name,
-      email: DEVELOPER_CREDENTIALS.email,
-      token: `dev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      authenticatedAt: new Date().toISOString()
-    };
-    try {
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem(DEV_SESSION_STORAGE_KEY, JSON.stringify(session));
-      }
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem(DEV_SESSION_STORAGE_KEY);
-      }
-    } catch {}
-    return { success: true, session };
+  // If no password configured in database yet, initialize and retain this password in database
+  if (!currentPassword) {
+    if (cleanPass.length < 6) {
+      return { success: false, error: 'Password must be at least 6 characters long to initialize and retain master developer password in database.' };
+    }
+    const updateRes = updateDeveloperPassword(cleanPass, null, { isReset: true, bypassOldCheck: true });
+    if (!updateRes.success) {
+      return { success: false, error: updateRes.error };
+    }
+  } else {
+    // Constant-time cryptographic verification of master credentials against database
+    const isMatch = timingSafeEqual(cleanPass, currentPassword);
+    if (!isMatch) {
+      return { success: false, error: 'Invalid Developer credentials. Master access key does not match database record.' };
+    }
   }
 
-  return { success: false, error: 'Invalid Developer credentials. Enter authorized developer email and master access key.' };
+  const session = {
+    role: 'developer',
+    name: currentCreds.name,
+    email: currentCreds.email,
+    token: `dev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    authenticatedAt: new Date().toISOString()
+  };
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(DEV_SESSION_STORAGE_KEY, JSON.stringify(session));
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(DEV_SESSION_STORAGE_KEY);
+    }
+  } catch {}
+  return { success: true, session };
 }
 
 /**
