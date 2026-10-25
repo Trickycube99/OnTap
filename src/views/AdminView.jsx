@@ -452,7 +452,9 @@ export default function AdminView({
     welcomeMessage: theme?.welcomeMessage || 'Scan table QR, order effortlessly, and track your kitchen ticket in real time.',
     accentColor: theme?.accentColor || '#007AFF',
     menuLayout: theme?.menuLayout || 'grid',
-    upiId: theme?.upiId || '9119069179@nyes',
+    upiId: theme?.upiId || '',
+    fssai: theme?.fssai || theme?.fssaiLicense || activeBiz?.fssai || activeBiz?.fssaiLicense || '',
+    address: theme?.address || activeBiz?.address || '',
     logo: theme?.logo || null,
     serviceType: theme?.serviceType || (theme?.tables?.length === 1 && theme?.tables[0].includes('Stand') ? 'stall' : 'dine_in'),
     tableCount: theme?.tableCount || (theme?.tables?.filter(t => t.toLowerCase().startsWith('table')).length || 6),
@@ -488,6 +490,8 @@ export default function AdminView({
       accentColor: theme?.accentColor || '#007AFF',
       menuLayout: theme?.menuLayout || 'grid',
       upiId: theme?.upiId || '',
+      fssai: theme?.fssai || theme?.fssaiLicense || activeBiz?.fssai || activeBiz?.fssaiLicense || '',
+      address: theme?.address || activeBiz?.address || '',
       logo: theme?.logo || null,
       serviceType: theme?.serviceType || (theme?.tables?.length === 1 && theme?.tables[0].includes('Stand') ? 'stall' : 'dine_in'),
       tableCount: theme?.tableCount || (theme?.tables?.filter(t => t.toLowerCase().startsWith('table')).length || 6),
@@ -631,7 +635,9 @@ export default function AdminView({
       serviceType: customizerDraft.serviceType || 'dine_in',
       tableCount,
       tables: computedTables,
-      showAboutChef: isChefVisible
+      showAboutChef: isChefVisible,
+      address: (customizerDraft.address || '').trim(),
+      fssai: (customizerDraft.fssai || '').trim()
     };
 
     const updatedChef = {
@@ -663,7 +669,9 @@ export default function AdminView({
         tables: computedTables,
         showAboutChef: isChefVisible,
         chef: updatedChef,
-        theme: updatedTheme
+        theme: updatedTheme,
+        address: (customizerDraft.address || '').trim(),
+        fssai: (customizerDraft.fssai || '').trim()
       });
 
       // 3. Save scoped theme and chef to localStorage using correct ontap_v5 prefix
@@ -5177,6 +5185,48 @@ export default function AdminView({
                 </div>
               </div>
 
+              {/* Section B2: Business Location & FSSAI License */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                    Business Physical Address (Customer Footer &amp; Receipts)
+                  </label>
+                  <input
+                    type="text"
+                    className="ios-input"
+                    value={customizerDraft.address || ''}
+                    onChange={(e) => {
+                      setCustomizerDraft({ ...customizerDraft, address: e.target.value });
+                      setCustomizerSaveSuccess(false);
+                    }}
+                    placeholder="e.g. 12/B Park Street, Near Clock Tower, City 248001"
+                  />
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>
+                    Your outlet's physical location. Displayed in customer menu footer and on printed receipts.
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                    FSSAI License Number (Optional / Displayed in Footer &amp; Receipts)
+                  </label>
+                  <input
+                    type="text"
+                    className="ios-input"
+                    value={customizerDraft.fssai || ''}
+                    onChange={(e) => {
+                      setCustomizerDraft({ ...customizerDraft, fssai: e.target.value.trim() });
+                      setCustomizerSaveSuccess(false);
+                    }}
+                    placeholder="e.g. 10026011009821"
+                    maxLength={20}
+                  />
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>
+                    Enter your restaurant's 14-digit FSSAI license. Leave blank if not yet registered.
+                  </div>
+                </div>
+              </div>
+
               {/* Section C: Brand Accent Color & Layout */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
                 <div>
@@ -5997,7 +6047,7 @@ export default function AdminView({
                           {customizerDraft.restaurantName || 'Your Restaurant'}
                         </div>
                         <div style={{ fontSize: 10, color: '#16A34A', display: 'flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
-                          <ShieldCheck size={10} color="#16A34A" /> FSSAI 5-Star Clean Dining
+                          <ShieldCheck size={10} color="#16A34A" /> {customizerDraft.fssai ? `FSSAI Lic #${customizerDraft.fssai}` : 'Clean Dining Certified'}
                         </div>
                       </div>
                     </div>
@@ -6025,6 +6075,11 @@ export default function AdminView({
                     <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
                       {customizerDraft.restaurantName || 'Your Restaurant'}
                     </div>
+                    {customizerDraft.address && (
+                      <div style={{ fontSize: 10.5, color: '#475569', marginTop: 2 }}>
+                        📍 {customizerDraft.address}
+                      </div>
+                    )}
                     <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
                       {customizerDraft.welcomeMessage || 'Welcome to Table 04! Order fresh dishes directly to your table.'}
                     </div>
@@ -6046,7 +6101,7 @@ export default function AdminView({
                             <span className="status-pill done" style={{ fontSize: 10, padding: '2px 8px' }}>
                               <ShieldCheck size={11} /> Officially Verified Master Chef
                             </span>
-                            <span style={{ fontSize: 10, color: '#64748B' }}>Lic: FSSAI-LIC-10026011009821</span>
+                            <span style={{ fontSize: 10, color: '#64748B' }}>{customizerDraft.fssai ? `Lic: FSSAI-${customizerDraft.fssai}` : 'Standard Certified'}</span>
                           </div>
                         )}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -7571,8 +7626,9 @@ export default function AdminView({
       {/* Visible Dashboard Footer with Privacy Policy & All Compliance Links */}
       <LegalFooter
         variant="dark"
-        restaurantName={activeBiz?.name || 'Restaurant Admin OS'}
-        licenseText="Store Owner &amp; Admin Back-Office"
+        restaurantName={activeBiz?.name || theme?.restaurantName || 'Restaurant Admin OS'}
+        businessAddress={customizerDraft?.address || theme?.address || activeBiz?.address || ''}
+        licenseText={`Store Owner & Admin Back-Office${(customizerDraft?.fssai || theme?.fssai || activeBiz?.fssai) ? ` • FSSAI Lic #${customizerDraft?.fssai || theme?.fssai || activeBiz?.fssai}` : ''}`}
       />
 
       {/* Interactive Global Legal Documents & Compliance Center */}

@@ -722,7 +722,7 @@ export default function AuthModal({
             </button>.
           </div>
           <div style={{ color: '#94A3B8', marginTop: 4 }}>
-            OnTap Technologies Inc. • 100 Innovation Way, Suite 400, Wilmington, DE 19801, USA
+            OnTap Technologies • Shastri Nagar, Dehradun, Uttarakhand 248001, India
           </div>
         </div>
       </div>

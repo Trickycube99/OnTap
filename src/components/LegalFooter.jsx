@@ -8,6 +8,7 @@ import { playTapSound } from '../utils/audio';
 export default function LegalFooter({
   variant = 'light', // 'light' | 'dark'
   restaurantName = '',
+  businessAddress = '',
   licenseText = '',
   onClearData = null,
   clearDataLabel = 'Clear My Diner Data',
@@ -49,14 +50,19 @@ export default function LegalFooter({
       }}
     >
       <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* Optional Restaurant Branding & FSSAI / Health Registration */}
-        {(restaurantName || licenseText) && (
+        {/* Optional Restaurant Branding, Business Address & FSSAI / Health Registration */}
+        {(restaurantName || licenseText || businessAddress) && (
           <div style={{ fontWeight: 700, color: headingColor, fontSize: 12.5 }}>
             {restaurantName}
             {licenseText && (
               <span style={{ fontWeight: 500, color: textColor, marginLeft: 6 }}>
                 • {licenseText}
               </span>
+            )}
+            {businessAddress && (
+              <div style={{ fontWeight: 500, color: textColor, fontSize: 11, marginTop: 3 }}>
+                📍 {businessAddress}
+              </div>
             )}
           </div>
         )}
@@ -171,7 +177,7 @@ export default function LegalFooter({
             {' '}(Service Provider / Data Processor)
           </div>
           <div>
-            Registered Legal Address: {COMPANY_LEGAL_INFO.physicalAddress}
+            Registered Platform Office: {COMPANY_LEGAL_INFO.physicalAddress}
           </div>
           <div>
             Support &amp; Grievances:{' '}

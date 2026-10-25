@@ -3244,17 +3244,24 @@ export default function CustomerView({
             }
           }}
         >
-          {theme.restaurantName} • FSSAI Lic #10026011009821
+          {theme.restaurantName}{theme.fssai ? ` • FSSAI Lic #${theme.fssai}` : ''}
         </div>
         <div style={{ color: 'var(--text-muted)' }}>
-          Pure Contactless Table QR Ordering • Freshly Crafted &amp; Served Hot
+          {theme.tagline || 'Pure Contactless Table QR Ordering • Freshly Crafted & Served Hot'}
         </div>
 
-        {/* Company Transparency & Legal Entity Details */}
+        {/* Business Physical Address (configured by owner) */}
+        {theme.address && (
+          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+            📍 {theme.address}
+          </div>
+        )}
+
+        {/* Company Transparency & Platform Operations Details */}
         <div style={{ marginTop: 10, fontSize: 10.5, color: '#64748B', lineHeight: 1.5 }}>
           Platform operated by <strong>{COMPANY_LEGAL_INFO.legalName}</strong><br />
-          {COMPANY_LEGAL_INFO.physicalAddress}<br />
-          Contact: <a href={`mailto:${COMPANY_LEGAL_INFO.supportEmail}`} style={{ color: 'var(--primary-blue)', textDecoration: 'none' }}>{COMPANY_LEGAL_INFO.supportEmail}</a> | Phone: {COMPANY_LEGAL_INFO.phone}
+          Platform Office: {COMPANY_LEGAL_INFO.physicalAddress}<br />
+          Contact: <a href={`mailto:${COMPANY_LEGAL_INFO.supportEmail}`} style={{ color: 'var(--primary-blue)', textDecoration: 'none' }}>{COMPANY_LEGAL_INFO.supportEmail}</a>
         </div>
 
         {/* Legal Policies Navigation Row */}

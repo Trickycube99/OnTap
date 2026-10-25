@@ -14,12 +14,12 @@
  */
 
 export const COMPANY_LEGAL_INFO = {
-  legalName: 'OnTap Technologies Inc.',
+  legalName: 'OnTap Technologies',
   tradeName: 'OnTap Restaurant OS',
-  physicalAddress: '100 Innovation Way, Suite 400, Wilmington, DE 19801, USA',
-  regionalOffice: 'OnTap Technologies India Pvt. Ltd., Level 6, Prestige Meridian, MG Road, Bengaluru, Karnataka 560001, India',
-  phone: '+1 (302) 555-0199',
-  fax: '+1 (302) 555-0198',
+  physicalAddress: 'Shastri Nagar, Dehradun, Uttarakhand 248001, India',
+  regionalOffice: 'Shastri Nagar, Dehradun, Uttarakhand 248001, India',
+  phone: '+91 98765 43210',
+  fax: '+91 135 276 0198',
   supportEmail: 'support@ontap.app',
   privacyEmail: 'privacy@ontap.app',
   legalEmail: 'legal@ontap.app',

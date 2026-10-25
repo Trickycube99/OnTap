@@ -104,10 +104,10 @@ export default function DmcaModal({ isOpen, onClose }) {
               <div>
                 <strong style={{ color: '#F1F5F9' }}>Physical Legal Address:</strong>
                 <div style={{ color: '#CBD5E1', marginTop: 2 }}>
-                  OnTap Technologies Inc.<br />
+                  OnTap Technologies<br />
                   Attn: Copyright Compliance Officer (DMCA Agent)<br />
-                  100 Innovation Way, Suite 400<br />
-                  Wilmington, DE 19801, USA
+                  Shastri Nagar, Dehradun<br />
+                  Uttarakhand 248001, India
                 </div>
               </div>
             </div>

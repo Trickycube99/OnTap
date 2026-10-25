@@ -121,9 +121,12 @@ export default function PrinterModal({ order, theme, chef, onClose }) {
                   </div>
                 )}
                 <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{theme.restaurantName}</div>
-                <div style={{ fontSize: '11px' }}>{theme.tagline}</div>
-                <div style={{ fontSize: '10px', color: '#4B5563' }}>FSSAI Lic: {chef.verificationId}</div>
-                <div style={{ fontSize: '10px', color: '#4B5563' }}>GSTIN: 07AAACB2194D1Z2</div>
+                {theme.tagline && <div style={{ fontSize: '11px' }}>{theme.tagline}</div>}
+                {theme.address && <div style={{ fontSize: '10px', color: '#4B5563' }}>{theme.address}</div>}
+                {(theme.fssai || chef.fssaiLicense) && (
+                  <div style={{ fontSize: '10px', color: '#4B5563' }}>FSSAI Lic: {theme.fssai || chef.fssaiLicense}</div>
+                )}
+                {theme.gstin && <div style={{ fontSize: '10px', color: '#4B5563' }}>GSTIN: {theme.gstin}</div>}
                 <div>--------------------------------</div>
                 <div style={{ fontWeight: 'bold' }}>TAX INVOICE</div>
               </div>

@@ -2,8 +2,8 @@
 
 **Effective Date:** October 24, 2026  
 **Last Updated:** October 24, 2026  
-**Entity:** OnTap Technologies Inc. ("OnTap", "we", "us", or "our")  
-**Registered Office:** 100 Innovation Way, Suite 400, Wilmington, DE 19801, USA  
+**Entity:** OnTap Technologies ("OnTap", "we", "us", or "our")  
+**Registered Office:** Shastri Nagar, Dehradun, Uttarakhand 248001, India  
 **Support Contact:** `refunds@ontap.app` | **Billing:** `billing@ontap.app`
 
 ---

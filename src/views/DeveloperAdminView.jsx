@@ -4848,7 +4848,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       <LegalFooter
         variant="dark"
         restaurantName="Developer Superadmin Portal"
-        licenseText="Platform Control Panel • Delaware Corp"
+        licenseText="Platform Control Operations • Shastri Nagar, Dehradun 248001"
       />
     </div>
   );

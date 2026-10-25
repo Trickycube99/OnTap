@@ -8,14 +8,14 @@
  */
 
 export const COMPANY_LEGAL_ADDRESS = {
-  name: 'OnTap Platform Technologies Inc.',
-  street: '100 Innovation Way, Suite 400',
-  city: 'Wilmington',
-  state: 'DE',
-  zip: '19801',
-  country: 'United States',
-  formatted: 'OnTap Platform Technologies Inc., 100 Innovation Way, Suite 400, Wilmington, DE 19801, USA',
-  regionalOffice: 'OnTap Technologies India Pvt. Ltd., Level 6, Prestige Meridian, MG Road, Bengaluru, Karnataka 560001, India'
+  name: 'OnTap Technologies',
+  street: 'Shastri Nagar',
+  city: 'Dehradun',
+  state: 'Uttarakhand',
+  zip: '248001',
+  country: 'India',
+  formatted: 'OnTap Technologies, Shastri Nagar, Dehradun, Uttarakhand 248001, India',
+  regionalOffice: 'Shastri Nagar, Dehradun, Uttarakhand 248001, India'
 };
 
 /**

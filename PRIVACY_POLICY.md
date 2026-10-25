@@ -2,9 +2,8 @@
 
 **Effective Date:** October 24, 2026  
 **Last Updated:** October 24, 2026  
-**Service Provider & Data Fiduciary:** OnTap Technologies Inc. ("OnTap", "we", "us", or "our")  
-**Registered Physical Address:** 100 Innovation Way, Suite 400, Wilmington, DE 19801, USA  
-**Regional Office (Asia-Pacific):** OnTap Technologies India Pvt. Ltd., Level 6, Prestige Meridian, MG Road, Bengaluru, Karnataka 560001, India  
+**Service Provider & Data Fiduciary:** OnTap Technologies ("OnTap", "we", "us", or "our")  
+**Registered Physical Address:** Shastri Nagar, Dehradun, Uttarakhand 248001, India  
 **Dedicated Privacy Contact:** `privacy@ontap.app` | **Data Protection Officer (DPO):** `dpo@ontap.app`
 
 ---
@@ -106,5 +105,5 @@ Under GDPR, CCPA, and the DPDP Act, you possess the following enforceable rights
 If you have questions, wish to exercise statutory privacy rights, or wish to file a grievance with our Data Protection Officer:
 
 - **Email:** `privacy@ontap.app` or `dpo@ontap.app`
-- **Mail:** OnTap Technologies Inc., Attn: Data Protection Officer, 100 Innovation Way, Suite 400, Wilmington, DE 19801, USA
+- **Mail:** OnTap Technologies, Attn: Data Protection Officer, Shastri Nagar, Dehradun, Uttarakhand 248001, India
 - **Response Timeline:** We respond to all verified statutory requests within 30 days (or within timelines prescribed by applicable law).

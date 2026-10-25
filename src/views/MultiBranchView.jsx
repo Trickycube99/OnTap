@@ -23,7 +23,7 @@ export default function MultiBranchView({ theme, chef: _chef }) {
       id: b.id,
       name: b.name || 'Restaurant Outlet',
       city: b.city || b.location || 'Main Branch',
-      address: b.address || `${b.name || 'Outlet'}, Store #${b.id.slice(0, 6)}`,
+      address: b.address || '',
       headChef: b.chef?.name ? `${b.chef.name} (${b.chef.title || 'Head Chef'})` : 'Executive Head Chef',
       todaySales: 0,
       activeOrders: 0,
@@ -47,44 +47,23 @@ export default function MultiBranchView({ theme, chef: _chef }) {
 
   const handleExportBranchesCsv = () => {
     playTapSound();
-    let exportBranches = branches.length > 0 ? branches : [
-      {
-        id: 'BIZ-001',
-        name: theme?.restaurantName || 'Main Flagship Bistro',
-        city: 'Mumbai',
-        address: 'Bandra West, Linking Road, Mumbai 400050',
-        headChef: 'Chef Rahul Sharma',
-        todaySales: 34250,
-        activeOrders: 14,
-        tableOccupancy: '85%',
-        staffOnDuty: 8,
-        status: 'Online & Active'
-      },
-      {
-        id: 'BIZ-002',
-        name: 'Downtown Express Cafe',
-        city: 'Mumbai',
-        address: 'Nariman Point, Marine Drive, Mumbai 400021',
-        headChef: 'Chef Amit Verma',
-        todaySales: 28900,
-        activeOrders: 9,
-        tableOccupancy: '70%',
-        staffOnDuty: 6,
-        status: 'Online & Active'
-      },
-      {
-        id: 'BIZ-003',
-        name: 'Cyber City Cloud Kitchen',
-        city: 'Pune',
-        address: 'Koregaon Park, Lane 7, Pune 411001',
-        headChef: 'Chef Priya Nair',
-        todaySales: 41200,
-        activeOrders: 18,
-        tableOccupancy: 'Delivery Only',
-        staffOnDuty: 5,
-        status: 'Online & Active'
-      }
-    ];
+    let exportBranches = branches;
+    if (exportBranches.length === 0) {
+      exportBranches = [
+        {
+          id: 'BIZ-001',
+          name: theme?.restaurantName || 'Main Outlet',
+          city: theme?.city || '',
+          address: theme?.address || '',
+          headChef: 'Executive Chef',
+          todaySales: 0,
+          activeOrders: 0,
+          tableOccupancy: '0%',
+          staffOnDuty: 1,
+          status: 'Online & Active'
+        }
+      ];
+    }
 
     const headers = [
       'Outlet Code',

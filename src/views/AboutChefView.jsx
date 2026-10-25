@@ -475,16 +475,16 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>FSSAI License No.</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary-blue)' }}>{chef.verificationId}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary-blue)' }}>{theme?.fssai || chef.fssaiLicense || chef.verificationId || 'Statutory Clean Dining'}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>ICF Registry No.</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{chef.guildRegistryNumber}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{chef.guildRegistryNumber || 'Culinary Operations'}</div>
                 </div>
               </div>
 
               <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Food Safety Certificate No.</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Food Safety Accreditation</div>
                 <div
                   style={{
                     fontSize: 13,
@@ -496,7 +496,7 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
                     marginTop: 2
                   }}
                 >
-                  FSSAI-CERT-2026-REG-9481
+                  {theme?.fssai ? `FSSAI License #${theme.fssai}` : 'Standard Food Safety & Hygiene Certified'}
                 </div>
               </div>
 
@@ -587,7 +587,8 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
       <LegalFooter
         variant="light"
         restaurantName={businessName}
-        licenseText="FSSAI Hygiene Certified Culinary Team"
+        businessAddress={theme?.address || ''}
+        licenseText={`Culinary Team${theme?.fssai ? ` • FSSAI Lic #${theme.fssai}` : ''}`}
       />
     </div>
   );

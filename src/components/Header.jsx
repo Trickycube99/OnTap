@@ -86,9 +86,9 @@ export default function Header({
                 <div className="brand-name-row">
                   <span className="brand-title">{theme?.restaurantName || 'Restaurant'}</span>
                 </div>
-                <div className="fssai-micro-badge">
+                <div className="fssai-micro-badge" title={theme?.fssai ? `FSSAI Lic: ${theme.fssai}` : undefined}>
                   <ShieldCheck size={11} color="#16A34A" />
-                  <span>FSSAI 5-Star Clean Dining</span>
+                  <span>{theme?.fssai ? `FSSAI Lic #${theme.fssai}` : 'Clean Dining Certified'}</span>
                 </div>
               </div>
             </div>

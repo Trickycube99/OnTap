@@ -3060,7 +3060,8 @@ export default function CounterView({
       <LegalFooter
         variant="light"
         restaurantName={theme?.restaurantName || 'Cashier Counter POS'}
-        licenseText="Terminal Station POS-01 • FSSAI Lic #10026011009821"
+        businessAddress={theme?.address || ''}
+        licenseText={`Terminal Station POS-01${theme?.fssai ? ` • FSSAI Lic #${theme.fssai}` : ''}`}
       />
     </div>
   );

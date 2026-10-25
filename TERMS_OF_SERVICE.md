@@ -2,8 +2,8 @@
 
 **Effective Date:** October 24, 2026  
 **Last Updated:** October 24, 2026  
-**Service Provider:** OnTap Technologies Inc. ("OnTap", "we", "us", or "our")  
-**Registered Office:** 100 Innovation Way, Suite 400, Wilmington, DE 19801, USA  
+**Service Provider:** OnTap Technologies ("OnTap", "we", "us", or "our")  
+**Registered Office:** Shastri Nagar, Dehradun, Uttarakhand 248001, India  
 **Support Contact:** `support@ontap.app` | **Legal Affairs:** `legal@ontap.app`
 
 ---
@@ -90,4 +90,4 @@ We reserve the right to amend these Terms at any time. When material changes are
 
 For legal inquiries or statutory notices under these Terms:
 - **Email:** `legal@ontap.app`
-- **Postal Mail:** OnTap Technologies Inc., Attn: Legal Department, 100 Innovation Way, Suite 400, Wilmington, DE 19801, USA
+- **Postal Mail:** OnTap Technologies, Attn: Legal Department, Shastri Nagar, Dehradun, Uttarakhand 248001, India

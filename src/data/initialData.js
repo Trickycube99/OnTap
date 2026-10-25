@@ -39,6 +39,8 @@ export const initialTheme = {
   fontPreset: "SF Pro / Inter",
   logoText: "OS",
   upiId: "",
+  fssai: "",
+  address: "",
   tables: ["Table 01", "Table 02", "Table 03", "Table 04", "Table 05", "Table 06", "Counter / Takeaway"],
   pendingAggregatorSettlement: 0,
   cashInHand: 0,

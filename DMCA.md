@@ -12,13 +12,11 @@
 Pursuant to Section 512(c)(2) of Title 17 of the United States Code, OnTap Technologies Inc. has designated an agent with the U.S. Copyright Office to receive notifications of claimed copyright infringement concerning materials hosted, posted, or transmitted across the OnTap application and associated services:
 
 - **Designated Agent Name:** Copyright Compliance Officer (DMCA Agent)
-- **Organization:** OnTap Technologies Inc.
+- **Organization:** OnTap Technologies
 - **Physical Registered Address:**  
-  100 Innovation Way, Suite 400  
-  Wilmington, DE 19801  
-  United States of America
-- **Telephone Number:** +1 (302) 555-0199
-- **Facsimile:** +1 (302) 555-0198
+  Shastri Nagar, Dehradun  
+  Uttarakhand 248001  
+  India
 - **Dedicated Electronic Mail Address:** `dmca@ontap.app`
 - **U.S. Copyright Office Directory Link:** [U.S. Copyright Office DMCA Designated Agent Directory](https://www.copyright.gov/dmca-directory/)
 
@@ -37,7 +35,7 @@ If you are a copyright owner, or an agent authorized to act on behalf of one, an
 
 Statutory DMCA Takedown notices must be transmitted to:
 > **By Email:** `dmca@ontap.app` (Subject line: *DMCA Takedown Notice*)  
-> **By Mail:** OnTap Technologies Inc., Attn: DMCA Designated Agent, 100 Innovation Way, Suite 400, Wilmington, DE 19801, USA
+> **By Mail:** OnTap Technologies, Attn: DMCA Designated Agent, Shastri Nagar, Dehradun, Uttarakhand 248001, India
 
 ---
 

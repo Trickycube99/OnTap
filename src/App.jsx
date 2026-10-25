@@ -205,14 +205,18 @@ export default function App() {
       tableCount: activeBiz.tableCount !== undefined ? activeBiz.tableCount : (loaded?.tableCount || 6),
       welcomeMessage: activeBiz.welcomeMessage || loaded?.welcomeMessage || initialBizTheme.welcomeMessage,
       menuLayout: activeBiz.menuLayout || loaded?.menuLayout || initialBizTheme.menuLayout,
-      showAboutChef: activeBiz.showAboutChef !== undefined ? activeBiz.showAboutChef : (loaded?.showAboutChef !== false)
+      showAboutChef: activeBiz.showAboutChef !== undefined ? activeBiz.showAboutChef : (loaded?.showAboutChef !== false),
+      address: activeBiz.address !== undefined ? activeBiz.address : (loaded?.address || ''),
+      fssai: (activeBiz.fssai || activeBiz.fssaiLicense) !== undefined ? (activeBiz.fssai || activeBiz.fssaiLicense) : (loaded?.fssai || loaded?.fssaiLicense || '')
     } : {};
     return {
       ...initialBizTheme,
       ...loaded,
       ...bizOverride,
       logo: bizOverride.logo !== undefined ? bizOverride.logo : (loaded?.logo || null),
-      upiId: loaded?.upiId || bizOverride.upiId || initialBizTheme.upiId || ''
+      upiId: loaded?.upiId || bizOverride.upiId || initialBizTheme.upiId || '',
+      address: bizOverride.address !== undefined ? bizOverride.address : (loaded?.address || ''),
+      fssai: bizOverride.fssai !== undefined ? bizOverride.fssai : (loaded?.fssai || loaded?.fssaiLicense || '')
     };
   });
   const [checklists, setChecklists] = useState(() => loadData(getScopedKey(STORAGE_KEYS.CHECKLISTS, initialBizId), []));
@@ -486,7 +490,9 @@ export default function App() {
             tableCount: currentBiz.tableCount !== undefined ? currentBiz.tableCount : prev.tableCount,
             welcomeMessage: currentBiz.welcomeMessage !== undefined ? currentBiz.welcomeMessage : prev.welcomeMessage,
             menuLayout: currentBiz.menuLayout || prev.menuLayout,
-            showAboutChef: currentBiz.showAboutChef !== undefined ? currentBiz.showAboutChef : prev.showAboutChef
+            showAboutChef: currentBiz.showAboutChef !== undefined ? currentBiz.showAboutChef : prev.showAboutChef,
+            address: currentBiz.address !== undefined ? currentBiz.address : (prev.address || ''),
+            fssai: (currentBiz.fssai || currentBiz.fssaiLicense) !== undefined ? (currentBiz.fssai || currentBiz.fssaiLicense) : (prev.fssai || '')
           }));
           if (currentBiz.chef) {
             setChef((prev) => ({ ...prev, ...currentBiz.chef }));

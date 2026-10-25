@@ -2,8 +2,8 @@
 
 **Effective Date:** October 24, 2026  
 **Last Updated:** October 24, 2026  
-**Service Provider:** OnTap Technologies Inc. ("OnTap", "we", "us", or "our")  
-**Registered Office:** 100 Innovation Way, Suite 400, Wilmington, DE 19801, USA  
+**Service Provider:** OnTap Technologies ("OnTap", "we", "us", or "our")  
+**Registered Office:** Shastri Nagar, Dehradun, Uttarakhand 248001, India  
 **Dedicated Privacy Contact:** `privacy@ontap.app`
 
 ---
@@ -70,4 +70,4 @@ Helps measure aggregated, anonymous platform performance and error metrics.
 
 If you have questions about our use of cookies or tracking technologies:
 - **Email:** `privacy@ontap.app`
-- **Postal Mail:** OnTap Technologies Inc., Attn: Privacy Compliance Team, 100 Innovation Way, Suite 400, Wilmington, DE 19801, USA
+- **Postal Mail:** OnTap Technologies, Attn: Privacy Compliance Team, Shastri Nagar, Dehradun, Uttarakhand 248001, India
