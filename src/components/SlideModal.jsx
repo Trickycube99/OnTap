@@ -63,9 +63,28 @@ export default function SlideModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isRendered, isClosing, handleDismiss]);
 
+  // Body scroll lock while modal is open
+  useEffect(() => {
+    if (isRendered) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isRendered]);
+
   // Touch gesture handlers for mobile swipe-down (Android & Apple iOS)
   const handleTouchStart = (e) => {
-    if (sheetRef.current && sheetRef.current.scrollTop <= 5) {
+    const isPill = e.target.closest('.modal-drag-pill');
+    const scrollable = e.target.closest('[data-scrollable="true"], .modal-scroll-area');
+
+    if (scrollable && scrollable.scrollTop > 2) {
+      isDragging.current = false;
+      return;
+    }
+
+    if (isPill || (sheetRef.current && sheetRef.current.scrollTop <= 5 && (!scrollable || scrollable.scrollTop <= 2))) {
       touchStartY.current = e.touches[0].clientY;
       isDragging.current = true;
     } else {
@@ -75,11 +94,18 @@ export default function SlideModal({
 
   const handleTouchMove = (e) => {
     if (!isDragging.current) return;
+    const scrollable = e.target.closest('[data-scrollable="true"], .modal-scroll-area');
+    if (scrollable && scrollable.scrollTop > 2) {
+      isDragging.current = false;
+      setDragY(0);
+      return;
+    }
     const currentY = e.touches[0].clientY;
     const deltaY = currentY - touchStartY.current;
-    if (deltaY > 0) {
-      // Prevent browser default pull-to-refresh on Android while dragging
-      if (e.cancelable) e.preventDefault();
+    if (deltaY > 15) {
+      if (e.cancelable && (e.target.closest('.modal-drag-pill') || !scrollable)) {
+        e.preventDefault();
+      }
       setDragY(deltaY);
     } else {
       setDragY(0);
@@ -89,7 +115,7 @@ export default function SlideModal({
   const handleTouchEnd = () => {
     if (!isDragging.current) return;
     isDragging.current = false;
-    if (dragY > 75) {
+    if (dragY > 80) {
       playTapSound();
       handleDismiss();
     } else {

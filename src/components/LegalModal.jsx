@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Shield,
   FileText,
@@ -20,12 +20,20 @@ import SlideModal from './SlideModal';
 
 export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) {
   const [activeTab, setActiveTab] = useState(initialTab);
+  const contentScrollRef = useRef(null);
 
   useEffect(() => {
     if (initialTab) {
       setActiveTab(initialTab);
     }
   }, [initialTab]);
+
+  // Reset scroll to top whenever active document tab or modal open state changes
+  useEffect(() => {
+    if (contentScrollRef.current) {
+      contentScrollRef.current.scrollTop = 0;
+    }
+  }, [activeTab, isOpen]);
 
   const tabs = [
     { id: 'privacy', label: 'Privacy Policy', icon: Shield },
@@ -46,7 +54,14 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
       isDark={true}
       maxWidth={820}
       ariaLabel="Legal & Privacy Policy Documents"
-      contentStyle={{ padding: 0, overflow: 'hidden' }}
+      contentStyle={{
+        padding: 0,
+        height: '88vh',
+        maxHeight: '92vh',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
+      }}
     >
       {({ dismiss }) => (
         <div
@@ -55,6 +70,8 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
             flexDirection: 'column',
             width: '100%',
             height: '100%',
+            minHeight: 0,
+            overflow: 'hidden',
             color: '#F8FAFC'
           }}
         >
@@ -64,9 +81,10 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '18px 24px',
+            padding: '16px 20px',
             borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-            background: 'rgba(30, 41, 59, 0.4)'
+            background: 'rgba(30, 41, 59, 0.6)',
+            flexShrink: 0
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -145,10 +163,12 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
           style={{
             display: 'flex',
             overflowX: 'auto',
-            background: 'rgba(15, 23, 42, 0.8)',
+            background: 'rgba(15, 23, 42, 0.85)',
             borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
             padding: '4px 16px',
-            gap: 6
+            gap: 6,
+            flexShrink: 0,
+            WebkitOverflowScrolling: 'touch'
           }}
         >
           {tabs.map((tab) => {
@@ -188,9 +208,15 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
 
         {/* Modal Scrollable Content Area */}
         <div
+          ref={contentScrollRef}
+          data-scrollable="true"
+          className="modal-scroll-area custom-scrollbar"
           style={{
             flex: 1,
+            minHeight: 0,
             overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
             padding: '24px',
             lineHeight: 1.6,
             fontSize: 13,
@@ -212,9 +238,9 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
           >
             <CheckCircle2 size={18} color="#34D399" style={{ flexShrink: 0 }} aria-hidden="true" />
             <div style={{ fontSize: 11.5, color: '#A7F3D0', lineHeight: 1.4 }}>
-              <strong>Official Corporate Entity:</strong> {COMPANY_LEGAL_INFO.legalName} • Registered in Delaware, USA.
+              <strong>Official Corporate Entity:</strong> {COMPANY_LEGAL_INFO.legalName} • Platform Technology &amp; Operations.
               <br />
-              U.S. Copyright Office Registration ID: <code>{COMPANY_LEGAL_INFO.registrationId}</code> | Regional Entity: {COMPANY_LEGAL_INFO.regionalOffice}
+              U.S. Copyright Office Registration ID: <code>{COMPANY_LEGAL_INFO.registrationId}</code> | Operating Office: {COMPANY_LEGAL_INFO.physicalAddress}
             </div>
           </div>
 
@@ -379,16 +405,17 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
         {/* Modal Footer with Company Business Details */}
         <div
           style={{
-            padding: '14px 24px',
+            padding: '12px 20px',
             borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-            background: 'rgba(30, 41, 59, 0.5)',
+            background: 'rgba(30, 41, 59, 0.6)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
             gap: 12,
             fontSize: 11.5,
-            color: '#94A3B8'
+            color: '#94A3B8',
+            flexShrink: 0
           }}
         >
           <div>

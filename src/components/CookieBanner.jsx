@@ -78,8 +78,11 @@ export default function CookieBanner({ forceOpen = false, onClose, onOpenLegal }
         color: '#F8FAFC',
         fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
         maxHeight: '85vh',
-        overflowY: 'auto'
+        overflowY: 'auto',
+        overscrollBehavior: 'contain',
+        WebkitOverflowScrolling: 'touch'
       }}
+      className="custom-scrollbar"
     >
       <div
         style={{

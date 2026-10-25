@@ -11,12 +11,18 @@ export default function DmcaModal({ isOpen, onClose }) {
       isDark={true}
       maxWidth={620}
       ariaLabel="DMCA Designated Agent Directory"
-      contentStyle={{ padding: '20px 24px' }}
+      contentStyle={{
+        padding: 0,
+        maxHeight: '90vh',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
+      }}
     >
       {({ dismiss }) => (
-        <div>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
               style={{
@@ -60,7 +66,9 @@ export default function DmcaModal({ isOpen, onClose }) {
           </button>
         </div>
 
-        {/* Directory Registration Status */}
+        {/* Scrollable Modal Content */}
+        <div data-scrollable="true" className="modal-scroll-area custom-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '18px 20px' }}>
+          {/* Directory Registration Status */}
         <div
           style={{
             background: 'rgba(16, 185, 129, 0.1)',
@@ -142,29 +150,31 @@ export default function DmcaModal({ isOpen, onClose }) {
           and (6) statement of accuracy under penalty of perjury. Repeat infringers' accounts are terminated under § 512(i).
         </div>
 
-        {/* Footer actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-          <button
-            type="button"
-            onClick={() => {
-              playTapSound();
-              dismiss();
-            }}
-            style={{
-              padding: '9px 18px',
-              borderRadius: 10,
-              background: '#0284C7',
-              border: 'none',
-              color: '#FFFFFF',
-              fontSize: 12.5,
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            Acknowledge & Close
-          </button>
+          </div>
+
+          {/* Footer actions */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 20px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(30, 41, 59, 0.6)', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => {
+                playTapSound();
+                dismiss();
+              }}
+              style={{
+                padding: '9px 18px',
+                borderRadius: 10,
+                background: '#0284C7',
+                border: 'none',
+                color: '#FFFFFF',
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Acknowledge &amp; Close
+            </button>
+          </div>
         </div>
-      </div>
       )}
     </SlideModal>
   );
