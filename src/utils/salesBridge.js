@@ -417,11 +417,20 @@ export function buildWeeklyArchives({ orders, expenses = [], checklists = [] }) 
   (expenses || []).forEach((exp) => {
     const expDate = exp.date ? new Date(exp.date) : (exp.createdAt ? new Date(exp.createdAt) : now);
     const validExpDate = !isNaN(expDate.getTime()) ? expDate : now;
-    const { key } = getWeekKey(validExpDate);
-    if (weeksMap.has(key)) {
-      weeksMap.get(key).expenses.push(exp);
+    const { key, startOfWeek, endOfWeek } = getWeekKey(validExpDate);
+    if (!weeksMap.has(key)) {
+      weeksMap.set(key, {
+        key,
+        startOfWeek,
+        endOfWeek,
+        isCurrent: key === currentWeekKey,
+        orders: [],
+        expenses: []
+      });
     }
+    weeksMap.get(key).expenses.push(exp);
   });
+
 
   return Array.from(weeksMap.values())
     .map((w) => {
@@ -515,11 +524,21 @@ export function buildMonthlyArchives({ orders, expenses = [], checklists = [] })
   (expenses || []).forEach((exp) => {
     const expDate = exp.date ? new Date(exp.date) : (exp.createdAt ? new Date(exp.createdAt) : now);
     const validExpDate = !isNaN(expDate.getTime()) ? expDate : now;
-    const { key } = getMonthKey(validExpDate);
-    if (monthsMap.has(key)) {
-      monthsMap.get(key).expenses.push(exp);
+    const { key, startOfCycle, endOfCycle, cycleLabel } = getMonthKey(validExpDate);
+    if (!monthsMap.has(key)) {
+      monthsMap.set(key, {
+        key,
+        startOfCycle,
+        endOfCycle,
+        cycleLabel,
+        isCurrent: key === currentMonthKey,
+        orders: [],
+        expenses: []
+      });
     }
+    monthsMap.get(key).expenses.push(exp);
   });
+
 
   return Array.from(monthsMap.values())
     .map((m) => {

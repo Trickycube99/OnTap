@@ -10,6 +10,10 @@ import {
   syncMenuToCloud,
   syncStaffToCloud,
   syncChecklistToCloud,
+  syncExpenseToCloud,
+  deleteExpenseFromCloud,
+  subscribeToCloudExpenses,
+  fetchExpensesFromCloud,
   subscribeToCloudOrders,
   subscribeToCloudServerCalls,
   subscribeToCloudOffers,
@@ -20,6 +24,7 @@ import {
   getCloudSyncState,
   subscribeCloudSyncState
 } from './firebaseSync';
+
 import { getActiveBusiness } from './businessManager';
 import { getScopedKey, STORAGE_KEYS } from './storage';
 
@@ -43,6 +48,8 @@ export const SYNC_EVENTS = {
   MENU_UPDATED: 'MENU_UPDATED',
   OFFERS_UPDATED: 'OFFERS_UPDATED',
   EXPENSE_ADDED: 'EXPENSE_ADDED',
+  EXPENSE_DELETED: 'EXPENSE_DELETED',
+  EXPENSES_SYNCED: 'EXPENSES_SYNCED',
   CHECKLIST_SUBMITTED: 'CHECKLIST_SUBMITTED',
   CALL_SERVER: 'CALL_SERVER',
   THEME_UPDATED: 'THEME_UPDATED',
@@ -110,6 +117,10 @@ export function broadcastSyncEvent(type, payload = {}, targetBusinessId = null) 
     syncStaffToCloud(payload, currentBizId).catch(() => {});
   } else if (type === SYNC_EVENTS.CHECKLIST_SUBMITTED && payload) {
     syncChecklistToCloud(payload, currentBizId).catch(() => {});
+  } else if (type === SYNC_EVENTS.EXPENSE_ADDED && payload) {
+    syncExpenseToCloud(payload, currentBizId).catch(() => {});
+  } else if (type === SYNC_EVENTS.EXPENSE_DELETED && payload) {
+    deleteExpenseFromCloud(payload?.id || payload, currentBizId).catch(() => {});
   }
 }
 
@@ -240,6 +251,16 @@ function ensureCloudSync(targetBizId) {
     });
   });
   if (unChecklists) cloudCleanups.push(unChecklists);
+
+  // 7. Expenses
+  const unExpenses = subscribeToCloudExpenses(targetBizId, (cloudExpenses) => {
+    dispatchToSubscribers({
+      type: SYNC_EVENTS.EXPENSES_SYNCED,
+      businessId: targetBizId,
+      payload: cloudExpenses
+    });
+  });
+  if (unExpenses) cloudCleanups.push(unExpenses);
 }
 
 /**
