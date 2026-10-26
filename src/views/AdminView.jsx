@@ -46,7 +46,7 @@ import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
 import { purgeBusinessAccountComplete, syncBusinessToCloud, resetAllOrdersAndFinancialData } from '../utils/systematicDatabase';
-import { syncMenuToCloud } from '../utils/firebaseSync';
+import { syncMenuToCloud, syncExpenseToCloud, deleteExpenseFromCloud } from '../utils/firebaseSync';
 import VerificationBridgeCard from '../components/VerificationBridgeCard';
 import DmcaModal from '../components/DmcaModal';
 import LegalModal from '../components/LegalModal';
@@ -128,6 +128,7 @@ export default function AdminView({
 
   // Owner Credentials Vault State
   const [showOwnerCredentialsModal, setShowOwnerCredentialsModal] = useState(false);
+  const [plTimeRange, setPlTimeRange] = useState('today'); // 'today' | 'week' | 'month' | 'all'
   const [showOwnerPin, setShowOwnerPin] = useState(false);
   const [showCounterPin, setShowCounterPin] = useState(false);
   const [copiedOwnerKey, setCopiedOwnerKey] = useState(null);
@@ -876,10 +877,129 @@ export default function AdminView({
     todayStaffSubmitTime
   ]);
 
-  // P&L Calculations (FR-A3 & 5.4) in ₹
-  const totalRecordedExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-  const netDailyProfit = effectiveGrossSales - totalRecordedExpenses;
-  const expectedNetProfit = todayKitchenGrossOrders - totalRecordedExpenses;
+  // P&L Calculations (FR-A3 & 5.4) in ₹ with Period-Aware Multi-Range Support
+  const getExpenseDate = (e) => {
+    if (!e) return new Date();
+    const d = e.date ? new Date(e.date) : (e.createdAt ? new Date(e.createdAt) : new Date(e.timestamp || 0));
+    return !isNaN(d.getTime()) ? d : new Date();
+  };
+
+  const todayExpensesList = useMemo(() => {
+    const { start, end } = getDailyDateRange(new Date());
+    return expenses.filter((e) => {
+      const d = getExpenseDate(e);
+      return d >= start && d <= end;
+    });
+  }, [expenses]);
+
+  const weekExpensesList = useMemo(() => {
+    const { startOfWeek, endOfWeek } = getWeekDateRange(new Date());
+    return expenses.filter((e) => {
+      const d = getExpenseDate(e);
+      return d >= startOfWeek && d <= endOfWeek;
+    });
+  }, [expenses]);
+
+  const monthExpensesList = useMemo(() => {
+    const { startOfCycle, endOfCycle } = get30thMonthDateRange(new Date());
+    return expenses.filter((e) => {
+      const d = getExpenseDate(e);
+      return d >= startOfCycle && d <= endOfCycle;
+    });
+  }, [expenses]);
+
+  const todayExpensesTotal = useMemo(() => {
+    return todayExpensesList.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  }, [todayExpensesList]);
+
+  const weekExpensesTotal = useMemo(() => {
+    return weekExpensesList.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  }, [weekExpensesList]);
+
+  const monthExpensesTotal = useMemo(() => {
+    return monthExpensesList.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  }, [monthExpensesList]);
+
+  const allTimeRecordedExpenses = useMemo(() => {
+    return expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  }, [expenses]);
+
+  const allTimeGrossSales = useMemo(() => {
+    return validOrders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+  }, [validOrders]);
+
+  const totalRecordedExpenses = allTimeRecordedExpenses;
+  const netDailyProfit = effectiveGrossSales - todayExpensesTotal;
+  const expectedNetProfit = todayKitchenGrossOrders - todayExpensesTotal;
+
+  const plData = useMemo(() => {
+    if (plTimeRange === 'week') {
+      const rev = weekSales;
+      const exp = weekExpensesTotal;
+      return {
+        label: 'This Week',
+        metaText: 'Current Monday – Sunday Consolidated Period',
+        revenue: rev,
+        expenses: exp,
+        netProfit: rev - exp,
+        entriesCount: weekExpensesList.length,
+        statusNote: 'Weekly Consolidated'
+      };
+    }
+    if (plTimeRange === 'month') {
+      const rev = monthSales;
+      const exp = monthExpensesTotal;
+      return {
+        label: 'This Month',
+        metaText: 'Current Monthly Billing Cycle',
+        revenue: rev,
+        expenses: exp,
+        netProfit: rev - exp,
+        entriesCount: monthExpensesList.length,
+        statusNote: 'Monthly Consolidated'
+      };
+    }
+    if (plTimeRange === 'all') {
+      const rev = allTimeGrossSales;
+      const exp = allTimeRecordedExpenses;
+      return {
+        label: 'All Time',
+        metaText: 'All Historical Sales vs Logged Expenses',
+        revenue: rev,
+        expenses: exp,
+        netProfit: rev - exp,
+        entriesCount: expenses.length,
+        statusNote: 'Lifetime Cumulative Total'
+      };
+    }
+    // Default 'today'
+    const rev = effectiveGrossSales;
+    const exp = todayExpensesTotal;
+    return {
+      label: 'Today',
+      metaText: 'Gross Sales vs Recorded Operating Expenses',
+      revenue: rev,
+      expenses: exp,
+      netProfit: rev - exp,
+      entriesCount: todayExpensesList.length,
+      statusNote: hasStaffSubmittedToday ? 'Reconciled from staff count' : 'Awaiting staff submission'
+    };
+  }, [
+    plTimeRange,
+    effectiveGrossSales,
+    todayExpensesTotal,
+    todayExpensesList.length,
+    hasStaffSubmittedToday,
+    weekSales,
+    weekExpensesTotal,
+    weekExpensesList.length,
+    monthSales,
+    monthExpensesTotal,
+    monthExpensesList.length,
+    allTimeGrossSales,
+    allTimeRecordedExpenses,
+    expenses.length
+  ]);
 
   // Real-Time Verification Bridge between Counter Served Orders and Owner Expected Orders
   const bridgeData = useMemo(() => {
@@ -1049,11 +1169,17 @@ export default function AdminView({
       category: expCategory,
       description: expDesc || expCategory,
       amount: amt,
-      loggedBy: 'Owner / Admin'
+      loggedBy: 'Owner / Admin',
+      businessId: activeBusinessId
     };
 
-    setExpenses((prev) => [newExp, ...prev]);
-    broadcastSyncEvent(SYNC_EVENTS.EXPENSE_ADDED, newExp);
+    const updated = [newExp, ...expenses];
+    setExpenses(updated);
+    if (activeBusinessId) {
+      saveData(getScopedKey(STORAGE_KEYS.EXPENSES, activeBusinessId), updated);
+      syncExpenseToCloud(newExp, activeBusinessId).catch(() => {});
+    }
+    broadcastSyncEvent(SYNC_EVENTS.EXPENSE_ADDED, newExp, activeBusinessId);
     setExpAmount('');
     setExpDesc('');
     playSuccessChime();
@@ -1062,7 +1188,13 @@ export default function AdminView({
   // Delete Expense
   const handleDeleteExpense = (id) => {
     playTapSound();
-    setExpenses((prev) => prev.filter((e) => e.id !== id));
+    const updated = expenses.filter((e) => e.id !== id);
+    setExpenses(updated);
+    if (activeBusinessId) {
+      saveData(getScopedKey(STORAGE_KEYS.EXPENSES, activeBusinessId), updated);
+      deleteExpenseFromCloud(id, activeBusinessId).catch(() => {});
+    }
+    broadcastSyncEvent(SYNC_EVENTS.EXPENSE_DELETED, { id }, activeBusinessId);
   };
 
   // Handle Dish Photo Upload with Canvas Resizing & Compression (~25KB)
@@ -2696,14 +2828,47 @@ export default function AdminView({
             </div>
           )}
 
-          {/* Daily P&L Summary Card */}
+          {/* P&L Summary Card with Multi-Period Time Range Filters */}
           <div className="ios-card completed-gradient" style={{ marginBottom: 16 }}>
-            <div className="card-top-row">
-              <div className="card-title-group">
-                <span className="card-heading">Daily Profit & Loss Statement (INR)</span>
-                <span className="card-meta-text">Gross Sales vs Recorded Operating Expenses</span>
+            <div className="card-top-row" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+              <div className="card-title-group" style={{ minWidth: 200 }}>
+                <span className="card-heading">{plData.label} Profit & Loss Statement (INR)</span>
+                <span className="card-meta-text">{plData.metaText}</span>
               </div>
-              <TrendingUp size={20} color="#16A34A" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 2, background: 'rgba(0, 0, 0, 0.05)', borderRadius: 20, padding: 2 }}>
+                  {[
+                    { id: 'today', label: 'Today' },
+                    { id: 'week', label: 'This Week' },
+                    { id: 'month', label: 'This Month' },
+                    { id: 'all', label: 'All Time' }
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        playTapSound();
+                        setPlTimeRange(tab.id);
+                      }}
+                      style={{
+                        border: 'none',
+                        borderRadius: 16,
+                        padding: '5px 11px',
+                        fontSize: 11,
+                        fontWeight: plTimeRange === tab.id ? 700 : 500,
+                        background: plTimeRange === tab.id ? '#FFFFFF' : 'transparent',
+                        color: plTimeRange === tab.id ? 'var(--primary-blue)' : 'var(--text-muted)',
+                        boxShadow: plTimeRange === tab.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                <TrendingUp size={20} color="#16A34A" />
+              </div>
             </div>
 
             <div
@@ -2718,31 +2883,35 @@ export default function AdminView({
             >
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  {hasStaffSubmittedToday ? 'Staff Submitted Revenue' : 'Gross Revenue (Awaiting Staff)'}
+                  {plTimeRange === 'today'
+                    ? (hasStaffSubmittedToday ? 'Staff Submitted Revenue' : 'Gross Revenue (Awaiting Staff)')
+                    : `${plData.label} Revenue`}
                 </div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: hasStaffSubmittedToday ? 'var(--primary-blue)' : '#64748B' }}>
-                  +₹{effectiveGrossSales.toFixed(0)}
+                <div style={{ fontSize: 16, fontWeight: 700, color: (plTimeRange === 'today' && !hasStaffSubmittedToday) ? '#64748B' : 'var(--primary-blue)' }}>
+                  +₹{plData.revenue.toFixed(0)}
                 </div>
-                <div style={{ fontSize: 9, color: hasStaffSubmittedToday ? '#15803D' : 'var(--text-muted)', marginTop: 2 }}>
-                  {hasStaffSubmittedToday ? `Counted & Submitted by ${todayStaffSubmitter || 'Staff'}` : `(Awaiting Staff Submission • Bills: ₹${todayKitchenGrossOrders.toFixed(0)})`}
+                <div style={{ fontSize: 9, color: (plTimeRange === 'today' && hasStaffSubmittedToday) ? '#15803D' : 'var(--text-muted)', marginTop: 2 }}>
+                  {plTimeRange === 'today'
+                    ? (hasStaffSubmittedToday ? `Counted & Submitted by ${todayStaffSubmitter || 'Staff'}` : `(Awaiting Staff Submission • Bills: ₹${todayKitchenGrossOrders.toFixed(0)})`)
+                    : plData.statusNote}
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Logged Expenses</div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#DC2626' }}>
-                  -₹{totalRecordedExpenses.toFixed(0)}
+                  -₹{plData.expenses.toFixed(0)}
                 </div>
                 <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>
-                  ({expenses.length} entries)
+                  ({plData.entriesCount} entries)
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Net Real Profit</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: netDailyProfit >= 0 ? '#16A34A' : '#DC2626' }}>
-                  ₹{netDailyProfit.toFixed(0)}
+                <div style={{ fontSize: 16, fontWeight: 700, color: plData.netProfit >= 0 ? '#16A34A' : '#DC2626' }}>
+                  ₹{plData.netProfit.toFixed(0)}
                 </div>
-                <div style={{ fontSize: 9, color: netDailyProfit >= 0 ? '#15803D' : '#DC2626', marginTop: 2 }}>
-                  {hasStaffSubmittedToday ? 'Reconciled from staff count' : 'Awaiting staff submission'}
+                <div style={{ fontSize: 9, color: plData.netProfit >= 0 ? '#15803D' : '#DC2626', marginTop: 2 }}>
+                  {plData.netProfit >= 0 ? 'Surplus (Profitable)' : 'Deficit (Operating Loss)'}
                 </div>
               </div>
             </div>

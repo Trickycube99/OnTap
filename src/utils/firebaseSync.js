@@ -466,6 +466,152 @@ export async function fetchOrdersFromCloud(businessId) {
 }
 
 /**
+ * Upload or sync an expense record to Firebase Firestore (Cross-Device, Multi-Tenant)
+ */
+export async function syncExpenseToCloud(expense, businessId = null) {
+  if (isQuotaExhausted()) return false;
+  const database = initFirebase();
+  if (!database || !expense || !expense.id) return false;
+
+  const targetBizId = businessId || expense.businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return false;
+
+  try {
+    const cleanExpense = sanitizeForFirestore(expense);
+    const cloudDocId = `${targetBizId}_${expense.id}`;
+    const expDocRef = doc(database, 'restaurant_expenses', cloudDocId);
+    await setDoc(expDocRef, {
+      ...cleanExpense,
+      businessId: targetBizId,
+      originalExpenseId: expense.id,
+      _cloudSyncedAt: Date.now()
+    }, { merge: true });
+
+    updateSyncState({ status: 'connected', error: null, errorCode: null });
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, 'expense sync');
+    return false;
+  }
+}
+
+/**
+ * Delete an expense record from Firebase Firestore
+ */
+export async function deleteExpenseFromCloud(expenseId, businessId = null) {
+  if (isQuotaExhausted()) return false;
+  const database = initFirebase();
+  if (!database || !expenseId) return false;
+
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return false;
+
+  try {
+    const cleanId = expenseId.startsWith(`${targetBizId}_`) ? expenseId : `${targetBizId}_${expenseId}`;
+    const expDocRef = doc(database, 'restaurant_expenses', cleanId);
+    await deleteDoc(expDocRef);
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, 'expense deletion');
+    return false;
+  }
+}
+
+/**
+ * Fetch all historical and current expenses for a specific business from Cloud Firestore
+ */
+export async function fetchExpensesFromCloud(businessId) {
+  if (isQuotaExhausted()) return [];
+  const database = initFirebase();
+  if (!database) return [];
+
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return [];
+
+  try {
+    const expCol = collection(database, 'restaurant_expenses');
+    const q = query(expCol, where('businessId', '==', targetBizId), limit(500));
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) return [];
+
+    const expenses = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data && (!data.businessId || data.businessId === targetBizId)) {
+        expenses.push({
+          ...data,
+          id: data.originalExpenseId || data.id
+        });
+      }
+    });
+
+    expenses.sort((a, b) => {
+      const timeA = new Date(a.date || a.createdAt || a.timestamp || 0).getTime();
+      const timeB = new Date(b.date || b.createdAt || b.timestamp || 0).getTime();
+      return timeB - timeA;
+    });
+
+    return expenses;
+  } catch (err) {
+    if (import.meta.env?.DEV) console.warn('🔥 [Cloud Sync] Error fetching expenses from Firestore:', err);
+    return [];
+  }
+}
+
+/**
+ * Real-time subscription to cloud expenses for a specific business
+ */
+export function subscribeToCloudExpenses(businessId, onExpensesUpdated) {
+  const database = initFirebase();
+  if (!database) return () => {};
+
+  const targetBizId = businessId || getActiveBusiness()?.id || '';
+  if (!targetBizId) return () => {};
+
+  try {
+    const expCol = collection(database, 'restaurant_expenses');
+    const q = query(expCol, where('businessId', '==', targetBizId), limit(500));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        updateSyncState({ status: 'connected', error: null, errorCode: null });
+        const expenses = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data && (!data.businessId || data.businessId === targetBizId)) {
+            expenses.push({
+              ...data,
+              id: data.originalExpenseId || data.id
+            });
+          }
+        });
+
+        expenses.sort((a, b) => {
+          const timeA = new Date(a.date || a.createdAt || a.timestamp || 0).getTime();
+          const timeB = new Date(b.date || b.createdAt || b.timestamp || 0).getTime();
+          return timeB - timeA;
+        });
+
+        if (onExpensesUpdated) {
+          onExpensesUpdated(expenses);
+        }
+      },
+      (error) => {
+        if (import.meta.env?.DEV) console.warn('🔥 [Cloud Sync] Firestore expenses snapshot error:', error);
+      }
+    );
+
+    return unsubscribe;
+  } catch (err) {
+    console.error('🔥 [Cloud Sync] Error subscribing to Firestore expenses:', err);
+    return () => {};
+  }
+}
+
+
+/**
  * Sync coupons & offers to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
 export async function syncOffersToCloud(offers, businessId = null) {
@@ -752,7 +898,21 @@ export async function deleteCloudOrdersForBusiness(businessId) {
       }
     } catch {}
 
-    // 3. Delete config documents
+    // 3. Delete all restaurant_expenses for this business
+    try {
+      const expensesCol = collection(database, 'restaurant_expenses');
+      const qExpenses = query(expensesCol, where('businessId', '==', businessId));
+      const snapshotExpenses = await getDocs(qExpenses);
+      if (!snapshotExpenses.empty) {
+        const batchExpenses = writeBatch(database);
+        snapshotExpenses.forEach((docSnap) => {
+          batchExpenses.delete(docSnap.ref);
+        });
+        await batchExpenses.commit();
+      }
+    } catch {}
+
+    // 4. Delete config documents
     try {
       await deleteDoc(doc(database, 'restaurant_config', `${businessId}_menu`));
       await deleteDoc(doc(database, 'restaurant_config', `${businessId}_staff`));
@@ -778,6 +938,7 @@ export async function purgeAllCloudOrdersAndFinancials(businessId = null) {
   try {
     let ordersPurged = 0;
     let checklistsPurged = 0;
+    let expensesPurged = 0;
 
     // 1. Purge restaurant_orders
     const ordersCol = collection(database, 'restaurant_orders');
@@ -814,7 +975,25 @@ export async function purgeAllCloudOrdersAndFinancials(businessId = null) {
       }
     } catch {}
 
-    return { success: true, ordersPurged, checklistsPurged };
+    // 3. Purge restaurant_expenses
+    try {
+      const expensesCol = collection(database, 'restaurant_expenses');
+      const qExpenses = businessId && businessId !== 'all'
+        ? query(expensesCol, where('businessId', '==', businessId))
+        : query(expensesCol);
+      const snapshotExpenses = await getDocs(qExpenses);
+      if (!snapshotExpenses.empty) {
+        const batchExpenses = writeBatch(database);
+        snapshotExpenses.forEach((docSnap) => {
+          batchExpenses.delete(docSnap.ref);
+        });
+        await batchExpenses.commit();
+        expensesPurged = snapshotExpenses.size;
+        console.log(`🔥 [Cloud Sync] Purged ${expensesPurged} expenses from Cloud Firestore.`);
+      }
+    } catch {}
+
+    return { success: true, ordersPurged, checklistsPurged, expensesPurged };
   } catch (err) {
     console.warn('🔥 [Cloud Sync] Error during cloud order & financial purge:', err);
     return { success: false, error: err.message };

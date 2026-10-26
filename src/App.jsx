@@ -43,7 +43,7 @@ import { playNewOrderChime, playTapSound } from './utils/audio';
 import { syncAllBusinessesToCloud, subscribeBusinessesFromCloud, fetchBusinessesFromCloud } from './utils/systematicDatabase';
 import { subscribeSyncEvents, SYNC_EVENTS } from './utils/sync';
 import { saveSubmittedReportToIndexedDB, fetchAllSubmittedReportsFromIndexedDB } from './utils/ownerDatabase';
-import { fetchOrdersFromCloud, syncOrderToCloud } from './utils/firebaseSync';
+import { fetchOrdersFromCloud, fetchExpensesFromCloud, syncOrderToCloud } from './utils/firebaseSync';
 import confetti from 'canvas-confetti';
 import { Server, Building2, PlusCircle } from 'lucide-react';
 
@@ -436,7 +436,16 @@ export default function App() {
 
   useEffect(() => {
     if (!isSwitchingTenantRef.current && loadedBusinessIdRef.current === activeBusinessId) {
-      saveData(getScopedKey(STORAGE_KEYS.EXPENSES, activeBusinessId), expenses);
+      if (!activeBusinessId) return;
+      const expKey = getScopedKey(STORAGE_KEYS.EXPENSES, activeBusinessId);
+      if (Array.isArray(expenses) && expenses.length > 0) {
+        saveData(expKey, expenses);
+      } else {
+        const existing = loadData(expKey, []);
+        if (!Array.isArray(existing) || existing.length === 0) {
+          saveData(expKey, []);
+        }
+      }
     }
   }, [expenses, activeBusinessId]);
 
@@ -477,6 +486,7 @@ export default function App() {
           if (!activeBusinessId || activeBusinessId !== currentBiz.id) {
             setActiveBusinessId(currentBiz.id);
             setActiveBusiness(currentBiz.id);
+            loadBusinessData(currentBiz.id, currentBiz);
           }
           setTheme((prev) => ({
             ...prev,
@@ -562,8 +572,10 @@ export default function App() {
         if (isMounted && Array.isArray(cloudOrders) && cloudOrders.length > 0) {
           setOrders((prev) => {
             const orderKey = getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId);
+            const diskOrders = loadData(orderKey, []);
             const map = new Map();
             cloudOrders.forEach((o) => { if (o && o.id) map.set(o.id, o); });
+            (Array.isArray(diskOrders) ? diskOrders : []).forEach((o) => { if (o && o.id) map.set(o.id, o); });
             (Array.isArray(prev) ? prev : []).forEach((o) => { if (o && o.id) map.set(o.id, o); });
             const merged = Array.from(map.values()).sort((a, b) => {
               const timeA = new Date(a.createdAt || a.timestamp || 0).getTime();
@@ -571,6 +583,33 @@ export default function App() {
               return timeB - timeA;
             });
             saveData(orderKey, merged);
+            return merged;
+          });
+        }
+      }).catch(() => {});
+    }
+    return () => { isMounted = false; };
+  }, [activeBusinessId]);
+
+  // Fast Cloud Expenses retrieval on mount or tenant switch so expenses and P&L history are always retained
+  useEffect(() => {
+    let isMounted = true;
+    if (activeBusinessId) {
+      fetchExpensesFromCloud(activeBusinessId).then((cloudExpenses) => {
+        if (isMounted && Array.isArray(cloudExpenses) && cloudExpenses.length > 0) {
+          setExpenses((prev) => {
+            const expKey = getScopedKey(STORAGE_KEYS.EXPENSES, activeBusinessId);
+            const diskExpenses = loadData(expKey, []);
+            const map = new Map();
+            cloudExpenses.forEach((e) => { if (e && e.id) map.set(e.id, e); });
+            (Array.isArray(diskExpenses) ? diskExpenses : []).forEach((e) => { if (e && e.id) map.set(e.id, e); });
+            (Array.isArray(prev) ? prev : []).forEach((e) => { if (e && e.id) map.set(e.id, e); });
+            const merged = Array.from(map.values()).sort((a, b) => {
+              const timeA = new Date(a.date || a.createdAt || a.timestamp || 0).getTime();
+              const timeB = new Date(b.date || b.createdAt || b.timestamp || 0).getTime();
+              return timeB - timeA;
+            });
+            saveData(expKey, merged);
             return merged;
           });
         }
@@ -693,7 +732,31 @@ export default function App() {
       } else if (msg.type === SYNC_EVENTS.OFFERS_UPDATED) {
         setOffers(msg.payload);
       } else if (msg.type === SYNC_EVENTS.EXPENSE_ADDED) {
-        setExpenses((prev) => [msg.payload, ...prev]);
+        if (msg.payload && msg.payload.id) {
+          setExpenses((prev) => {
+            const list = Array.isArray(prev) ? prev : [];
+            if (list.some((e) => e.id === msg.payload.id)) return prev;
+            return [msg.payload, ...list];
+          });
+        }
+      } else if (msg.type === SYNC_EVENTS.EXPENSE_DELETED) {
+        const delId = msg.payload?.id || msg.payload;
+        if (delId) {
+          setExpenses((prev) => (Array.isArray(prev) ? prev.filter((e) => e.id !== delId) : []));
+        }
+      } else if (msg.type === SYNC_EVENTS.EXPENSES_SYNCED) {
+        if (Array.isArray(msg.payload)) {
+          setExpenses((prev) => {
+            const map = new Map();
+            msg.payload.forEach((e) => { if (e && e.id) map.set(e.id, e); });
+            (Array.isArray(prev) ? prev : []).forEach((e) => { if (e && e.id) map.set(e.id, e); });
+            return Array.from(map.values()).sort((a, b) => {
+              const timeA = new Date(a.date || a.createdAt || a.timestamp || 0).getTime();
+              const timeB = new Date(b.date || b.createdAt || b.timestamp || 0).getTime();
+              return timeB - timeA;
+            });
+          });
+        }
       } else if (msg.type === SYNC_EVENTS.CHECKLIST_SUBMITTED) {
         if (msg.payload && msg.payload.id) {
           saveSubmittedReportToIndexedDB(msg.payload);
@@ -1062,20 +1125,44 @@ export default function App() {
     fetchOrdersFromCloud(bizId).then((cloudOrders) => {
       if (Array.isArray(cloudOrders) && cloudOrders.length > 0) {
         setOrders((prev) => {
+          const orderKey = getScopedKey(STORAGE_KEYS.ORDERS, bizId);
+          const diskOrders = loadData(orderKey, []);
           const map = new Map();
           cloudOrders.forEach((o) => { if (o && o.id) map.set(o.id, o); });
+          (Array.isArray(diskOrders) ? diskOrders : []).forEach((o) => { if (o && o.id) map.set(o.id, o); });
           (Array.isArray(prev) ? prev : []).forEach((o) => { if (o && o.id) map.set(o.id, o); });
           const merged = Array.from(map.values()).sort((a, b) => {
             const timeA = new Date(a.createdAt || a.timestamp || 0).getTime();
             const timeB = new Date(b.createdAt || b.timestamp || 0).getTime();
             return timeB - timeA;
           });
-          saveData(getScopedKey(STORAGE_KEYS.ORDERS, bizId), merged);
+          saveData(orderKey, merged);
           return merged;
         });
       }
     }).catch(() => {});
     setExpenses(loadedExpenses);
+    // Fetch cloud expenses to recover historical expenses if local storage is missing them
+    fetchExpensesFromCloud(bizId).then((cloudExpenses) => {
+      if (Array.isArray(cloudExpenses) && cloudExpenses.length > 0) {
+        setExpenses((prev) => {
+          const expKey = getScopedKey(STORAGE_KEYS.EXPENSES, bizId);
+          const diskExpenses = loadData(expKey, []);
+          const map = new Map();
+          cloudExpenses.forEach((e) => { if (e && e.id) map.set(e.id, e); });
+          (Array.isArray(diskExpenses) ? diskExpenses : []).forEach((e) => { if (e && e.id) map.set(e.id, e); });
+          (Array.isArray(prev) ? prev : []).forEach((e) => { if (e && e.id) map.set(e.id, e); });
+          const merged = Array.from(map.values()).sort((a, b) => {
+            const timeA = new Date(a.date || a.createdAt || a.timestamp || 0).getTime();
+            const timeB = new Date(b.date || b.createdAt || b.timestamp || 0).getTime();
+            return timeB - timeA;
+          });
+          saveData(expKey, merged);
+          return merged;
+        });
+      }
+    }).catch(() => {});
+
     setStaff(loadedStaff);
     setOffers(loadedOffers);
     setChecklists(loadedChecklists);

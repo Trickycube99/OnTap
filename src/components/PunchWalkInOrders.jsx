@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import { broadcastSyncEvent, SYNC_EVENTS } from '../utils/sync';
+import { saveData, loadData, getScopedKey, STORAGE_KEYS } from '../utils/storage';
 
 export default function PunchWalkInOrders({
   activeBusinessId = '',
@@ -183,6 +184,18 @@ export default function PunchWalkInOrders({
     newOrder.cloudConfirmed = true;
     if (setOrders) {
       setOrders((prev) => prev.some(order => order.id === newOrder.id) ? prev : [newOrder, ...prev]);
+    }
+
+    // Immediately persist directly to scoped localStorage to protect against page refreshes or connection drops
+    if (activeBusinessId) {
+      try {
+        const orderKey = getScopedKey(STORAGE_KEYS.ORDERS, activeBusinessId);
+        const existingOrders = loadData(orderKey, []);
+        const updatedOrders = [newOrder, ...(Array.isArray(existingOrders) ? existingOrders.filter((o) => o && o.id !== newOrder.id) : [])];
+        saveData(orderKey, updatedOrders);
+      } catch (err) {
+        console.warn('Failed to immediately save order to localStorage:', err);
+      }
     }
 
     broadcastSyncEvent(SYNC_EVENTS.NEW_ORDER, newOrder, activeBusinessId);
