@@ -16,6 +16,7 @@ import LegalFooter from '../components/LegalFooter';
 
 export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMenu }) {
   const [showVerifyModal, setShowVerifyModal] = useState(false);
+  const [selectedCert, setSelectedCert] = useState(null);
   const [verifiedCount, setVerifiedCount] = useState(chef?.endorsedCount || 0);
   const [hasEndorsed, setHasEndorsed] = useState(false);
 
@@ -25,7 +26,7 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
   const businessName = theme?.restaurantName || chef?.businessName || 'Artisanal Kitchen';
 
   // Find chef's signature items
-  const signatureItems = menu.filter((item) => item.tags.includes("Chef's Pick") || item.tags.includes("Signature Special"));
+  const signatureItems = (menu || []).filter((item) => item?.tags && (item.tags.includes("Chef's Pick") || item.tags.includes("Signature Special")));
 
   const handleEndorse = () => {
     playTapSound();
@@ -208,11 +209,11 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
         </div>
 
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 12 }}>
-          "{chef.philosophy}"
+          "{chef?.philosophy || 'Dedicated to authentic flavors, organic ingredients, and modern gastronomy.'}"
         </p>
 
         <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 12 }}>
-          {chef.bio}
+          {chef?.bio || ''}
         </p>
 
         {/* Highlights & Awards */}
@@ -356,7 +357,7 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
         <div className="card-top-row">
           <div className="card-title-group">
             <span className="card-heading">Chef's Verified Signatures</span>
-            <span className="card-meta-text">Crafted exclusively by Chef {chef.name}</span>
+            <span className="card-meta-text">Crafted exclusively by Chef {chef?.name || 'our Master Chef'}</span>
           </div>
           <UtensilsCrossed size={18} color="#007AFF" />
         </div>
@@ -469,17 +470,17 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
             >
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Certified Master Chef</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{chef.name}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{chef?.name || 'Master Chef'}</div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>FSSAI License No.</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary-blue)' }}>{theme?.fssai || chef.fssaiLicense || chef.verificationId || 'Statutory Clean Dining'}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary-blue)' }}>{theme?.fssai || chef?.fssaiLicense || chef?.verificationId || 'Statutory Clean Dining'}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>ICF Registry No.</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{chef.guildRegistryNumber || 'Culinary Operations'}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{chef?.guildRegistryNumber || 'Culinary Operations'}</div>
                 </div>
               </div>
 
@@ -511,7 +512,7 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Issued By</div>
                 <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginTop: 2 }}>
-                  {chef.authorityName}
+                  {chef?.authorityName || 'FSSAI Food Safety Directorate'}
                 </div>
               </div>
             </div>
@@ -566,7 +567,7 @@ export default function AboutChefView({ chef, menu, theme, onAddToCart, onGoToMe
                 Certificate ID
               </div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                CERT-{selectedCert.id.toUpperCase()}-2026
+                CERT-{String(selectedCert.id || 'ACC').toUpperCase()}-2026
               </div>
             </div>
 

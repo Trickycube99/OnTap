@@ -3343,29 +3343,6 @@ export default function CustomerView({
           >
             Cookie Preferences
           </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              playTapSound();
-              if (window.confirm('Clear all your local dining session data, table identity, and stored order numbers from this device?')) {
-                handleWipeCustomerInterface('user_requested');
-                alert('Your local dining data and table session have been cleared successfully.');
-              }
-            }}
-            style={{
-              padding: '5px 12px',
-              borderRadius: 8,
-              background: 'rgba(239, 68, 68, 0.08)',
-              border: '1px solid rgba(239, 68, 68, 0.25)',
-              color: '#EF4444',
-              fontSize: 11,
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            Clear My Diner Data
-          </button>
         </div>
       </footer>
 
