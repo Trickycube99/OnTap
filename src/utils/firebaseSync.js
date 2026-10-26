@@ -1,3 +1,4 @@
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 // Firebase Firestore Real-Time Cross-Device Synchronization Layer
 // Enables instantaneous real-time sync across physical devices (Phones, Tablets, Laptops)
 // Worldwide over 4G/5G/Wi-Fi with zero delay
@@ -36,6 +37,8 @@ export const getFirebaseConfig = () => {
   if (envConfig.apiKey && envConfig.projectId) {
     return envConfig;
   }
+
+  if (import.meta.env.PROD) return null;
 
   // 2. Check localStorage custom configuration if set in browser
   try {
@@ -115,7 +118,7 @@ export function handleFirestoreError(err, context = 'operation') {
     quotaExhaustedUntil = Date.now() + 10 * 60 * 1000; // 10-minute circuit breaker
     updateSyncState({
       status: 'quota_exceeded',
-      error: 'Firebase Firestore daily free-tier quota reached. Seamlessly running in local/device sync mode.',
+      error: 'Cloud capacity is unavailable. Order delivery cannot be confirmed; please contact the counter.',
       errorCode: 'QUOTA_EXCEEDED'
     });
     console.warn(`🔥 [Cloud Sync] Firestore quota exceeded during ${context}. Switched to local sync.`);
@@ -139,7 +142,7 @@ export function getCloudSyncState() {
   if (!config) {
     return {
       status: 'local_only',
-      error: 'Firebase environment variables not detected. Local network sync active.',
+      error: 'Online ordering is unavailable until the restaurant cloud connection is configured.',
       errorCode: 'NO_CONFIG',
       projectId: null,
       lastSyncTime: syncState.lastSyncTime
@@ -202,6 +205,17 @@ export function isCloudSyncEnabled() {
   return Boolean(initFirebase());
 }
 
+
+let identityPromise = null;
+export async function ensureCloudIdentity() {
+  if (!initFirebase()) throw new Error('Cloud connection is not configured.');
+  const auth = getAuth();
+  await auth.authStateReady();
+  if (auth.currentUser) return auth.currentUser;
+  if (!identityPromise) identityPromise = signInAnonymously(auth).then(result => result.user).finally(() => { identityPromise = null; });
+  return identityPromise;
+}
+
 /**
  * Upload or sync a new order to Firebase Firestore (Cross-Device, Multi-Tenant)
  */
@@ -214,7 +228,10 @@ export async function syncOrderToCloud(order, businessId = null) {
   if (!targetBizId) return false;
 
   try {
+    const identity = await ensureCloudIdentity();
     const cleanOrder = sanitizeForFirestore(order);
+    delete cleanOrder.cloudConfirmed;
+    cleanOrder.dinerUid = order.dinerUid || identity.uid;
     const cloudDocId = `${targetBizId}_${order.id}`;
     const orderDocRef = doc(database, 'restaurant_orders', cloudDocId);
     await setDoc(orderDocRef, {
@@ -317,6 +334,18 @@ export function subscribeToCloudServerCalls(businessId, onCallReceived) {
  * Subscribe to real-time order updates for a specific business (Strict Isolation)
  */
 export function subscribeToCloudOrders(businessId, onOrdersUpdated, onStatusUpdated) {
+  if (!initFirebase()) return () => {};
+  let cleanup = () => {};
+  const unsubscribe = onAuthStateChanged(getAuth(), identity => {
+    cleanup();
+    cleanup = () => {};
+    if (identity) cleanup = subscribeAuthorizedOrders(businessId, onOrdersUpdated, onStatusUpdated, identity);
+    else ensureCloudIdentity().catch(error => handleFirestoreError(error, 'order identity'));
+  });
+  return () => { unsubscribe(); cleanup(); };
+}
+
+function subscribeAuthorizedOrders(businessId, onOrdersUpdated, onStatusUpdated, identity) {
   const database = initFirebase();
   if (!database) {
     updateSyncState({ status: 'local_only' });
@@ -329,7 +358,7 @@ export function subscribeToCloudOrders(businessId, onOrdersUpdated, onStatusUpda
   try {
     const ordersCol = collection(database, 'restaurant_orders');
     // STRICT MULTI-TENANT QUERY: Only fetch orders for target business
-    const q = query(ordersCol, where('businessId', '==', targetBizId), limit(500));
+    const q = query(ordersCol, where('businessId', '==', targetBizId), ...(identity.isAnonymous ? [where('dinerUid', '==', identity.uid)] : []), limit(500));
 
     let isInitial = true;
 
@@ -404,8 +433,9 @@ export async function fetchOrdersFromCloud(businessId) {
   if (!targetBizId) return [];
 
   try {
+    const identity = await ensureCloudIdentity();
     const ordersCol = collection(database, 'restaurant_orders');
-    const q = query(ordersCol, where('businessId', '==', targetBizId), limit(500));
+    const q = query(ordersCol, where('businessId', '==', targetBizId), ...(identity.isAnonymous ? [where('dinerUid', '==', identity.uid)] : []), limit(500));
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) return [];
@@ -575,7 +605,7 @@ export async function syncStaffToCloud(staff, businessId = null) {
   try {
     const configDocRef = doc(database, 'restaurant_config', `${targetBizId}_staff`);
     await setDoc(configDocRef, {
-      staff: sanitizeForFirestore(staff),
+      staff: sanitizeForFirestore(staff.map(({ pin, password, ...member }) => member)),
       businessId: targetBizId,
       _cloudSyncedAt: Date.now()
     }, { merge: true });

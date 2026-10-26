@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { syncOrderToCloud } from '../utils/firebaseSync';
+import React, { useState, useRef } from 'react';
 import {
   Plus,
   Minus,
@@ -132,7 +133,11 @@ export default function PunchWalkInOrders({
   };
 
   // Submit and punch order
-  const handlePunchOrder = (grid) => {
+  const pendingPunch = useRef(new Map());
+  const pendingIds = useRef(new Map());
+  const [sending, setSending] = useState(new Set());
+  const handlePunchOrder = async (grid) => {
+    if (pendingPunch.current.has(grid.id)) return;
     if (!grid.items || grid.items.length === 0) {
       playAlertChime();
       return;
@@ -143,7 +148,8 @@ export default function PunchWalkInOrders({
     const tax = 0; // Taxes are included in dish prices
     const total = Number(subtotal.toFixed(2));
 
-    const uniqueOrderId = `ORD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const uniqueOrderId = pendingIds.current.get(grid.id) || crypto.randomUUID();
+    pendingIds.current.set(grid.id, uniqueOrderId);
     const newOrder = {
       id: uniqueOrderId,
       businessId: activeBusinessId,
@@ -164,8 +170,19 @@ export default function PunchWalkInOrders({
       progressPercent: 50
     };
 
+    pendingPunch.current.set(grid.id, true);
+    setSending(previous => new Set(previous).add(grid.id));
+    const confirmed = await syncOrderToCloud(newOrder, activeBusinessId);
+    pendingPunch.current.delete(grid.id);
+    setSending(previous => { const next = new Set(previous); next.delete(grid.id); return next; });
+    if (!confirmed) {
+      alert('This order was not confirmed by the restaurant cloud. The tray is saved. Reconnect and retry.');
+      return;
+    }
+    pendingIds.current.delete(grid.id);
+    newOrder.cloudConfirmed = true;
     if (setOrders) {
-      setOrders((prev) => [newOrder, ...prev]);
+      setOrders((prev) => prev.some(order => order.id === newOrder.id) ? prev : [newOrder, ...prev]);
     }
 
     broadcastSyncEvent(SYNC_EVENTS.NEW_ORDER, newOrder, activeBusinessId);
@@ -738,7 +755,7 @@ export default function PunchWalkInOrders({
                 type="button"
                 className="btn-primary-pill full-width"
                 onClick={() => handlePunchOrder(grid)}
-                disabled={grid.items.length === 0}
+                disabled={sending.has(grid.id) || grid.items.length === 0}
                 style={{
                   opacity: grid.items.length === 0 ? 0.5 : 1,
                   cursor: grid.items.length === 0 ? 'not-allowed' : 'pointer'

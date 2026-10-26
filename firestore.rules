@@ -1,162 +1,127 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Default deny-all policy
-    match /{document=**} {
-      allow read, write: if false;
+    function verified() {
+      return request.auth != null && request.auth.token.get('email_verified', false) == true;
     }
-
-    // Helper functions for authentication & authorization
-    function isAuthenticated() {
-      return request.auth != null;
+    function developer() {
+      return verified() && request.auth.token.get('role', '') == 'developer';
     }
-
-    function isDeveloper() {
-      return isAuthenticated() && (
-        request.auth.token.role == 'developer' ||
-        request.auth.token.admin == true ||
-        request.auth.token.email == 'manj@ontap.app' ||
-        request.auth.token.email == 'pranjalmk62@gmail.com'
-      );
+    function owner(biz) {
+      return verified() && get(/databases/$(database)/documents/businesses/$(biz)).data.owner.email == request.auth.token.email;
     }
-
-    function isTenantOwner(bizId) {
-      return isAuthenticated() && (
-        isDeveloper() ||
-        request.auth.token.businessId == bizId ||
-        request.auth.uid == bizId ||
-        (resource != null && resource.data.owner.email == request.auth.token.email)
-      );
+    function staff(biz) {
+      return developer() || owner(biz) || (verified()
+        && request.auth.token.get('businessId', '') == biz
+        && request.auth.token.get('role', '') in ['counter', 'chef']);
     }
-
-    function isTenantStaffOrOwner(bizId) {
-      return isAuthenticated() && (
-        isDeveloper() ||
-        request.auth.token.businessId == bizId ||
-        request.auth.uid == bizId
-      );
+    function active(biz) {
+      return get(/databases/$(database)/documents/public_businesses/$(biz)).data.status == 'active';
     }
-
-    // 1. Business Directory & Settings
-    match /businesses/{businessId} {
-      // Diners can read public business menu/theme info; owners can read full profile
+    function itemValid(item, dish) {
+      return item.diff(dish).affectedKeys().hasOnly(['quantity', 'note', 'menuIndex'])
+        && dish.get('isAvailable', true) == true && dish.price > 0
+        && item.quantity is int && item.quantity > 0 && item.quantity <= 99;
+    }
+    function validItems() {
+      let items = request.resource.data.items;
+      let menu = get(/databases/$(database)/documents/restaurant_config/$(request.resource.data.businessId + '_menu')).data.menu;
+      return items.size() > 0 && items.size() <= 8
+        && (items.size() <= 0 || itemValid(items[0], menu[items[0].menuIndex]))
+        && (items.size() <= 1 || itemValid(items[1], menu[items[1].menuIndex]))
+        && (items.size() <= 2 || itemValid(items[2], menu[items[2].menuIndex]))
+        && (items.size() <= 3 || itemValid(items[3], menu[items[3].menuIndex]))
+        && (items.size() <= 4 || itemValid(items[4], menu[items[4].menuIndex]))
+        && (items.size() <= 5 || itemValid(items[5], menu[items[5].menuIndex]))
+        && (items.size() <= 6 || itemValid(items[6], menu[items[6].menuIndex]))
+        && (items.size() <= 7 || itemValid(items[7], menu[items[7].menuIndex]))
+        && math.abs(request.resource.data.subtotal - ((items.size() <= 0 ? 0 : items[0].price * items[0].quantity) + (items.size() <= 1 ? 0 : items[1].price * items[1].quantity) + (items.size() <= 2 ? 0 : items[2].price * items[2].quantity) + (items.size() <= 3 ? 0 : items[3].price * items[3].quantity) + (items.size() <= 4 ? 0 : items[4].price * items[4].quantity) + (items.size() <= 5 ? 0 : items[5].price * items[5].quantity) + (items.size() <= 6 ? 0 : items[6].price * items[6].quantity) + (items.size() <= 7 ? 0 : items[7].price * items[7].quantity))) < 0.011;
+    }
+    function discountValid(order) {
+      return (order.promoIndex == -1 && order.discount == 0 && order.appliedPromoCode == null)
+        || validOffer(order);
+    }
+    function validOffer(order) {
+      let offers = get(/databases/$(database)/documents/restaurant_config/$(order.businessId + '_offers')).data.offers;
+      let offer = offers[order.promoIndex];
+      let raw = offer.type == 'percent' ? order.subtotal * offer.value / 100 : offer.value;
+      let capped = offer.type == 'percent' && offer.get('maxDiscount', 0) > 0 && raw > offer.maxDiscount ? offer.maxDiscount : raw;
+      let expected = capped > order.subtotal ? order.subtotal : capped;
+      return order.promoIndex is int && order.promoIndex >= 0 && order.promoIndex < offers.size()
+        && offer.isActive == true && offer.code == order.appliedPromoCode
+        && order.subtotal >= offer.get('minOrderAmount', 0)
+        && (offer.get('expiryDate', '') == '' || request.time < timestamp.value(offer.expiryDate + 'T23:59:59+05:30'))
+        && math.abs(order.discount - expected) < 0.011;
+    }
+    match /businesses/{biz} {
+      allow read: if developer() || (verified() && (resource.data.owner.email == request.auth.token.email || (request.auth.token.get('businessId', '') == biz && request.auth.token.get('role', '') in ['counter', 'chef'])));
+      allow create: if verified() && request.resource.data.id == biz
+        && (developer() || request.resource.data.owner.email == request.auth.token.email)
+        && !('pin' in request.resource.data.owner) && !('pin' in request.resource.data.counter);
+      allow update: if (developer() || owner(biz)) && request.resource.data.id == biz
+        && !('pin' in request.resource.data.owner) && !('pin' in request.resource.data.counter);
+      allow delete: if developer() || owner(biz);
+    }
+    match /public_businesses/{biz} {
       allow read: if true;
-
-      // Only tenant owner or developer can create, update, or delete
-      allow create: if isDeveloper() || (
-        isAuthenticated() && (
-          request.resource.data.id == businessId &&
-          (request.resource.data.owner.email == request.auth.token.email || request.auth.uid == businessId)
+      allow create, update: if (developer() || owner(biz))
+        && request.resource.data.id == biz
+        && request.resource.data.keys().hasOnly(['id', 'name', 'tagline', 'category', 'city', 'status', 'upiId', 'address', 'fssai', 'tables', 'accentColor', 'logo', 'serviceType', 'tableCount', 'showAboutChef', 'chef', 'welcomeMessage', 'menuLayout', 'theme']);
+      allow delete: if developer() || owner(biz);
+    }
+    match /restaurant_orders/{id} {
+      allow read: if staff(resource.data.businessId)
+        || (request.auth != null && resource.data.dinerUid == request.auth.uid);
+      allow create: if request.auth != null
+        && id == request.resource.data.businessId + '_' + request.resource.data.id
+        && request.resource.data.originalOrderId == request.resource.data.id
+        && active(request.resource.data.businessId)
+        && (staff(request.resource.data.businessId) || (
+          request.resource.data.dinerUid == request.auth.uid
+          && request.resource.data.status == 'received'
+          && request.resource.data.paymentStatus in ['Pay at Counter (Pending)', 'UPI payment pending staff verification']
+          && request.resource.data.items is list
+          && validItems()
+          && discountValid(request.resource.data)
+          && request.resource.data.tax == 0
+          && request.resource.data.total >= 0
+          && math.abs(request.resource.data.total - (request.resource.data.subtotal - request.resource.data.discount)) < 0.011
+        ));
+      allow update: if request.resource.data.businessId == resource.data.businessId && (
+        staff(resource.data.businessId) || (
+          request.auth != null && resource.data.dinerUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['_cloudSyncedAt'])
         )
       );
-
-      allow update: if isDeveloper() || (
-        isTenantOwner(businessId) &&
-        request.resource.data.id == businessId
-      );
-
-      allow delete: if isDeveloper() || isTenantOwner(businessId);
+      allow delete: if developer() || owner(resource.data.businessId);
     }
-
-    // 2. Orders Collection (Strict Row-Level & Object-Level Security)
-    match /restaurant_orders/{orderDocId} {
-      // Guests can read orders belonging to their table/session; Staff/Owner can read all for their business
-      allow read: if isDeveloper() || (
-        resource != null && (
-          isTenantStaffOrOwner(resource.data.businessId) ||
-          // Public diner tracking order by document ID
-          (resource.data.originalOrderId != null && resource.data.originalOrderId == request.query.orderId) ||
-          true
-        )
-      );
-
-      // Diners can create an order as long as it has a valid target businessId
-      allow create: if request.resource.data.businessId != null &&
-                      request.resource.data.businessId != '' &&
-                      request.resource.data.items is list;
-
-      // Only authenticated staff/owner of that specific business can update status or payment
-      allow update: if isDeveloper() || (
-        resource != null &&
-        isTenantStaffOrOwner(resource.data.businessId) &&
-        request.resource.data.businessId == resource.data.businessId
-      );
-
-      // Orders can only be purged by the tenant owner or developer
-      allow delete: if isDeveloper() || (
-        resource != null &&
-        isTenantOwner(resource.data.businessId)
-      );
+    match /restaurant_config/{id} {
+      allow read: if id.matches('.*_(menu|offers|theme|chef)$') || staff(resource.data.businessId);
+      allow create: if developer() || owner(request.resource.data.businessId);
+      allow update: if (developer() || owner(resource.data.businessId))
+        && request.resource.data.businessId == resource.data.businessId;
+      allow delete: if developer() || owner(resource.data.businessId);
     }
-
-    // 3. Shift Checklists & Reports
-    match /restaurant_checklists/{reportDocId} {
-      // Only staff/owner of the tenant or developer can read checklists
-      allow read: if isDeveloper() || (
-        resource != null &&
-        isTenantStaffOrOwner(resource.data.businessId)
-      );
-
-      // Only staff/owner of that business can submit a shift report
-      allow create: if isDeveloper() || (
-        request.resource.data.businessId != null &&
-        (isTenantStaffOrOwner(request.resource.data.businessId) || isAuthenticated())
-      );
-
-      allow update, delete: if isDeveloper() || (
-        resource != null &&
-        isTenantOwner(resource.data.businessId)
-      );
+    match /restaurant_checklists/{id} {
+      allow read: if staff(resource.data.businessId);
+      allow create: if staff(request.resource.data.businessId);
+      allow update: if staff(resource.data.businessId) && request.resource.data.businessId == resource.data.businessId;
+      allow delete: if developer() || owner(resource.data.businessId);
     }
-
-    // 4. Restaurant Configuration (Offers, Menus, Branding)
-    match /restaurant_config/{configDocId} {
-      // Diners can read active offers and restaurant theme
-      allow read: if true;
-
-      // Only tenant owner or developer can mutate configurations
-      allow write: if isDeveloper() || (
-        isAuthenticated() &&
-        (
-          (resource != null && isTenantOwner(resource.data.businessId)) ||
-          (request.resource != null && isTenantOwner(request.resource.data.businessId))
-        )
-      );
+    match /restaurant_alerts/{id} {
+      allow create: if request.auth != null && active(request.resource.data.businessId);
+      allow read: if staff(resource.data.businessId);
+      allow update: if request.resource.data.businessId == resource.data.businessId
+        && (staff(resource.data.businessId) || (request.auth != null && active(resource.data.businessId)));
+      allow delete: if staff(resource.data.businessId);
     }
-
-    // 5. Restaurant Real-Time Alerts (Server Calls & Assistance)
-    match /restaurant_alerts/{alertDocId} {
-      // Diners can call server; Staff/Owner of the tenant can read alerts
-      allow create: if request.resource.data.businessId != null;
-
-      allow read, update: if isDeveloper() || (
-        resource != null &&
-        isTenantStaffOrOwner(resource.data.businessId)
-      );
-
-      allow delete: if isDeveloper() || (
-        resource != null &&
-        isTenantOwner(resource.data.businessId)
-      );
+    match /legal_compliance_records/{id} {
+      allow read, delete: if developer() || owner(resource.data.businessId);
+      allow create: if developer() || owner(request.resource.data.businessId);
+      allow update: if (developer() || owner(resource.data.businessId)) && request.resource.data.businessId == resource.data.businessId;
     }
-
-    // 6. Legal & Privacy Compliance Records
-    match /legal_compliance_records/{recordId} {
-      // Strictly private: readable and writable only by authorized owners or developer
-      allow read, write: if isDeveloper() || (
-        isAuthenticated() && (
-          (resource != null && isTenantOwner(resource.data.businessId)) ||
-          (request.resource != null && isTenantOwner(request.resource.data.businessId))
-        )
-      );
-    }
-
-    // 7. Platform Settings & Developer System Credentials
-    match /system_config/{configDocId} {
-      allow read, write: if isDeveloper() || (
-        isAuthenticated() && request.auth.token.email == 'pranjalmk62@gmail.com'
-      );
-    }
+    // Passwords and developer credentials are managed by Firebase Authentication.
+    match /system_config/{id} { allow read, write: if false; }
+    match /{document=**} { allow read, write: if false; }
   }
 }

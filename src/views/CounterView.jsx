@@ -1,3 +1,4 @@
+import { syncStatusToCloud } from '../utils/firebaseSync';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Layers,
@@ -535,7 +536,7 @@ export default function CounterView({
   };
 
   // Status Handlers (FR-P2)
-  const handleUpdateStatus = (orderId, newStatus, newLabel, progressPercent) => {
+  const handleUpdateStatus = async (orderId, newStatus, newLabel, progressPercent) => {
     playTapSound();
     const target = orders.find((o) => o.id === orderId);
     if (!target) return;
@@ -560,6 +561,11 @@ export default function CounterView({
       updatedAt: nowIso
     };
 
+    if (!await syncStatusToCloud(orderId, updatedOrder, activeBusinessId)) {
+      alert('The status update was not confirmed by the restaurant cloud. Reconnect and try again.');
+      return;
+    }
+    updatedOrder.cloudConfirmed = true;
     setOrders((prev) =>
       prev.map((ord) => (ord.id === orderId ? updatedOrder : ord))
     );
@@ -572,7 +578,7 @@ export default function CounterView({
     }
   };
 
-  const handleRejectSubmit = () => {
+  const handleRejectSubmit = async () => {
     playTapSound();
     const target = orders.find((o) => o.id === rejectOrderId);
     if (!target) return;
@@ -597,6 +603,11 @@ export default function CounterView({
       progressPercent: 0
     };
 
+    if (!await syncStatusToCloud(rejectOrderId, rejectedOrder, activeBusinessId)) {
+      alert('Rejection was not confirmed by the restaurant cloud. Reconnect and try again.');
+      return;
+    }
+    rejectedOrder.cloudConfirmed = true;
     setOrders((prev) =>
       prev.map((ord) => (ord.id === rejectOrderId ? rejectedOrder : ord))
     );

@@ -140,10 +140,13 @@ export const PRIVACY_MASK_ATTRS = {
  */
 export async function submitDataErasureRequest({ email, businessId, customerPhone, requestType = 'account_erasure', reason = 'User Exercising Right to be Forgotten' }) {
   try {
+    const { getFirebaseAuth } = await import('./firebaseAuth.js');
+    const token = await getFirebaseAuth()?.currentUser?.getIdToken();
     const response = await fetch('/api/privacy/delete-data', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
       },
       body: JSON.stringify({
         email,
@@ -162,11 +165,5 @@ export async function submitDataErasureRequest({ email, businessId, customerPhon
     console.debug('Cloud erasure endpoint offline or in local mode:', apiErr);
   }
 
-  // Graceful local fallback for local development or client-side execution
-  return {
-    success: true,
-    status: 'completed_locally',
-    message: 'Local data erasure completed successfully.',
-    erasedAt: new Date().toISOString()
-  };
+  return { success: false, status: 'not_completed', message: 'Cloud deletion could not be confirmed. Your data has not been reported as erased. Contact the restaurant administrator.' };
 }

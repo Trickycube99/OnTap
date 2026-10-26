@@ -1,163 +1,43 @@
-# 🍽️ Advait Artisanal Indian Kitchen — Full-Stack QR Dine & Back-Office Web App
+# OnTap
 
-> A production-grade, Apple Human Interface Guidelines (HIG)-compliant Progressive Web App built strictly according to the **"PRD: QR Ordering & Back-Office Web App for Local Restaurants"**, completely localized for the Indian culinary and business ecosystem in **Indian Rupees (₹)** with an official **FSSAI Verified Chef Accreditation Portal**.
+OnTap provides QR table ordering, a live counter station, and restaurant administration. The frontend uses React and Vite. Netlify hosts the site and API Functions; the existing Firebase Authentication and Firestore integration provides accounts and shared operational data.
 
----
+## Local development
 
-## 🌟 Production Architecture & Zero-Auth Customer Experience
+Use Node.js 22.14 or newer and install dependencies with `npm ci`. Start the complete local environment with `netlify dev --port 8889`. The Netlify configuration defines the publish directory, SPA routes, API routing, security headers, and asset caching. The hosting platform runs the production build during deployment.
 
-Advait Artisanal Indian Kitchen replaces traditional paper order pads, noisy shouting, manual cash calculations, and chaotic month-end aggregator crunches with an integrated, multi-role operating system strictly adhering to the **PRD: QR Ordering & Back-Office Web App for Local Restaurants**:
+## Production configuration
 
-1. **Zero-Auth Customer QR Menu (`/?table=04`)**:
-   - **No login options visible**: Diners cannot see any options to log in to counter, admin, or staff interfaces.
-   - **Walk-in Table QR Scanning**: Automatically detects table number from QR code (or allows table selection).
-   - **Bilingual Interface**: Seamless 1-tap toggle between **English** and **हिन्दी (Hindi)** (PRD Section 7 requirement).
-   - **Effortless Ordering**: Diners enter their name, add items with per-item cooking notes ("less spicy", "Jain prep", "extra crisp"), and add overall service notes.
-   - **Upsell Suggestables (FR-C8)**: Automatic chef pairing suggestions configured by the restaurant.
-   - **Payment Choice (FR-C7)**:
-     - **Pay at Counter (Default)**: Cash or Card at counter.
-     - **Instant UPI QR & Deep Link**: Dynamic high-resolution QR code generated for the exact bill amount + 1-tap UPI deep link (`upi://pay?pa=...`) for GPay, PhonePe, Paytm, and CRED.
-   - **Real-Time 4-Stage Status Tracking (FR-C6)**: Received ➔ Accepted & Cooking ➔ Ready to Serve ➔ Completed, plus instant "Call Server" table notification button.
-2. **Floor Staff & Workstation Access (Role-Based Access Control)**:
-   - Staff and owners access dedicated workstation screens through direct URLs or hash routes:
-     - `/counter` or `#/counter` (Live Counterperson POS & Cashier)
-     - `/admin` or `#/admin` (Owner Executive Back-Office)
-     - `/portal` or `#/portal` (Floor Staff Station Portal)
-   - **Enforced Access Matrix**:
-     - 👑 **Owner Admin (PIN: `8821`)**: Full master access. Can log in and switch between **Admin** and **Counter POS**.
-     - 💼 **Counter Person (PIN: `4421`)**: Access to **Counter POS** ONLY. Admin Back-Office is strictly blocked.
-     - 🍽️ **Customer**: Seamless contactless QR dine-in ordering with zero login barriers.
-   - Workstation banner displays operator name, live online status, role-filtered station switcher, sound alert mute toggle, table standee QR generator, and an "Exit Station / Lock" button to safely return to the diner menu.
-3. **Real-Time Cross-Tab / Cross-Device Synchronization**:
-   - Powered by `BroadcastChannel` with storage fallbacks (<50ms latency).
-   - Placing an order from a diner's phone or tab instantly triggers a kitchen bell chime on the counter POS tab and immediately updates the live stack, unaccepted order counter, and owner sales dashboard.
-   - Counterperson status updates (Accept ➔ Ready ➔ Done) immediately reflect on the diner's live tracking screen without refreshing.
-4. **Counterperson Interface (FR-P1 to FR-P8)**:
-   - Live order stack with audible chime and visual alerts.
-   - Overdue unaccepted order warning (alerts if an order sits unaccepted for > 2 mins per PRD Section 16).
-   - One-tap status pipeline (Accept, Ready, Done, Reject with reason).
-   - Direct manual order punching (FR-P7) for phone/walk-in orders.
-   - Inline menu stock toggle and price editing (FR-P4).
-   - Daily Closing EOD Checklist (FR-P8 & 5.4) verifying expected vs actual cash, card, and UPI with ₹200 threshold variance audit checks.
-5. **Owner Admin Back-Office (FR-A1 to FR-A7 & 5.4)**:
-   - Sales dashboard (today, week, month split by Cash, Card, UPI).
-   - Order history with instant CSV export.
-   - Daily P&L statement with manual expense entry (ingredients, LPG gas, rent, staff food, maintenance).
-   - Cash vs Profit & Obligations alert (checks cash-in-hand + pending Zomato/Swiggy receivables against upcoming rent, payroll, and EMI commitments).
-   - Top selling items & peak rush hours distribution.
-   - Customer page customizer (theme accent, branding, menu layout grid/list).
-   - Statutory Indian payroll assistant (PF 12%, ESI 0.75%, TDS) with payslip exports.
-   - Bank reconciliation, inventory & wastage, multi-branch, and accounting export (Tally Prime XML & Zoho Books CSV).
+Configure Firebase settings in Netlify for both build and Functions scopes. The application accepts the existing settings named `apiKey`, `projectId`, `authDomain`, `appId`, `storageBucket`, and `messagingSenderId`, as well as the corresponding `VITE_FIREBASE_*` names used by Vite. Use the same Firebase project for the frontend and Functions. Never place a Firebase service account or administrative secret in a frontend setting.
 
----
+In Firebase Authentication, enable email/password login and anonymous authentication. Add the production domain and any preview domain used for account testing to the authorized domains. Set email action links to the deployed site and test verification and password recovery.
 
-## 📱 Visual System & HIG Architecture
+Owners use verified Firebase email/password accounts. Counter and developer access also requires verified accounts. Assign custom claims through trusted Firebase administrative tooling: `role: "developer"` for platform administrators, or `role: "counter"` and `businessId` for a restaurant's counter operator. Owner access is checked against the private business record's owner email. Browser PINs and locally initialized developer passwords do not grant production access.
 
-- **Aesthetic**: Apple Human Interface Guidelines (HIG) with subtle glassmorphism (`backdrop-filter: blur(20px)`), soft gradient cards, and rounded corners (`border-radius: 20px`).
-- **Interactive Frame**: Switchable between an **iPhone 16 Pro Frame** (with Dynamic Island, live status bar, and home indicator) and **Full Desktop Screen**.
-- **Currency**: Everything in **Indian Rupees (₹)**.
-- **Sound Alerts**: Web Audio API two-tone bell chime for incoming orders and status transitions.
-- **Language**: English with authentic Indian culinary nomenclature.
+## Required Firebase rollout
 
----
+Deploy the supplied rules and indexes to the existing Firebase project with `firebase deploy --only firestore:rules,firestore:indexes`. Netlify deploys do not deploy Firebase rules. Confirm the intended project before running this command.
 
-## 🛠️ Tech Stack
+Before giving staff access, remove legacy stored passwords from private business records and staff configuration, delete the old `system_config/developer_credentials` document using Firebase administrative tooling, and rotate any passwords previously stored by the older application. Re-save existing business profiles through a verified developer account to create sanitized `public_businesses` directory records and remove legacy owner/counter PIN fields. Existing menu and offer records remain under `restaurant_config`.
 
-- **Frontend**: React 19, Vite 8, Vanilla CSS (Design Tokens, Glassmorphism, Micro-interactions)
-- **Icons**: Lucide React
-- **Celebratory Effects**: Canvas Confetti
-- **Audio**: Web Audio API (zero external mp3 assets needed)
-- **Data Layer**: Reactive LocalStorage synchronization with versioned key migration
+Keep private business records out of public collections. Diners receive public restaurant information and menu data, while anonymous Firebase identities scope order tracking to the diner who placed the order. Legacy diner orders without `dinerUid` remain available to authorized restaurant staff; do not make them publicly readable to restore old tracking links.
 
----
+## Ordering and payments
 
-## 🚀 Quick Start Guide
+Diner and walk-in orders wait for Firestore confirmation before displaying success. Counter status changes also wait for confirmation. A failed write preserves the tray. While an order is sending, keep the page open; do not assume that a disconnected device delivered the order.
 
-### Prerequisites
-- Node.js (v18+)
-- npm or yarn
+Diner orders support up to eight distinct tray lines per submission, with additional orders available for the same table. Firestore rules validate dishes against the published menu, verify totals and configured coupons, and reject guest changes to order status or payment settlement. UPI acknowledgments remain pending staff verification; a customer clicking a payment button is not payment-provider verification.
 
-### Installation
-```bash
-# Clone repository
-git clone https://github.com/Trickycube99/Restraunt-Web-app.git
-cd Restraunt-Web-app
+Menu image extraction runs in a verified Netlify Function through Netlify AI Gateway. Restaurant operators review extracted dishes and prices before publishing them. Text parsing and manual dish entry remain available if image scanning is unavailable.
 
-# Install dependencies
-npm install
+## Privacy and deletion
 
-# Start Vite development server
-npm run dev
-```
+Account deletion requires a recently authenticated owner. It removes dependent cloud records before removing the business profile and Firebase login, and reports failures rather than claiming successful erasure. Remote account deletion by a platform administrator requires Firebase administrative tooling. The privacy API does not report a request receipt as completed deletion.
 
-Visit `http://localhost:5173` in your browser.
+Some existing back-office modules use device-local browser storage or IndexedDB. Validate their retention and export behavior before using them as the restaurant's sole accounting or inventory system. This release does not migrate those modules into a central financial ledger.
 
-### Building for Production
-```bash
-npm run build
-```
+## Validation and launch checks
 
-### ☁️ Deploying to Vercel
+Run `npm run lint` and `npm run test:session`. With the local Netlify server running, `node scripts/testPublishReadiness.mjs` checks mobile routes, modal lifecycles, and API routing (install Chromium with `npx playwright install chromium` first). For Firestore isolation and pricing checks, run `npm run test:rules` with Java 21 or newer installed. The rule tests use a disposable demo project and do not touch production data.
 
-The repository includes a production-ready `vercel.json` configured for Vite SPA routing and asset caching.
-
-#### Method 1: 1-Click via Vercel Dashboard (Recommended)
-1. Navigate to [vercel.com/new](https://vercel.com/new).
-2. Import your GitHub repository: `Trickycube99/Restraunt-Web-app`.
-3. Vercel automatically selects the **Vite** framework preset with `npm run build` and output directory `dist`.
-4. Click **Deploy** — your restaurant web app will be live with full HTTPS and worldwide CDN edge routing in under 60 seconds!
-
-#### Method 2: Via Vercel CLI
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Deploy directly
-vercel
-```
-
----
-
-## 📂 Project Structure
-
-```
-├── public/
-│   └── assets/                     # Food photography & Chef portraits
-├── src/
-│   ├── components/
-│   │   ├── BottomNav.jsx           # iOS Bottom Dock navigation
-│   │   ├── Header.jsx              # iOS Navigation Bar & Table Switcher
-│   │   ├── IosFrame.jsx            # iPhone 16 Pro Frame with Dynamic Island
-│   │   ├── PrinterModal.jsx        # 80mm/58mm ESC/POS Thermal Receipt & KOT
-│   │   └── WhatsAppAlertModal.jsx  # WhatsApp Business Order Alert Simulator
-│   ├── data/
-│   │   └── initialData.js          # Menu, Chef credentials, Orders, Staff, Obligations
-│   ├── utils/
-│   │   ├── accountingExport.js     # Tally Prime XML & Zoho Books CSV generators
-│   │   ├── audio.js                # Web Audio API alert chimes
-│   │   └── storage.js              # LocalStorage persistence & INR migration
-│   ├── views/
-│   │   ├── AboutChefView.jsx       # Official FSSAI Verified Chef Accreditation Portal
-│   │   ├── AdminView.jsx           # Owner Admin Dashboard, P&L, Obligations & Payroll
-│   │   ├── AggregatorReconciliationView.jsx # Zomato & Swiggy Payout Audit
-│   │   ├── BankReconciliationView.jsx # Bank Statement CSV Reconciliation
-│   │   ├── CounterView.jsx         # Live Order Counter, POS Punch & EOD Checklist
-│   │   ├── CustomerView.jsx        # Customer QR Menu, Cart, UPI QR & Live Tracker
-│   │   ├── InventoryView.jsx       # Raw Ingredients Stock & Kitchen Wastage Logger
-│   │   ├── LoyaltyView.jsx         # Diners Club & VIP Rewards Vouchers
-│   │   └── MultiBranchView.jsx     # Multi-Branch Outlets Management (NCR & BLR)
-│   ├── App.css
-│   ├── App.jsx                     # Master Role Router & State Store
-│   ├── index.css                   # iOS HIG Design System & Styling Tokens
-│   └── main.jsx
-├── index.html
-├── package.json
-└── vite.config.js
-```
-
----
-
-## 📜 License & Compliance
-
-- Built under FSSAI Clean Street Food & Dining Guidelines.
-- Adheres to Indian Digital Personal Data Protection (DPDP) standards.
+The `/api/health` endpoint confirms configuration presence only. It does not certify Firebase rules, provider availability, or restaurant readiness. Before accepting customers, test an actual verified owner and assigned counter account on separate devices: publish the real menu, scan the restaurant QR code, place an order, accept and serve it, verify payment at the counter, and test failed connectivity. Also verify email recovery and account deletion with a disposable account. Production account and cross-device acceptance testing require access to the configured Firebase project.

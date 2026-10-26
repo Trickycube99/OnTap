@@ -85,6 +85,7 @@ export function getDeveloperPassword() {
  * Supports both authenticated updates and verified reset/recovery updates
  */
 export function updateDeveloperPassword(newPassword, oldPassword = null, options = {}) {
+  if (import.meta.env.PROD) return { success: false, error: 'Use Firebase Authentication account recovery to manage this password.' };
   const cleanNew = String(newPassword || '').trim();
   if (!cleanNew || cleanNew.length < 6) {
     return { success: false, error: 'New password must be at least 6 characters long.' };
@@ -153,6 +154,7 @@ export function updateDeveloperPassword(newPassword, oldPassword = null, options
  * Generates an instant 6-digit recovery code and attempts Firebase Auth dispatch
  */
 export async function requestDeveloperPasswordReset(email) {
+  if (import.meta.env.PROD) return { success: false, error: 'Use Firebase Authentication account recovery to manage this password.' };
   const cleanEmail = String(email || '').trim().toLowerCase();
   const currentCreds = getDeveloperCredentials();
 
@@ -211,6 +213,7 @@ export async function requestDeveloperPasswordReset(email) {
  * Confirm Developer Password Reset using the 6-digit verification code
  */
 export function confirmDeveloperPasswordReset(email, recoveryCode, newPassword) {
+  if (import.meta.env.PROD) return { success: false, error: 'Use Firebase Authentication account recovery to manage this password.' };
   const cleanEmail = String(email || '').trim().toLowerCase();
   const cleanCode = String(recoveryCode || '').trim();
   const cleanNew = String(newPassword || '').trim();
@@ -311,6 +314,12 @@ export function getBusinesses() {
  * Save businesses list to localStorage and dispatch local & broadcast events
  */
 export function saveBusinesses(businesses) {
+  if (import.meta.env.PROD) businesses = businesses.map(business => ({
+    ...business,
+    owner: Object.fromEntries(Object.entries(business.owner || {}).filter(([key]) => !['pin', 'password'].includes(key))),
+    counter: Object.fromEntries(Object.entries(business.counter || {}).filter(([key]) => !['pin', 'password'].includes(key))),
+    staff: (business.staff || []).map(member => Object.fromEntries(Object.entries(member).filter(([key]) => !['pin', 'password'].includes(key))))
+  }));
   try {
     localStorage.setItem(BUSINESSES_STORAGE_KEY, JSON.stringify(businesses));
     if (typeof window !== 'undefined') {
@@ -665,6 +674,7 @@ export function deleteBusiness(id) {
  * Authenticate Developer Superadmin credentials
  */
 export function authenticateDeveloper(email, password) {
+  if (import.meta.env.PROD) return { success: false, error: 'Verified online developer access is required.' };
   const cleanEmail = (email || '').trim().toLowerCase();
   const cleanPass = (password || '').trim();
   const currentCreds = getDeveloperCredentials();
@@ -731,6 +741,10 @@ export function isDeveloperAuthenticated() {
  * Logout Developer Superadmin
  */
 export function logoutDeveloper() {
+  import('./firebaseAuth.js').then(({ getFirebaseAuth }) => {
+    const auth = getFirebaseAuth();
+    if (auth) import('firebase/auth').then(({ signOut }) => signOut(auth));
+  }).catch(() => {});
   try {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(DEV_SESSION_STORAGE_KEY);

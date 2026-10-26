@@ -1,3 +1,4 @@
+import { logInStaffAccount } from '../utils/firebaseAuth';
 import React, { useState, useEffect } from 'react';
 import {
   Server,
@@ -275,12 +276,14 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     };
   }, []);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     playTapSound();
     setLoginError('');
 
-    const res = authenticateDeveloper(loginEmail, loginPassword);
+    const res = import.meta.env.PROD
+      ? await logInStaffAccount({ email: loginEmail, password: loginPassword, requiredRole: 'developer' })
+      : authenticateDeveloper(loginEmail, loginPassword);
     if (res.success) {
       setHasDbPassword(true);
       playSuccessChime();
@@ -982,7 +985,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#CBD5E1' }}>
                       Master Access Key / Password
                     </label>
-                    {hasDbPassword && (
+                    {!import.meta.env.PROD && hasDbPassword && (
                       <button
                         type="button"
                         onClick={() => {
@@ -1007,7 +1010,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     )}
                   </div>
 
-                  {!hasDbPassword && (
+                  {!import.meta.env.PROD && !hasDbPassword && (
                     <div style={{
                       background: 'rgba(6, 182, 212, 0.1)',
                       border: '1px solid rgba(6, 182, 212, 0.25)',
@@ -1032,7 +1035,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                       minLength={6}
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder={hasDbPassword ? '••••••••••••' : 'Enter password to retain in database'}
+                      placeholder={import.meta.env.PROD ? 'Verified account password' : hasDbPassword ? '••••••••••••' : 'Enter password to retain in database'}
                       style={{
                         width: '100%',
                         padding: '12px 42px 12px 14px',

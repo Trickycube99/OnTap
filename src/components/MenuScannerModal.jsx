@@ -27,13 +27,16 @@ import {
   COMMON_CATEGORIES
 } from '../utils/menuAiParser';
 
-export default function MenuScannerModal({
+export default function MenuScannerModal(props) {
+  return props.isOpen ? <MenuScannerForm {...props} /> : null;
+}
+
+function MenuScannerForm({
   isOpen,
   currentMenuCount = 0,
   onImportDishes,
   onClose
 }) {
-  if (!isOpen) return null;
 
   const [activeTab, setActiveTab] = useState('upload'); // 'upload' | 'paste' | 'settings'
   const [selectedFile, setSelectedFile] = useState(null);
@@ -390,6 +393,7 @@ export default function MenuScannerModal({
 
             <button
               type="button"
+              hidden={import.meta.env.PROD}
               onClick={() => { setActiveTab('settings'); setErrorMessage(''); }}
               style={{
                 padding: '8px 14px',
@@ -401,7 +405,7 @@ export default function MenuScannerModal({
                 boxShadow: activeTab === 'settings' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                 fontSize: 12,
                 cursor: 'pointer',
-                display: 'flex',
+                display: import.meta.env.PROD ? 'none' : 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 6
