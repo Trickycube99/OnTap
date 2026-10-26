@@ -7150,7 +7150,7 @@ export default function AdminView({
                 <span>{(activeBiz?.status === 'active' && activeBiz?.emailVerified !== false) ? 'Account Active & Verified' : 'Account Suspended'}</span>
               </div>
               <span style={{ fontSize: 11, color: '#94A3B8' }}>
-                Plan: <strong style={{ color: '#E2E8F0' }}>{activeBiz?.plan || 'Enterprise'}</strong>
+                Subscription: <strong style={{ color: '#E2E8F0' }}>Flat Monthly</strong>
               </span>
             </div>
 
@@ -7244,14 +7244,14 @@ export default function AdminView({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <span style={{ fontSize: 11.5, fontWeight: 700, color: '#38BDF8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  ACTIVE PLAN: {activeBiz?.plan || 'PRO'} (RECURRING)
+                  SUBSCRIPTION: FLAT MONTHLY (RECURRING)
                 </span>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: '#34D399', background: 'rgba(16, 185, 129, 0.15)', padding: '2px 8px', borderRadius: 12 }}>
                   Active &amp; Auto-Renewing
                 </span>
               </div>
               <div style={{ fontSize: 11, color: '#CBD5E1', lineHeight: 1.45, marginBottom: 6 }}>
-                <strong>Renewal Terms:</strong> Your subscription renews automatically each month at your plan rate unless canceled prior to the next billing cycle.
+                <strong>Renewal Terms:</strong> Your flat monthly subscription renews automatically each month unless canceled prior to the next billing cycle.
               </div>
               <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.45 }}>
                 <strong>1-Click Cancel Instructions:</strong> You may cancel anytime without fees or penalties by clicking "Delete Business Account &amp; Erase All Data" below or emailing <a href="mailto:billing@ontap.app" style={{ color: '#38BDF8', textDecoration: 'none' }}>billing@ontap.app</a>. Access remains active until the end of the prepaid monthly cycle.

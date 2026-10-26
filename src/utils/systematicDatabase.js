@@ -70,7 +70,7 @@ export async function syncBusinessToCloud(business) {
       tagline: business.tagline || '',
       category: business.category || 'Dining & Bar',
       city: business.city || '',
-      plan: business.plan || 'Pro',
+      plan: business.plan || 'Flat Monthly',
       status: business.status || 'active',
       emailVerified: business.emailVerified !== false,
       owner: {

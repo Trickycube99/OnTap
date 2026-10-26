@@ -37,7 +37,7 @@ By accessing, browsing, registering for, or using the OnTap dining application, 
 
 Pursuant to the **Federal Trade Commission (FTC) Negative Option Rule** and applicable state automatic renewal statutes (e.g., California Automatic Renewal Law, Cal. Bus. & Prof. Code § 17600 et seq.):
 
-1. **Clear Upfront Pricing:** Subscription plan fees (e.g. Free Tier, Starter, Pro, Enterprise) are clearly displayed prior to checkout, specifying the exact billing frequency (e.g. Monthly or Annual), renewal amount, and included features.
+1. **Clear Upfront Pricing:** Subscription fees for the flat monthly subscription are clearly displayed prior to checkout, specifying the exact billing frequency (Monthly), renewal amount, and included features. Zero hidden fees or tiered feature gates.
 2. **Automatic Renewal:** Paid subscriptions renew automatically at the end of each billing cycle at the prevailing plan rate unless you cancel prior to the renewal date.
 3. **1-Click Cancellation Mechanism (No Roach Motels):** You may cancel your subscription at any time without fees, penalties, or telephone retention queues. Cancellation can be completed directly through the Admin Dashboard (*Settings -> Plan Details -> Cancel Subscription*) or by emailing `billing@ontap.app`.
 4. **Access Post-Cancellation:** Upon cancellation, your account remains fully active through the conclusion of your current paid billing period.

@@ -433,7 +433,7 @@ export function createBusiness(data) {
     city: (data.city || '').trim() || '',
     address: (data.address || '').trim() || '',
     fssai: (data.fssai || data.fssaiLicense || '').trim() || '',
-    plan: data.plan || 'Starter',
+    plan: data.plan || 'Flat Monthly',
     status: data.status ? data.status : (data.emailVerified === true ? 'active' : 'suspended'),
     emailVerified: data.emailVerified === true ? true : false,
     serviceType,

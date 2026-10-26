@@ -109,7 +109,6 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
   const [activeTab, setActiveTab] = useState('tenants'); // 'tenants' | 'health' | 'logs' | 'settings'
   const [businesses, setBusinesses] = useState(() => getBusinesses());
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterPlan, setFilterPlan] = useState('all');
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -133,7 +132,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     tagline: '',
     category: 'Fine Dining / Artisanal',
     city: '',
-    plan: 'Pro',
+    plan: 'Flat Monthly',
     ownerName: '',
     ownerEmail: '',
     ownerPin: '',
@@ -538,7 +537,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
         tagline: '',
         category: 'Fine Dining / Artisanal',
         city: '',
-        plan: 'Pro',
+        plan: 'Flat Monthly',
         ownerName: '',
         ownerEmail: '',
         ownerPin: '',
@@ -857,8 +856,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       b.owner.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       b.owner.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       b.city.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesPlan = filterPlan === 'all' || b.plan.toLowerCase() === filterPlan.toLowerCase();
-    return matchesSearch && matchesPlan;
+    return matchesSearch;
   });
 
   const totalGMV = businesses.reduce((acc, b) => acc + (b.gmv || 0), 0);
@@ -2303,27 +2301,6 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     }}
                   />
                 </div>
-
-                {/* Filter Plan */}
-                <select
-                  value={filterPlan}
-                  onChange={(e) => setFilterPlan(e.target.value)}
-                  style={{
-                    padding: '9px 12px',
-                    borderRadius: 10,
-                    background: 'rgba(30, 41, 59, 0.6)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    color: '#F8FAFC',
-                    fontSize: 13,
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <option value="all">All Plans</option>
-                  <option value="Enterprise">Enterprise</option>
-                  <option value="Pro">Pro</option>
-                  <option value="Starter">Starter</option>
-                </select>
               </div>
 
               {/* Add New Business Button */}
@@ -2549,11 +2526,11 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                           fontWeight: 700,
                           padding: '2px 8px',
                           borderRadius: 6,
-                          background: biz.plan === 'Enterprise' ? 'rgba(139, 92, 246, 0.2)' : biz.plan === 'Pro' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-                          color: biz.plan === 'Enterprise' ? '#C084FC' : biz.plan === 'Pro' ? '#FBBF24' : '#60A5FA',
-                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                          background: 'rgba(56, 189, 248, 0.15)',
+                          color: '#38BDF8',
+                          border: '1px solid rgba(56, 189, 248, 0.25)'
                         }}>
-                          Plan: {biz.plan}
+                          Flat Monthly Subscription
                         </span>
 
                         {/* Format Badge */}
@@ -3304,25 +3281,27 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#CBD5E1', marginBottom: 4 }}>
                       Subscription Plan
                     </label>
-                    <select
-                      value={newBiz.plan}
-                      onChange={(e) => setNewBiz({ ...newBiz, plan: e.target.value })}
+                    <div
                       style={{
                         width: '100%',
                         padding: '9px 12px',
                         borderRadius: 10,
                         background: 'rgba(15, 23, 42, 0.8)',
                         border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: '#F8FAFC',
+                        color: '#38BDF8',
                         fontSize: 13,
-                        outline: 'none',
-                        boxSizing: 'border-box'
+                        fontWeight: 600,
+                        boxSizing: 'border-box',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
                       }}
                     >
-                      <option value="Starter">Starter (₹1,499/mo)</option>
-                      <option value="Pro">Pro (₹3,499/mo)</option>
-                      <option value="Enterprise">Enterprise (₹8,999/mo)</option>
-                    </select>
+                      <span>Flat Monthly Subscription</span>
+                      <span style={{ fontSize: 10.5, background: 'rgba(56, 189, 248, 0.15)', color: '#38BDF8', padding: '2px 8px', borderRadius: 6 }}>
+                        All Features Included
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -3341,7 +3320,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
                     <span>Subscription Renewal Terms &amp; 1-Click Cancellation Disclosure</span>
                   </div>
                   <div style={{ fontSize: 11, color: '#CBD5E1', lineHeight: 1.45 }}>
-                    <strong>Recurring Billing Terms:</strong> Your chosen <strong>{newBiz.plan} Plan ({newBiz.plan === 'Starter' ? '₹1,499' : newBiz.plan === 'Pro' ? '₹3,499' : '₹8,999'}/month)</strong> will automatically renew at the beginning of each monthly billing cycle unless canceled prior to renewal.
+                    <strong>Recurring Billing Terms:</strong> Your <strong>Flat Monthly Subscription</strong> will automatically renew at the beginning of each monthly billing cycle unless canceled prior to renewal.
                   </div>
                   <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.45 }}>
                     <strong>1-Click Cancellation Instructions:</strong> You may cancel anytime with 1 click in <em>Account Settings &gt; Danger Zone</em> or by sending an email to <a href="mailto:billing@ontap.app" style={{ color: '#38BDF8', textDecoration: 'none' }}>billing@ontap.app</a>. There are zero cancellation fees, penalties, or long-term lock-ins. Access continues until the end of the paid billing period.
