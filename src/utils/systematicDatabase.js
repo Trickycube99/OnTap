@@ -1,3 +1,4 @@
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 // Systematic Multi-Tenant Database Architecture & Legal Compliance Ledger
 // Ensures:
 // 1. Standardized systematic database schema for all business accounts
@@ -6,7 +7,7 @@
 //    Firestore cloud collections, and local storage partitions.
 // 4. Statutory Non-PII Compliance Retention (7-year tax & accounting ledger under GST Act & DPDP Act 2023)
 
-import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, writeBatch, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteField, deleteDoc, collection, query, where, getDocs, writeBatch, onSnapshot } from 'firebase/firestore';
 import { initFirebase, deleteCloudOrdersForBusiness, purgeAllCloudOrdersAndFinancials, isQuotaExhausted, handleFirestoreError } from './firebaseSync.js';
 import { deleteOwnerAccountFromFirebase, getFirebaseAuth } from './firebaseAuth.js';
 import { signOut, deleteUser } from 'firebase/auth';
@@ -54,8 +55,7 @@ export function validateBusinessAccount(biz) {
 
 /**
  * Synchronize a business account record to Firebase Firestore systematically
- * Persists full credentials (including 6-digit Owner Master PIN & Counter Staff PIN)
- * so accounts are instantly accessible across all devices, windows, and developer consoles.
+ * Publishes a separate public directory projection and removes legacy password fields.
  */
 export async function syncBusinessToCloud(business) {
   if (isQuotaExhausted()) return false;
@@ -76,16 +76,16 @@ export async function syncBusinessToCloud(business) {
       owner: {
         name: business.owner?.name || 'Owner',
         email: (business.owner?.email || '').trim().toLowerCase(),
-        pin: business.owner?.pin ? String(business.owner.pin).trim() : '',
+        pin: deleteField(),
         hasPinConfigured: Boolean(business.owner?.pin),
         createdAt: business.owner?.createdAt || business.createdAt || new Date().toISOString()
       },
       counter: {
-        pin: business.counter?.pin ? String(business.counter.pin).trim() : '',
+        pin: deleteField(),
         terminalName: business.counter?.terminalName || 'POS Terminal 01',
         loginId: business.counter?.loginId || `${business.id}.pos`
       },
-      staff: Array.isArray(business.staff) ? business.staff : [],
+      staff: (business.staff || []).map(({ pin, password, ...member }) => member),
       upiId: business.upiId || '',
       address: business.address || '',
       fssai: business.fssai || business.fssaiLicense || '',
@@ -107,6 +107,9 @@ export async function syncBusinessToCloud(business) {
     };
 
     await setDoc(bizDocRef, sanitizedBiz, { merge: true });
+    const publicFields = ['id', 'name', 'tagline', 'category', 'city', 'status', 'upiId', 'address', 'fssai', 'tables', 'accentColor', 'logo', 'serviceType', 'tableCount', 'showAboutChef', 'chef', 'welcomeMessage', 'menuLayout', 'theme'];
+    const publicBusiness = Object.fromEntries(publicFields.map(key => [key, sanitizedBiz[key]]));
+    await setDoc(doc(database, 'public_businesses', business.id), publicBusiness);
     return true;
   } catch (err) {
     handleFirestoreError(err, 'sync business');
@@ -189,12 +192,12 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
         owner: {
           ...local.owner,
           ...(cloudBiz.owner || {}),
-          pin: (cloudBiz.owner?.pin && String(cloudBiz.owner.pin).trim()) || local.owner?.pin || '882100'
+          pin: (cloudBiz.owner?.pin && String(cloudBiz.owner.pin).trim()) || local.owner?.pin || ''
         },
         counter: {
           ...local.counter,
           ...(cloudBiz.counter || {}),
-          pin: (cloudBiz.counter?.pin && String(cloudBiz.counter.pin).trim()) || local.counter?.pin || '442100'
+          pin: (cloudBiz.counter?.pin && String(cloudBiz.counter.pin).trim()) || local.counter?.pin || ''
         }
       };
 
@@ -232,7 +235,11 @@ export async function fetchBusinessesFromCloud() {
   if (!database) return null;
 
   try {
-    const bizCol = collection(database, 'businesses');
+    const auth = getAuth();
+    await auth.authStateReady();
+    const claims = await auth.currentUser?.getIdTokenResult();
+    const name = claims?.claims.role === 'developer' ? 'businesses' : 'public_businesses';
+    const bizCol = collection(database, name);
     const snapshot = await getDocs(bizCol);
     if (snapshot.empty) return [];
 
@@ -258,42 +265,32 @@ export async function fetchBusinessesFromCloud() {
  * Real-time listener for business collection in Firestore
  */
 export function subscribeBusinessesFromCloud(onUpdate) {
-  if (isQuotaExhausted()) return () => {};
   const database = initFirebase();
   if (!database) return () => {};
-
-  try {
-    const bizCol = collection(database, 'businesses');
-    const unsubscribe = onSnapshot(bizCol, (snapshot) => {
-      const cloudBusinesses = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data && data.id) {
-          cloudBusinesses.push(data);
-        }
-      });
-
-      if (cloudBusinesses.length > 0) {
-        mergeCloudBusinessesToLocal(cloudBusinesses);
-      }
-      if (typeof onUpdate === 'function') {
-        onUpdate(getBusinesses());
-      }
-    }, (err) => {
-      handleFirestoreError(err, 'businesses listener');
-    });
-
-    return unsubscribe;
-  } catch (err) {
-    handleFirestoreError(err, 'businesses subscribe');
-    return () => {};
-  }
+  let generation = 0;
+  let cleanup = () => {};
+  const unsubscribe = onAuthStateChanged(getAuth(), async user => {
+    const current = ++generation;
+    cleanup();
+    try {
+      const token = await user?.getIdTokenResult();
+      if (current !== generation) return;
+      const name = token?.claims.role === 'developer' ? 'businesses' : 'public_businesses';
+      cleanup = onSnapshot(collection(database, name), snapshot => {
+        const businesses = snapshot.docs.map(record => record.data()).filter(business => business?.id);
+        mergeCloudBusinessesToLocal(businesses);
+        if (typeof onUpdate === 'function') onUpdate(getBusinesses());
+      }, error => handleFirestoreError(error, 'businesses listener'));
+    } catch (error) { handleFirestoreError(error, 'businesses identity'); }
+  });
+  return () => { generation++; unsubscribe(); cleanup(); };
 }
 
 /**
  * Synchronize developer superadmin credentials to cloud database
  */
 export async function syncDeveloperCredentialsToCloud(credentials) {
+  if (import.meta.env.PROD) return false;
   if (isQuotaExhausted()) return false;
   const database = initFirebase();
   if (!database || !credentials) return false;
@@ -319,6 +316,7 @@ export async function syncDeveloperCredentialsToCloud(credentials) {
  * Fetch developer superadmin credentials from cloud database and retain locally
  */
 export async function fetchDeveloperCredentialsFromCloud() {
+  if (import.meta.env.PROD) return null;
   if (isQuotaExhausted()) return null;
   const database = initFirebase();
   if (!database) return null;
@@ -356,6 +354,7 @@ export async function fetchDeveloperCredentialsFromCloud() {
  * Real-time listener for developer credentials in cloud database
  */
 export function subscribeDeveloperCredentialsFromCloud(onUpdate) {
+  if (import.meta.env.PROD) return () => {};
   if (isQuotaExhausted()) return () => {};
   const database = initFirebase();
   if (!database) return () => {};
@@ -568,6 +567,10 @@ export async function purgeBusinessAccountComplete({
   reason = 'User Requested Account Erasure'
 }) {
   const cleanId = (businessId || '').trim();
+  if (import.meta.env.PROD) {
+    const { deleteLiveAccount } = await import('./liveAccountDeletion.js');
+    return deleteLiveAccount(cleanId);
+  }
   const businesses = getBusinesses();
 
   const targetBiz = businesses.find((b) => b.id === cleanId);

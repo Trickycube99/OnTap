@@ -14,13 +14,17 @@ import { playTapSound, playSuccessChime } from '../utils/audio';
 import { DEFAULT_CUTLERY_IMAGE } from '../data/initialData';
 import { COMMON_CATEGORIES } from '../utils/menuAiParser';
 
-export default function EditDishModal({
+export default function EditDishModal(props) {
+  if (!props.dish) return null;
+  return <EditDishForm key={props.dish.id} {...props} />;
+}
+
+function EditDishForm({
   dish,
   menu = [],
   onSave,
   onClose
 }) {
-  if (!dish) return null;
 
   const [name, setName] = useState(dish.name || '');
   const [category, setCategory] = useState(dish.category || 'Main Course');

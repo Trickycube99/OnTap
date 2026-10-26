@@ -262,7 +262,8 @@ export async function scanMenuDocument({ file, rawText = '', customApiKey = '' }
     };
   }
 
-  const apiKey = (customApiKey || getStoredGeminiApiKey() || '').trim();
+  const apiKey = import.meta.env.PROD ? '' : (customApiKey || getStoredGeminiApiKey() || '').trim();
+  if (file.size > 3_500_000) return { success: false, message: 'Please choose a file under 3.5 MB.' };
 
   // 2. Try Gemini Multimodal AI (if API key is present or server route is available)
   try {
@@ -272,13 +273,16 @@ export async function scanMenuDocument({ file, rawText = '', customApiKey = '' }
 
     // Attempt 2a: Serverless route /api/ai/scan-menu
     try {
+      const { getFirebaseAuth } = await import('./firebaseAuth.js');
+      const { getActiveBusiness } = await import('./businessManager.js');
+      const token = await getFirebaseAuth()?.currentUser?.getIdToken();
       const serverRes = await fetch('/api/ai/scan-menu', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           fileBase64: pureBase64,
           mimeType: effectiveMime,
-          customApiKey: apiKey
+          businessId: getActiveBusiness()?.id
         })
       });
 
@@ -406,6 +410,6 @@ Rules:
   return {
     success: false,
     reason: 'REQUIRES_GEMINI_KEY',
-    message: 'To scan image photos and complex visual menus, connect your free Google Gemini API key or use the Paste Menu Text option.'
+    message: 'Image scanning is unavailable. Please use Paste Menu Text or add dishes manually.'
   };
 }

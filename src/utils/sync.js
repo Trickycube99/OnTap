@@ -103,9 +103,9 @@ export function broadcastSyncEvent(type, payload = {}, targetBusinessId = null) 
   }
 
   // 3. Cross-Device Cloud Sync (Firebase Firestore - Scoped to Business)
-  if (type === SYNC_EVENTS.NEW_ORDER && payload) {
+  if (type === SYNC_EVENTS.NEW_ORDER && payload && !payload.cloudConfirmed) {
     syncOrderToCloud(payload, currentBizId).catch(() => {});
-  } else if (type === SYNC_EVENTS.ORDER_STATUS_UPDATED && payload && payload.id) {
+  } else if (type === SYNC_EVENTS.ORDER_STATUS_UPDATED && payload && payload.id && !payload.cloudConfirmed) {
     syncStatusToCloud(payload.id, payload, currentBizId).catch(() => {});
   } else if (type === SYNC_EVENTS.CALL_SERVER && payload) {
     syncServerCallToCloud(payload, currentBizId).catch(() => {});

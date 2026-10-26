@@ -563,11 +563,26 @@ export default function CustomerView({
     completeOrderPlacement('Pay at Counter (Pending)');
   };
 
-  const completeOrderPlacement = (finalPaymentStatus) => {
+  const checkoutInFlight = useRef(false);
+  const pendingOrder = useRef(null);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
+
+  const completeOrderPlacement = async (finalPaymentStatus) => {
+    if (checkoutInFlight.current) return;
+    checkoutInFlight.current = true;
+    setIsPlacingOrder(true);
+    setCheckoutError('');
+    if (cart.length > 8) {
+      checkoutInFlight.current = false;
+      setIsPlacingOrder(false);
+      setCheckoutError('Please send up to 8 different dishes per order. You can place another order afterwards.');
+      return;
+    }
     const finalCustomerName = (customerName || '').trim() || `${activeTable} Guest`;
     const orderNum = Math.floor(1000 + Math.random() * 9000);
     const newOrderId = `ORD-${Date.now().toString(36).toUpperCase()}-${orderNum}`;
-    const newOrder = {
+    const newOrder = pendingOrder.current || {
       id: newOrderId,
       orderNumber: orderNum,
       businessId: activeBusinessId,
@@ -577,7 +592,8 @@ export default function CustomerView({
       createdAt: new Date().toISOString(),
       status: 'received',
       statusLabel: 'Received by Kitchen',
-      items: [...cart],
+      items: cart.map(item => ({ ...item, menuIndex: menu.findIndex(dish => dish.id === item.id) })),
+      promoIndex: activePromo ? offers.findIndex(offer => offer.code === activePromo.code) : -1,
       orderNote: orderNote.trim(),
       paymentMode: paymentMode === 'upi' ? 'UPI Instant QR' : 'Pay at Counter',
       paymentStatus: finalPaymentStatus,
@@ -590,17 +606,28 @@ export default function CustomerView({
     };
 
     // 1. Local state update
-    onPlaceOrder(newOrder);
+    pendingOrder.current = newOrder;
+    let confirmed = false;
+    try { confirmed = await onPlaceOrder(newOrder); }
+    catch { confirmed = false; }
+    checkoutInFlight.current = false;
+    setIsPlacingOrder(false);
+    if (!confirmed) {
+      pendingOrder.current = null;
+      setCheckoutError('Your order has not been confirmed. Your tray is saved. Reconnect and retry, or order at the counter.');
+      return;
+    }
+    pendingOrder.current = null;
 
     // Save this diner's placed tickets strictly to sessionStorage (retained across refreshes, cleared when tab is closed)
     if (typeof window !== 'undefined') {
       try {
         const existingRaw = sessionStorage.getItem(dinerOrderIdsKey);
         const existingList = existingRaw ? JSON.parse(existingRaw) : [];
-        const nextList = [newOrderId, ...(Array.isArray(existingList) ? existingList.filter((id) => id !== newOrderId) : [])];
+        const nextList = [newOrder.id, ...(Array.isArray(existingList) ? existingList.filter((id) => id !== newOrder.id) : [])];
         sessionStorage.setItem(dinerOrderIdsKey, JSON.stringify(nextList));
-        sessionStorage.setItem(dinerLegacyOrderKey, newOrderId);
-        sessionStorage.setItem('ontap_customer_last_order_id', newOrderId);
+        sessionStorage.setItem(dinerLegacyOrderKey, newOrder.id);
+        sessionStorage.setItem('ontap_customer_last_order_id', newOrder.id);
         // Ensure legacy localStorage doesn't bleed across browser tabs
         try {
           localStorage.removeItem(dinerOrderIdsKey);
@@ -610,7 +637,7 @@ export default function CustomerView({
         // ignore
       }
     }
-    setPlacedOrderIds((prev) => [newOrderId, ...prev.filter((id) => id !== newOrderId)]);
+    setPlacedOrderIds((prev) => [newOrder.id, ...prev.filter((id) => id !== newOrder.id)]);
 
     // 2. Broadcast cross-tab instant sync to Counter POS & Admin!
     broadcastSyncEvent(SYNC_EVENTS.NEW_ORDER, newOrder, activeBusinessId);
@@ -1333,7 +1360,7 @@ export default function CustomerView({
                             {language === 'hi' ? 'अस्वीकृत (हटाया गया)' : 'Excluded (-₹0)'}
                           </div>
                         </div>
-                      ) : (order.paymentMode === 'UPI Instant QR' || (order.paymentStatus && order.paymentStatus.toLowerCase().includes('upi') && order.paymentStatus.toLowerCase().includes('paid')) || (order.paymentMode && order.paymentMode.toLowerCase().includes('upi') && !order.paymentStatus?.toLowerCase().includes('pending'))) ? (
+                      ) : ((order.paymentStatus && order.paymentStatus.toLowerCase().includes('upi') && order.paymentStatus.toLowerCase().includes('paid')) || (order.paymentMode && order.paymentMode.toLowerCase().includes('upi') && !order.paymentStatus?.toLowerCase().includes('pending'))) ? (
                         <div style={{ textAlign: 'right', marginTop: 4 }}>
                           <div style={{ fontSize: 15, fontWeight: 700, color: '#15803D' }}>
                             ₹{(Number(order.total) || 0).toFixed(0)}
@@ -1951,6 +1978,8 @@ export default function CustomerView({
         {renderNameModal()}
         {renderOrderStatusTipModal()}
         {renderSessionNotice()}
+        {checkoutError && <p role="alert" style={{ padding: 14, borderRadius: 12, background: '#FFF1F2', color: '#9F1239' }}>{checkoutError}</p>}
+        {isPlacingOrder && <p role="status">Sending your order to the restaurant. Please keep this page open.</p>}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
             <div className="screen-title">{t('yourOrderTray')}</div>
@@ -2359,12 +2388,12 @@ export default function CustomerView({
             <button
               className="btn-primary-pill full-width"
               onClick={handleCheckoutSubmit}
-              disabled={cart.length === 0 || isCurrentBizSuspended}
+              disabled={isPlacingOrder || cart.length === 0 || isCurrentBizSuspended}
               style={isCurrentBizSuspended ? { opacity: 0.6, cursor: 'not-allowed', background: '#9CA3AF' } : undefined}
             >
               <CheckCircle2 size={18} />
               <span>
-                {isCurrentBizSuspended
+                {isPlacingOrder ? 'Sending order…' : isCurrentBizSuspended
                   ? (language === 'hi' ? 'ऑर्डरिंग स्थगित है' : 'Ordering Paused')
                   : `${t('confirmOrder')} (₹${cartTotal.toFixed(0)})`}
               </span>
@@ -2493,11 +2522,12 @@ export default function CustomerView({
                 className="btn-primary-pill full-width"
                 style={{ background: '#16A34A', marginBottom: 8 }}
                 onClick={() => {
-                  completeOrderPlacement('Paid via UPI QR (Verified)');
+                  completeOrderPlacement('UPI payment pending staff verification');
                 }}
               >
                 <CheckCircle2 size={16} />
-                <span>Confirm Payment Completed</span>
+                <span>{isPlacingOrder ? 'Sending order…' : 'I have paid — send for verification'}</span>
+                {checkoutError && <span role="alert">{checkoutError}</span>}
               </button>
 
               <button

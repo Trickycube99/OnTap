@@ -1018,13 +1018,19 @@ export default function App() {
   }, [currentRole, orders, activeBusinessId]);
 
   // Handle Order Placement from Customer
-  const handlePlaceOrder = (newOrder) => {
+  const handlePlaceOrder = async (newOrder) => {
     const currentBiz = getActiveBusiness();
     if (currentBiz && currentBiz.status === 'suspended') {
       alert(`Ordering is currently paused: "${currentBiz.name}" is temporarily suspended. Please speak to staff at the counter.`);
-      return;
+      return false;
     }
     const orderWithBiz = { ...newOrder, businessId: activeBusinessId };
+
+    if (!activeBusinessId || (typeof navigator !== 'undefined' && !navigator.onLine)) return false;
+    const confirmed = await syncOrderToCloud(orderWithBiz, activeBusinessId);
+    if (!confirmed) return false;
+    newOrder.cloudConfirmed = true;
+    orderWithBiz.cloudConfirmed = true;
 
     // Atomically persist to localStorage so concurrent tabs receive it immediately
     if (activeBusinessId) {
@@ -1036,7 +1042,7 @@ export default function App() {
         }
       } catch {}
       // Ensure sync to cloud
-      syncOrderToCloud(orderWithBiz, activeBusinessId).catch(() => {});
+
     }
 
     setOrders((prev) => {
@@ -1054,6 +1060,7 @@ export default function App() {
       playNewOrderChime();
     }
     setActiveTab('track');
+    return true;
   };
 
   // Reset state helper

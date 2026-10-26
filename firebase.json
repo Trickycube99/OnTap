@@ -1,6 +1,7 @@
 {
   "firestore": {
-    "rules": "firestore.rules"
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   },
   "hosting": {
     "public": "dist",
@@ -12,7 +13,7 @@
     "redirects": [
       {
         "source": "/__/auth/action",
-        "destination": "https://restraunt-web-app.vercel.app",
+        "destination": "https://fastidious-gaufre-d909da.netlify.app",
         "type": 302
       }
     ],

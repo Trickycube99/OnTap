@@ -55,7 +55,7 @@ export function getFirebaseAuth() {
   }
 }
 
-export const PRODUCTION_WEBAPP_URL = 'https://restraunt-web-app.vercel.app';
+export const PRODUCTION_WEBAPP_URL = 'https://fastidious-gaufre-d909da.netlify.app';
 
 /**
  * Construct custom web-app URL for Firebase Auth actions (email verification & password reset)
@@ -125,6 +125,8 @@ export async function provisionOwnerAccountWithVerification({ email, password, o
       return { success: false, error: formatAuthError(error) };
     }
   }
+
+  if (import.meta.env.PROD) return { success: false, error: 'Account service is not configured. Contact the platform administrator.' };
 
   // Local fallback mode when Firebase env vars are not set
   return {
@@ -216,6 +218,7 @@ export async function logInUserWithVerification({ email, password }) {
 
     if (userCredential && userCredential.user) {
       const user = userCredential.user;
+      matchingBiz = await findBusinessByEmailInCloud(cleanEmail) || matchingBiz;
 
       // Force reload to pick up fresh email verification status
       try {
@@ -238,8 +241,7 @@ export async function logInUserWithVerification({ email, password }) {
       // OR
       // 2. The tenant was explicitly verified and activated by the platform administrator / developer in Developer Dashboard!
       const isAccountVerified = Boolean(
-        user.emailVerified ||
-        (matchingBiz && matchingBiz.emailVerified === true && matchingBiz.status === 'active')
+        user.emailVerified
       );
 
       if (!isAccountVerified) {
@@ -268,8 +270,8 @@ export async function logInUserWithVerification({ email, password }) {
           name: 'My Restaurant Back-Office',
           ownerName: user.displayName || 'Business Owner',
           ownerEmail: cleanEmail,
-          ownerPin: cleanPassword,
-          counterPin: `${cleanPassword.slice(0, 4)}00`,
+
+
           status: 'active',
           emailVerified: true
         });
@@ -284,13 +286,6 @@ export async function logInUserWithVerification({ email, password }) {
           updates.emailVerified = true;
           updates.accountCreatedAt = matchingBiz.accountCreatedAt || new Date().toISOString();
         }
-        if (matchingBiz.owner?.pin !== cleanPassword) {
-          updates.owner = {
-            ...matchingBiz.owner,
-            pin: cleanPassword,
-            hasPinConfigured: true
-          };
-        }
         if (Object.keys(updates).length > 0) {
           updateBusiness(matchingBiz.id, updates);
           matchingBiz = { ...matchingBiz, ...updates };
@@ -301,7 +296,6 @@ export async function logInUserWithVerification({ email, password }) {
             businessId: matchingBiz.id,
             reason: 'login_sync',
             email: cleanEmail,
-            newPin: cleanPassword
           }, null);
           broadcastSyncEvent(SYNC_EVENTS.BUSINESSES_UPDATED, {
             businessId: matchingBiz.id,
@@ -341,6 +335,8 @@ export async function logInUserWithVerification({ email, password }) {
       };
     }
   }
+
+  if (import.meta.env.PROD) return { success: false, error: 'Online account verification is unavailable. Please reconnect and try again.' };
 
   // ─── 2. OFFLINE / LOCAL DEMO FALLBACK (ONLY IF FIREBASE NOT CONFIGURED OR NETWORK OFFLINE) ───
   if (!matchingBiz) {
@@ -430,6 +426,8 @@ export async function sendPasswordReset({ email }) {
       return { success: false, error: formatAuthError(error) };
     }
   }
+
+  if (import.meta.env.PROD) return { success: false, error: 'Online account service is unavailable. Please try again later.' };
 
   // Local fallback mode:
   const businesses = getBusinesses();
@@ -885,6 +883,7 @@ export async function updateOwnerCredentialsManually({
   newPin,
   markVerified = true
 }) {
+  if (import.meta.env.PROD) return { success: false, error: 'Use verified password recovery or Firebase administrative tooling to change account credentials.' };
   const cleanOldEmail = (oldEmail || '').trim().toLowerCase();
   const cleanOldPin = (oldPin || '').trim();
   const cleanNewEmail = (newEmail || '').trim().toLowerCase();
@@ -1114,5 +1113,34 @@ function formatAuthError(error) {
       return 'This user account has been disabled. Please contact administrator support.';
     default:
       return error.message || 'Authentication error. Please try again.';
+  }
+}
+
+
+/** Staff accounts use verified Firebase credentials and administrator-issued claims. */
+export async function logInStaffAccount({ email, password, requiredRole = 'counter' }) {
+  const auth = getFirebaseAuth();
+  if (!auth) return { success: false, error: 'Account service is not configured.' };
+  try {
+    const { user } = await signInWithEmailAndPassword(auth, email.trim(), password);
+    const result = await user.getIdTokenResult(true);
+    const claims = result.claims;
+    if (!user.emailVerified || claims.role !== requiredRole || (requiredRole !== 'developer' && !claims.businessId)) {
+      await signOut(auth);
+      return { success: false, error: 'This verified account does not have access to this station. Contact the administrator.' };
+    }
+    const session = { role: requiredRole, businessId: claims.businessId || null, name: user.displayName || user.email, email: user.email, token: result.token, authenticatedAt: new Date().toISOString(), authenticatedBy: 'firebase_auth' };
+    if (requiredRole === 'developer') {
+      sessionStorage.setItem('flowscape_dev_session_v1', JSON.stringify(session));
+    } else {
+      const sessions = getStoredSessions();
+      sessions[requiredRole] = session;
+      delete sessions.admin;
+      saveStoredSessions(sessions);
+      setActiveBusiness(claims.businessId);
+    }
+    return { success: true, session };
+  } catch (error) {
+    return { success: false, error: formatAuthError(error) };
   }
 }

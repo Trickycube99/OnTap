@@ -20,6 +20,7 @@ import { ROLE_CONFIGS, ROLES, authenticateRole } from '../utils/auth';
 import { playTapSound, playSuccessChime, playAlertChime } from '../utils/audio';
 import {
   logInUserWithVerification,
+  logInStaffAccount,
   sendPasswordReset,
   resendVerificationLink
 } from '../utils/firebaseAuth';
@@ -107,14 +108,14 @@ export default function AuthModal({
       if (!trimmedLoginId) {
         playAlertChime();
         setIsSubmitting(false);
-        setErrorMessage('Please enter your Staff Login ID (e.g. @username.pos).');
+        setErrorMessage('Please enter your verified staff account email.');
         return;
       }
 
-      if (!trimmedPin || !/^\d{4,6}$/.test(trimmedPin)) {
+      if (!trimmedPin || (import.meta.env.PROD ? trimmedPin.length < 6 : !/^\d{4,6}$/.test(trimmedPin))) {
         playAlertChime();
         setIsSubmitting(false);
-        setErrorMessage('Staff POS PIN must be 4 to 6 numeric digits.');
+        setErrorMessage('Enter your staff account password (at least 6 characters).');
         return;
       }
 
@@ -124,7 +125,9 @@ export default function AuthModal({
         terminal: 'POS-01 (Flagship CP)'
       };
 
-      const result = authenticateRole(currentStation, creds);
+      const result = import.meta.env.PROD
+        ? await logInStaffAccount({ email: trimmedLoginId, password: trimmedPin })
+        : authenticateRole(currentStation, creds);
 
       if (result.success) {
         playSuccessChime();
@@ -442,7 +445,7 @@ export default function AuthModal({
                     autoCorrect="off"
                     autoCapitalize="none"
                     spellCheck="false"
-                    placeholder="Enter Cashier Login ID"
+                    placeholder={import.meta.env.PROD ? 'Staff account email' : 'Enter Cashier Login ID'}
                     className="auth-input"
                     value={counterLoginId}
                     onChange={(e) => {
@@ -454,7 +457,7 @@ export default function AuthModal({
                   />
                 </div>
                 <span className="auth-hint">
-                  Enter the Cashier Login ID for this restaurant.
+                  Use the verified staff email assigned to this restaurant.
                 </span>
               </div>
 
@@ -480,23 +483,24 @@ export default function AuthModal({
                     autoComplete="off"
                     placeholder="••••••"
                     className="auth-input"
-                    maxLength={6}
-                    pattern="[0-9]*"
-                    inputMode="numeric"
+                    maxLength={import.meta.env.PROD ? 128 : 6}
+                    pattern={import.meta.env.PROD ? undefined : '[0-9]*'}
+                    inputMode={import.meta.env.PROD ? 'text' : 'numeric'}
                     value={pin}
                     onKeyDown={(e) => {
-                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
+                      if (!import.meta.env.PROD && !/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && !e.ctrlKey && !e.metaKey) {
                         e.preventDefault();
                       }
                     }}
                     onPaste={(e) => {
+                      if (import.meta.env.PROD) return;
                       e.preventDefault();
                       const cleaned = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
                       setPin(cleaned);
                       setErrorMessage('');
                     }}
                     onChange={(e) => {
-                      setPin(e.target.value.replace(/\D/g, '').slice(0, 6));
+                      setPin(import.meta.env.PROD ? e.target.value : e.target.value.replace(/\D/g, '').slice(0, 6));
                       setErrorMessage('');
                     }}
                     style={{ letterSpacing: showPin ? 'normal' : '0.2em', fontWeight: 700 }}

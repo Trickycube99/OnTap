@@ -1,3 +1,5 @@
+import { getApps, getApp } from 'firebase/app';
+import { getAuth, signOut } from 'firebase/auth';
 // Auth Abstraction Layer for Restaurant OS & Multi-Tenant Business Architecture
 // Supports Developer Superadmin, Distinct Business Owners, Counterperson POS, and Customer Dining
 
@@ -405,6 +407,9 @@ export function getSession(role) {
  * Authenticate and issue a new session for a role
  */
 export function authenticateRole(role, credentials) {
+  if (import.meta.env.PROD && role !== ROLES.CUSTOMER) {
+    return { success: false, error: 'A verified online staff account is required.' };
+  }
   const config = ROLE_CONFIGS[role];
   if (!config) {
     return { success: false, error: `Invalid role: ${role}` };
@@ -443,6 +448,7 @@ export function authenticateRole(role, credentials) {
  * 4. Wipes local tokens and BFCache keys
  */
 export function logoutRole(role) {
+  if (getApps().length) signOut(getAuth(getApp())).catch(() => {});
   const currentSessions = getStoredSessions();
   if (currentSessions && currentSessions[role]) {
     currentSessions[role] = null;
@@ -497,6 +503,7 @@ export function logoutRole(role) {
  * Reset all role sessions to defaults and invalidate backend credentials completely
  */
 export function resetAllSessions() {
+  if (getApps().length) signOut(getAuth(getApp())).catch(() => {});
   saveStoredSessions(INITIAL_DEFAULT_SESSIONS);
   clearAuthCookies();
 
