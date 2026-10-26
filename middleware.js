@@ -43,9 +43,9 @@ export default function middleware(request) {
   };
 
   // 1. Strict CORS Policy Handling
-  const isAllowedOrigin = ALLOWED_ORIGINS.includes(origin) || !origin;
+  const isAllowedOrigin = ALLOWED_ORIGINS.includes(origin) || (origin && origin.endsWith('.netlify.app')) || !origin;
   const corsHeaders = {
-    'Access-Control-Allow-Origin': isAllowedOrigin && origin ? origin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Origin': isAllowedOrigin && origin ? origin : (origin || ALLOWED_ORIGINS[0]),
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
     'Access-Control-Allow-Credentials': 'true',

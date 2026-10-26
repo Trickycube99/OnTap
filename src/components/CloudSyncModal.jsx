@@ -235,7 +235,7 @@ service cloud.firestore {
                 ? '🟢 Firebase Firestore: Live & Connected'
                 : syncState.status === 'error'
                 ? '🔴 Cloud Sync: Action Required'
-                : '🟡 Local Network Mode (Awaiting Vercel Redeploy)'}
+                : '🟡 Local Network Mode (Awaiting Netlify/Vercel Redeploy)'}
             </span>
           </div>
 
@@ -244,7 +244,7 @@ service cloud.firestore {
               ? `Connected to Firebase project "${syncState.projectId}". Orders placed on any mobile phone will instantly pop up on counter POS and kitchen screens without refreshing.`
               : syncState.status === 'error'
               ? syncState.error || 'Firestore rejected the request. Please check Firestore security rules below.'
-              : 'Firebase environment variables were not detected in this build. If you added them in Vercel, trigger a Redeploy so the build picks them up.'}
+              : 'Firebase environment variables were not detected in this build. If you added them in Netlify or Vercel, trigger a Redeploy so the build picks them up.'}
           </p>
 
           {syncState.projectId && (
@@ -296,15 +296,17 @@ service cloud.firestore {
             2-Step Checklist for Cross-Device Sync
           </div>
 
-          {/* Step 1: Vercel Redeploy */}
+          {/* Step 1: Netlify / Vercel Redeploy */}
           <div style={{ background: '#F9FAFB', borderRadius: 12, padding: '12px', marginBottom: 10, border: '1px solid #E5E7EB' }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 4 }}>
-              1. Redeploy on Vercel (Crucial!)
+              1. Redeploy on Netlify / Vercel (Crucial!)
             </div>
             <div style={{ fontSize: 12, color: '#4B5563', lineHeight: 1.4 }}>
-              Adding Environment Variables in Vercel does not update previous deployments. Vite embeds variables during <code>npm run build</code>.
+              Adding Environment Variables in Netlify/Vercel does not update previous deployments. Vite embeds variables during <code>npm run build</code>.
               <br />
-              Go to <strong>Vercel Dashboard → Deployments → Click ⋯ on top deployment → Click "Redeploy"</strong>.
+              On Netlify: Go to <strong>Deploys → Trigger deploy → Clear cache and deploy site</strong>.
+              <br />
+              On Vercel: Go to <strong>Deployments → Click ⋯ → Redeploy</strong>.
             </div>
           </div>
 
