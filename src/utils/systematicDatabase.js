@@ -76,14 +76,13 @@ export async function syncBusinessToCloud(business) {
       owner: {
         name: business.owner?.name || 'Owner',
         email: (business.owner?.email || '').trim().toLowerCase(),
-        pin: business.owner?.pin ? String(business.owner.pin).trim() : '',
-        hasPinConfigured: Boolean(business.owner?.pin),
+        hasPinConfigured: Boolean(business.owner?.pin || business.owner?.hasPinConfigured),
         createdAt: business.owner?.createdAt || business.createdAt || new Date().toISOString()
       },
       counter: {
-        pin: business.counter?.pin ? String(business.counter.pin).trim() : '',
         terminalName: business.counter?.terminalName || 'POS Terminal 01',
-        loginId: business.counter?.loginId || `${business.id}.pos`
+        loginId: business.counter?.loginId || `${business.id}.pos`,
+        hasPinConfigured: Boolean(business.counter?.pin || business.counter?.hasPinConfigured)
       },
       staff: Array.isArray(business.staff) ? business.staff : [],
       upiId: business.upiId || '',
@@ -107,6 +106,21 @@ export async function syncBusinessToCloud(business) {
     };
 
     await setDoc(bizDocRef, sanitizedBiz, { merge: true });
+
+    // Store sensitive credentials exclusively in protected private_config subcollection
+    if (business.owner?.pin || business.counter?.pin) {
+      try {
+        const credDocRef = doc(database, 'businesses', business.id, 'private_config', 'credentials');
+        await setDoc(credDocRef, {
+          ownerPin: business.owner?.pin ? String(business.owner.pin).trim() : '',
+          counterPin: business.counter?.pin ? String(business.counter.pin).trim() : '',
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (credErr) {
+        // Non-blocking credential sync error
+      }
+    }
+
     return true;
   } catch (err) {
     handleFirestoreError(err, 'sync business');
@@ -189,12 +203,12 @@ export function mergeCloudBusinessesToLocal(cloudBusinesses) {
         owner: {
           ...local.owner,
           ...(cloudBiz.owner || {}),
-          pin: (cloudBiz.owner?.pin && String(cloudBiz.owner.pin).trim()) || local.owner?.pin || '882100'
+          pin: local.owner?.pin || (cloudBiz.owner?.pin && String(cloudBiz.owner.pin).trim()) || ''
         },
         counter: {
           ...local.counter,
           ...(cloudBiz.counter || {}),
-          pin: (cloudBiz.counter?.pin && String(cloudBiz.counter.pin).trim()) || local.counter?.pin || '442100'
+          pin: local.counter?.pin || (cloudBiz.counter?.pin && String(cloudBiz.counter.pin).trim()) || ''
         }
       };
 

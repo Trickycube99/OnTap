@@ -583,12 +583,17 @@ export function buildMonthlyArchives({ orders, expenses = [], checklists = [] })
 /**
 /**
  * Helper to escape CSV cell contents conforming strictly to RFC 4180
+ * and preventing CSV Formula Injection (CWE-1236)
  */
 export function escapeCsv(val) {
   if (val === null || val === undefined) return '""';
   let str = String(val).trim();
   if (str.startsWith('"') && str.endsWith('"') && str.length >= 2) {
     str = str.slice(1, -1);
+  }
+  // Neutralize CSV formula injection by prefixing formula trigger characters
+  if (/^[=\+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
   }
   return `"${str.replace(/"/g, '""')}"`;
 }

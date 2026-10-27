@@ -4,24 +4,40 @@
  */
 
 /**
+ * Helper to escape XML special entities to prevent XML injection
+ */
+export function escapeXml(val) {
+  if (val === null || val === undefined) return '';
+  return String(val)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
  * Generates and triggers download of Tally Prime XML Sales Vouchers
  */
 export function exportToTallyPrimeXml(orders, theme) {
   const currentDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const safeRestaurantName = escapeXml(theme?.restaurantName || 'Restaurant');
   
   const voucherEntries = orders.map((order) => {
-    const voucherNo = `POS-${order.id.replace('ORD-', '')}`;
+    const rawVoucherNo = `POS-${String(order.id || '').replace('ORD-', '')}`;
+    const voucherNo = escapeXml(rawVoucherNo);
     const voucherDate = currentDate;
-    const narration = `QR Dine Order ${order.id} at ${order.table} - ${theme.restaurantName}`;
+    const narration = escapeXml(`QR Dine Order ${order.id || ''} at ${order.table || 'Table'} - ${theme?.restaurantName || 'Restaurant'}`);
     const cgstAmount = order.tax ? (order.tax / 2).toFixed(2) : '0.00';
     const sgstAmount = order.tax ? (order.tax / 2).toFixed(2) : '0.00';
     const taxableSales = Number(order.subtotal || order.total || 0).toFixed(2);
     const totalAmount = Number(order.total || 0).toFixed(2);
-    const ledgerName = (order.paymentMode || '').toLowerCase().includes('cash')
+    const rawLedgerName = (order.paymentMode || '').toLowerCase().includes('cash')
       ? 'Cash-in-Hand'
       : (order.paymentMode || '').toLowerCase().includes('card')
       ? 'HDFC POS Merchant Bank'
       : 'ICICI UPI BharatPe Current Account';
+    const ledgerName = escapeXml(rawLedgerName);
 
     return `
     <TALLYMESSAGE xmlns:UDF="TallyUDF">
@@ -41,7 +57,7 @@ export function exportToTallyPrimeXml(orders, theme) {
 
         <!-- Credit F&B Sales Taxable Ledger -->
         <ALLLEDGERENTRIES.LIST>
-          <LEDGERNAME>Food & Beverage Sales (5% GST)</LEDGERNAME>
+          <LEDGERNAME>Food &amp; Beverage Sales (5% GST)</LEDGERNAME>
           <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
           <AMOUNT>${taxableSales}</AMOUNT>
         </ALLLEDGERENTRIES.LIST>
@@ -73,7 +89,7 @@ export function exportToTallyPrimeXml(orders, theme) {
       <REQUESTDESC>
         <REPORTNAME>Vouchers</REPORTNAME>
         <STATICVARIABLES>
-          <SVCURRENTCOMPANY>${theme.restaurantName}</SVCURRENTCOMPANY>
+          <SVCURRENTCOMPANY>${safeRestaurantName}</SVCURRENTCOMPANY>
         </STATICVARIABLES>
       </REQUESTDESC>
       <REQUESTDATA>

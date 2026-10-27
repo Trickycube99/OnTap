@@ -167,8 +167,15 @@ export async function requestDeveloperPasswordReset(email) {
     };
   }
 
-  // Generate a secure 6-digit verification code
-  const recoveryCode = String(Math.floor(100000 + Math.random() * 900000));
+  // Generate a cryptographically secure 6-digit verification code
+  const randArray = new Uint32Array(1);
+  const cryptoObj = typeof window !== 'undefined' ? (window.crypto || window.msCrypto) : globalThis.crypto;
+  if (cryptoObj?.getRandomValues) {
+    cryptoObj.getRandomValues(randArray);
+  } else {
+    randArray[0] = Math.floor(Math.random() * 1000000);
+  }
+  const recoveryCode = String(100000 + (randArray[0] % 900000));
   const expiresAt = Date.now() + 15 * 60 * 1000; // 15-minute validity window
 
   try {
@@ -200,10 +207,11 @@ export async function requestDeveloperPasswordReset(email) {
   return {
     success: true,
     email: cleanEmail,
-    recoveryCode,
     expiresInMinutes: 15,
     firebaseDispatched,
-    message: `Password reset verification code dispatched for ${cleanEmail}! Enter the 6-digit verification code to set a new password.`
+    message: firebaseDispatched
+      ? `A password reset link has been dispatched to ${cleanEmail}. Please check your inbox.`
+      : `Password reset verification code dispatched for ${cleanEmail}! Please check your authorized developer mailbox.`
   };
 }
 
@@ -691,11 +699,18 @@ export function authenticateDeveloper(email, password) {
     }
   }
 
+  const randBytes = new Uint8Array(8);
+  const cryptoObj = typeof window !== 'undefined' ? (window.crypto || window.msCrypto) : globalThis.crypto;
+  if (cryptoObj?.getRandomValues) {
+    cryptoObj.getRandomValues(randBytes);
+  }
+  const randHex = Array.from(randBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+
   const session = {
     role: 'developer',
     name: currentCreds.name,
     email: currentCreds.email,
-    token: `dev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    token: `dev_${Date.now()}_${randHex || Math.random().toString(36).substring(2, 7)}`,
     authenticatedAt: new Date().toISOString()
   };
   try {

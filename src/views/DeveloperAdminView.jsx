@@ -275,7 +275,7 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
     };
   }, []);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     playTapSound();
     setLoginError('');
@@ -285,6 +285,16 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       setHasDbPassword(true);
       playSuccessChime();
       setIsAuthenticated(true);
+
+      // Attempt serverless edge cookie synchronization
+      try {
+        await fetch('/api/auth/developer-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: loginEmail, password: loginPassword })
+        });
+      } catch {}
+
       setLogs((prev) => [
         { id: Date.now(), time: 'Just now', type: 'auth', text: `Developer ${loginEmail} logged in successfully` },
         ...prev
@@ -313,7 +323,6 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
       const res = await requestDeveloperPasswordReset(forgotEmail);
       if (res.success) {
         playSuccessChime();
-        setDispatchedRecoveryCode(res.recoveryCode);
         setForgotStep(2);
         setForgotStatus({
           loading: false,
@@ -1299,45 +1308,21 @@ export default function DeveloperAdminView({ onSwitchToApp, onRoleSwitch }) {
               {/* Step 2: Enter Code & New Password */}
               {forgotStep === 2 && (
                 <form onSubmit={handleConfirmForgot} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {/* Emergency on-screen code banner for instant seamless reset */}
-                  {dispatchedRecoveryCode && (
-                    <div style={{
-                      padding: '12px 14px',
-                      borderRadius: 12,
-                      background: 'rgba(6, 182, 212, 0.12)',
-                      border: '1px dashed rgba(6, 182, 212, 0.4)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 8
-                    }}>
-                      <div>
-                        <div style={{ fontSize: 11, color: '#38BDF8', fontWeight: 700 }}>6-Digit Security Code:</div>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: '#FFFFFF', letterSpacing: 3, fontFamily: 'monospace' }}>
-                          {dispatchedRecoveryCode}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          playTapSound();
-                          setForgotCode(dispatchedRecoveryCode);
-                        }}
-                        style={{
-                          background: '#0284C7',
-                          border: 'none',
-                          color: '#FFFFFF',
-                          borderRadius: 8,
-                          padding: '6px 12px',
-                          fontSize: 11,
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Auto-Fill
-                      </button>
+                  {/* Secure verification notice */}
+                  <div style={{
+                    padding: '12px 14px',
+                    borderRadius: 12,
+                    background: 'rgba(6, 182, 212, 0.1)',
+                    border: '1px solid rgba(6, 182, 212, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10
+                  }}>
+                    <div style={{ fontSize: 18 }}>📩</div>
+                    <div style={{ fontSize: 12, color: '#E2E8F0', lineHeight: 1.5 }}>
+                      A 6-digit verification code has been dispatched to <b style={{ color: '#38BDF8' }}>{forgotEmail}</b>. Please check your inbox and enter the code below.
                     </div>
-                  )}
+                  </div>
 
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#CBD5E1', marginBottom: 6 }}>

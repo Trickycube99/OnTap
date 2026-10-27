@@ -24,7 +24,40 @@ function checkIpRateLimit(ip, limit = 60, windowMs = 60000) {
   return record.count <= limit;
 }
 
-export default function middleware(request) {
+const SERVER_SECRET = (typeof process !== 'undefined' && (process.env?.SESSION_SECRET || process.env?.DEVELOPER_MASTER_SECRET)) || 'ontap_edge_server_hmac_secret_2026';
+
+async function verifySignedToken(token, secret = SERVER_SECRET) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [pB64, sig] = parts;
+  try {
+    const enc = new TextEncoder();
+    const cryptoObj = (typeof crypto !== 'undefined' ? crypto : globalThis.crypto);
+    if (!cryptoObj?.subtle) return null;
+    const key = await cryptoObj.subtle.importKey(
+      'raw',
+      enc.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+    const hexMatches = sig.match(/.{1,2}/g);
+    if (!hexMatches) return null;
+    const sigBytes = new Uint8Array(hexMatches.map((byte) => parseInt(byte, 16)));
+    const isValid = await cryptoObj.subtle.verify('HMAC', key, sigBytes, enc.encode(pB64));
+    if (!isValid) return null;
+    const base64Str = pB64.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonStr = typeof atob === 'function' ? atob(base64Str) : Buffer.from(pB64, 'base64url').toString('utf8');
+    const payload = JSON.parse(jsonStr);
+    if (payload.exp && payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export default async function middleware(request) {
   const url = new URL(request.url);
   const pathname = url.pathname.toLowerCase();
   const origin = request.headers.get('origin') || '';
@@ -75,12 +108,15 @@ export default function middleware(request) {
 
   const sessionToken = cookies['ontap_session_token'] || '';
   const sessionRole = cookies['ontap_session_role'] || '';
-  const devSession = cookies['ontap_dev_session'] || '';
+  const rawDevSession = cookies['ontap_dev_session'] || '';
   const authHeader = request.headers.get('authorization') || '';
   const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
 
-  const isAuthenticated = Boolean(sessionToken || devSession || bearerToken);
-  const isDeveloper = Boolean(devSession || (sessionRole === 'developer'));
+  // Cryptographically verify developer session token
+  const devPayload = await verifySignedToken(rawDevSession);
+  const isDeveloper = Boolean(devPayload && devPayload.role === 'developer');
+
+  const isAuthenticated = Boolean(sessionToken || isDeveloper || bearerToken);
 
   // 2. Server-Side Protection & Rate Limiting for API Endpoints (/api/*)
   if (pathname.startsWith('/api/')) {

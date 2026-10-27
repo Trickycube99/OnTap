@@ -17,11 +17,26 @@ export default async function handler(req, res) {
     });
   }
 
-  if (!fileBase64) {
-    return res.status(400).json({ error: 'Missing fileBase64 in request body.' });
+  // Validate API key structure
+  if (!/^[a-zA-Z0-9_\-]{20,100}$/.test(apiKey)) {
+    return res.status(400).json({ error: 'Invalid API key format.' });
+  }
+
+  if (!fileBase64 || typeof fileBase64 !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid fileBase64 in request body.' });
+  }
+
+  // Enforce 10MB maximum payload size limit (approx 14MB base64 string)
+  if (fileBase64.length > 14 * 1024 * 1024) {
+    return res.status(413).json({ error: 'Payload too large. Maximum supported document size is 10MB.' });
   }
 
   const cleanMimeType = (mimeType || 'image/jpeg').toLowerCase();
+  const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
+  if (!ALLOWED_MIME_TYPES.includes(cleanMimeType)) {
+    return res.status(400).json({ error: 'Unsupported MIME type. Allowed types: JPEG, PNG, WebP, GIF, PDF.' });
+  }
+
   // Strip any data URL prefix if sent
   const pureBase64 = fileBase64.includes(',') ? fileBase64.split(',')[1] : fileBase64;
 

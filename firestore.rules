@@ -16,8 +16,8 @@ service cloud.firestore {
       return isAuthenticated() && (
         request.auth.token.role == 'developer' ||
         request.auth.token.admin == true ||
-        request.auth.token.email == 'manj@ontap.app' ||
-        request.auth.token.email == 'pranjalmk62@gmail.com'
+        ((request.auth.token.email == 'manj@ontap.app' || request.auth.token.email == 'pranjalmk62@gmail.com') &&
+         request.auth.token.email_verified == true)
       );
     }
 
@@ -57,17 +57,21 @@ service cloud.firestore {
       );
 
       allow delete: if isDeveloper() || isTenantOwner(businessId);
+
+      // Private credentials & internal config subcollection (STRICT: Accessible ONLY by tenant staff/owner or developer)
+      match /private_config/{docId} {
+        allow read, write: if isTenantStaffOrOwner(businessId);
+      }
     }
 
     // 2. Orders Collection (Strict Row-Level & Object-Level Security)
     match /restaurant_orders/{orderDocId} {
-      // Guests can read orders belonging to their table/session; Staff/Owner can read all for their business
+      // Guests can read orders belonging to their specific order tracking ID; Staff/Owner can read all for their business
       allow read: if isDeveloper() || (
         resource != null && (
           isTenantStaffOrOwner(resource.data.businessId) ||
-          // Public diner tracking order by document ID
-          (resource.data.originalOrderId != null && resource.data.originalOrderId == request.query.orderId) ||
-          true
+          // Public diner tracking order by document ID or originalOrderId
+          (resource.data.originalOrderId != null && resource.data.originalOrderId == request.query.orderId)
         )
       );
 
@@ -155,7 +159,7 @@ service cloud.firestore {
     // 7. Platform Settings & Developer System Credentials
     match /system_config/{configDocId} {
       allow read, write: if isDeveloper() || (
-        isAuthenticated() && request.auth.token.email == 'pranjalmk62@gmail.com'
+        isAuthenticated() && request.auth.token.email == 'pranjalmk62@gmail.com' && request.auth.token.email_verified == true
       );
     }
   }

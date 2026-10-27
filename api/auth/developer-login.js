@@ -1,16 +1,23 @@
 // Server-Side Developer Superadmin Login API Handler
 // Provides constant-time master credential evaluation, rate-limiting, and issues HttpOnly cookies
+import crypto from 'crypto';
 
 const ALLOWED_DEVELOPER_EMAIL = (process.env.DEVELOPER_EMAIL || 'pranjalmk62@gmail.com').trim().toLowerCase();
 const DEVELOPER_MASTER_SECRET = process.env.DEVELOPER_MASTER_SECRET || process.env.DEVELOPER_PASSWORD || '';
+const SERVER_SECRET = process.env.SESSION_SECRET || DEVELOPER_MASTER_SECRET || 'ontap_edge_server_hmac_secret_2026';
 
 function timingSafeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
-  let diff = a.length ^ b.length;
-  for (let i = 0; i < Math.min(a.length, b.length); i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+export function signSessionPayload(payload, secret = SERVER_SECRET) {
+  const pB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', secret).update(pB64).digest('hex');
+  return `${pB64}.${sig}`;
 }
 
 // In-memory rate limiting for developer login attempts
@@ -62,7 +69,16 @@ export default async function handler(req, res) {
   // Clear attempts on success
   devAttemptMap.delete(clientIp);
 
-  const sessionToken = `dev_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  // Generate cryptographically secure signed session token
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const sessionPayload = {
+    role: 'developer',
+    email: ALLOWED_DEVELOPER_EMAIL,
+    nonce,
+    iat: now,
+    exp: now + 86400 * 1000 // 24 hours
+  };
+  const sessionToken = signSessionPayload(sessionPayload);
   const cookieFlags = 'Path=/; Max-Age=86400; HttpOnly; SameSite=Strict; Secure';
 
   res.setHeader('Set-Cookie', [
