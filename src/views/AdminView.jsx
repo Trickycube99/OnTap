@@ -706,9 +706,35 @@ export default function AdminView({
     setTimeout(() => setCustomizerSaveSuccess(false), 3500);
   };
 
-  // Helper to extract a reliable date from order records
+  // Daily Midnight Watcher Key (resets every 12:00 AM)
+  const getTodayKey = (d = new Date()) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const [todayDateKey, setTodayDateKey] = useState(() => getTodayKey());
+
+  useEffect(() => {
+    const checkMidnightReset = () => {
+      const currentKey = getTodayKey();
+      if (currentKey !== todayDateKey) {
+        setTodayDateKey(currentKey);
+      }
+    };
+
+    const now = new Date();
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+    const msUntilMidnight = Math.max(1000, nextMidnight.getTime() - now.getTime());
+
+    const midnightTimeout = setTimeout(checkMidnightReset, msUntilMidnight);
+    const heartbeat = setInterval(checkMidnightReset, 15000);
+
+    return () => {
+      clearTimeout(midnightTimeout);
+      clearInterval(heartbeat);
+    };
+  }, [todayDateKey]);
+
+  // Helper to extract a reliable date from order records (never falls back to today so ancient/undated orders never bleed into today)
   const getOrderDate = (order) => {
-    if (!order) return new Date();
+    if (!order) return new Date(0);
     if (order.createdAt) {
       const d = new Date(order.createdAt);
       if (!isNaN(d.getTime())) return d;
@@ -717,13 +743,17 @@ export default function AdminView({
       const d = new Date(order.timestamp);
       if (!isNaN(d.getTime())) return d;
     }
-    if (typeof order.id === 'string' && order.id.startsWith('ord-')) {
-      const ts = parseInt(order.id.replace('ord-', ''), 10);
+    if (typeof order.id === 'string' && order.id.toLowerCase().startsWith('ord-')) {
+      const ts = parseInt(order.id.toLowerCase().replace('ord-', ''), 10);
       if (!isNaN(ts) && ts > 1000000000000) {
         return new Date(ts);
       }
     }
-    return new Date();
+    if (order.date) {
+      const d = new Date(order.date);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return new Date(0);
   };
 
   // Valid orders (strictly excluding rejected and cancelled orders from expected amounts)
@@ -732,17 +762,17 @@ export default function AdminView({
   }, [orders]);
 
   // Reset Cycle Period Metadata
-  const weekPeriodInfo = useMemo(() => getWeekDateRange(new Date()), []);
-  const monthPeriodInfo = useMemo(() => get30thMonthDateRange(new Date()), []);
+  const weekPeriodInfo = useMemo(() => getWeekDateRange(new Date()), [todayDateKey]);
+  const monthPeriodInfo = useMemo(() => get30thMonthDateRange(new Date()), [todayDateKey]);
 
-  // Today's orders (local calendar day: 00:00:00 to 23:59:59, resetting on midnight)
+  // Today's orders (local calendar day: 00:00:00 to 23:59:59, resetting strictly on midnight)
   const todayOrders = useMemo(() => {
     const { start, end } = getDailyDateRange(new Date());
     return validOrders.filter((o) => {
       const d = getOrderDate(o);
       return d >= start && d <= end;
     });
-  }, [validOrders]);
+  }, [validOrders, todayDateKey]);
 
   // This Week's orders (current calendar week: Monday 00:00:00 to Sunday 23:59:59, resetting every Monday)
   const weekOrders = useMemo(() => {
@@ -751,7 +781,7 @@ export default function AdminView({
       const d = getOrderDate(o);
       return d >= startOfWeek && d <= endOfWeek;
     });
-  }, [validOrders]);
+  }, [validOrders, todayDateKey]);
 
   // This Month's orders (30th to 29th monthly cycle, resetting on every 30th)
   const monthOrders = useMemo(() => {
@@ -760,7 +790,7 @@ export default function AdminView({
       const d = getOrderDate(o);
       return d >= startOfCycle && d <= endOfCycle;
     });
-  }, [validOrders]);
+  }, [validOrders, todayDateKey]);
 
   // Kitchen Placed Orders (Audit baseline for kitchen tickets)
   const totalOrdersCount = todayOrders.length;
@@ -809,7 +839,7 @@ export default function AdminView({
       endOfMonth: monthPeriodInfo.endOfCycle,
       todayOrdersCount: totalOrdersCount
     });
-  }, [activeSubmittedReports, weekPeriodInfo, monthPeriodInfo, totalOrdersCount]);
+  }, [activeSubmittedReports, weekPeriodInfo, monthPeriodInfo, totalOrdersCount, todayDateKey]);
 
   const {
     hasStaffSubmittedToday,
@@ -1007,22 +1037,22 @@ export default function AdminView({
       orders,
       latestEodReport
     });
-  }, [orders, latestEodReport]);
+  }, [orders, latestEodReport, todayDateKey]);
 
   // Daily Cash Check Archives (automatically preserving all historical days from database)
   const dailyArchives = useMemo(() => {
     return buildDailyArchives({ orders, checklists: activeSubmittedReports });
-  }, [orders, activeSubmittedReports]);
+  }, [orders, activeSubmittedReports, todayDateKey]);
 
   // Weekly Sales & P&L Archives (Monday to Sunday Cycles, Resetting on Monday)
   const weeklyArchives = useMemo(() => {
     return buildWeeklyArchives({ orders, expenses, checklists: activeSubmittedReports });
-  }, [orders, expenses, activeSubmittedReports]);
+  }, [orders, expenses, activeSubmittedReports, todayDateKey]);
 
   // Monthly Sales & P&L Archives (30th to 29th Cycles, Resetting on 30th)
   const monthlyArchives = useMemo(() => {
     return buildMonthlyArchives({ orders, expenses, checklists: activeSubmittedReports });
-  }, [orders, expenses, activeSubmittedReports]);
+  }, [orders, expenses, activeSubmittedReports, todayDateKey]);
 
   // Cash vs Obligations in ₹ (Section 5.4)
   const totalUpcomingObligations =

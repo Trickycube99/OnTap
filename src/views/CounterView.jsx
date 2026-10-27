@@ -32,7 +32,7 @@ import { playTapSound, playSuccessChime, playAlertChime, playNewOrderChime } fro
 import PrinterModal from '../components/PrinterModal';
 import PunchWalkInOrders from '../components/PunchWalkInOrders';
 import LegalFooter from '../components/LegalFooter';
-import { buildDailyArchives, exportDailyDataCsv } from '../utils/salesBridge';
+import { buildDailyArchives, exportDailyDataCsv, getReportDate, getDailyDateRange } from '../utils/salesBridge';
 import { broadcastSyncEvent, SYNC_EVENTS, subscribeSyncEvents } from '../utils/sync';
 import { getActiveBusiness, getBusinesses, updateBusiness } from '../utils/businessManager';
 import { STORAGE_KEYS, saveData, getScopedKey } from '../utils/storage';
@@ -88,10 +88,12 @@ function formatMaskedPhone(phone, isOwner) {
 
 function createClosingChecklistReport({ expected, actual, variance, varianceReason, submittedBy, staffRole }) {
   const now = new Date();
+  const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   return {
     id: `CHK-${now.getTime()}`,
-    date: now.toLocaleDateString(),
-    timestamp: now.toLocaleTimeString(),
+    dateKey,
+    date: now.toLocaleDateString('en-IN'),
+    timestamp: now.toLocaleTimeString('en-IN'),
     createdAt: now.toISOString(),
     expected,
     actual,
@@ -139,6 +141,68 @@ export default function CounterView({
   const [checklistSubmitted, setChecklistSubmitted] = useState(false);
   const [showClosingConfirmModal, setShowClosingConfirmModal] = useState(false);
   const [closingPendingReport, setClosingPendingReport] = useState(null);
+
+  // Daily Midnight Watcher Key (resets every 12:00 AM)
+  const getTodayKey = (d = new Date()) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const [todayDateKey, setTodayDateKey] = useState(() => getTodayKey());
+
+  // Check if today's checklist has already been submitted
+  const todaySubmittedChecklist = useMemo(() => {
+    const { start: todayStart, end: todayEnd } = getDailyDateRange(new Date());
+    return (checklists || []).find((c) => {
+      if (!c) return false;
+      if (c.dateKey && c.dateKey === todayDateKey) return true;
+      const d = getReportDate(c);
+      return Boolean(d && d >= todayStart && d <= todayEnd);
+    });
+  }, [checklists, todayDateKey]);
+
+  // Sync checklistSubmitted state with whether today has been submitted
+  useEffect(() => {
+    if (todaySubmittedChecklist) {
+      setChecklistSubmitted(true);
+      if (actualCash === '' && actualCard === '' && actualUpi === '') {
+        setActualCash(String(todaySubmittedChecklist.actual?.cash ?? ''));
+        setActualCard(String(todaySubmittedChecklist.actual?.card ?? ''));
+        setActualUpi(String(todaySubmittedChecklist.actual?.upi ?? ''));
+        if (todaySubmittedChecklist.varianceReason) {
+          setVarianceReason(todaySubmittedChecklist.varianceReason);
+        }
+      }
+    }
+  }, [todaySubmittedChecklist]);
+
+  // Midnight Watcher: Auto-resets daily cash check & counter POS financial totals at 12:00 AM
+  useEffect(() => {
+    const checkMidnightReset = () => {
+      const currentKey = getTodayKey();
+      if (currentKey !== todayDateKey) {
+        setTodayDateKey(currentKey);
+        // Reset daily cash checklist inputs & state for the fresh day
+        setActualCash('');
+        setActualCard('');
+        setActualUpi('');
+        setVarianceReason('');
+        setChecklistSubmitted(false);
+        setClosingPendingReport(null);
+        setShowClosingConfirmModal(false);
+      }
+    };
+
+    // Calculate time to next 12:00:00 AM
+    const now = new Date();
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+    const msUntilMidnight = Math.max(1000, nextMidnight.getTime() - now.getTime());
+
+    const midnightTimeout = setTimeout(checkMidnightReset, msUntilMidnight);
+    const heartbeat = setInterval(checkMidnightReset, 15000);
+
+    return () => {
+      clearTimeout(midnightTimeout);
+      clearInterval(heartbeat);
+    };
+  }, [todayDateKey]);
 
   // Price Edit State (FR-P4)
   const [editingItem, setEditingItem] = useState(null);
@@ -445,9 +509,9 @@ export default function CounterView({
     };
   }, [activeBusinessId, setOrders]);
 
-  // Helper to extract order creation date reliably
+  // Helper to extract order creation date reliably (never falls back to today so ancient/undated orders never bleed into today)
   const getOrderDate = (order) => {
-    if (!order) return new Date();
+    if (!order) return new Date(0);
     if (order.createdAt) {
       const d = new Date(order.createdAt);
       if (!isNaN(d.getTime())) return d;
@@ -456,28 +520,28 @@ export default function CounterView({
       const d = new Date(order.timestamp);
       if (!isNaN(d.getTime())) return d;
     }
-    if (typeof order.id === 'string' && order.id.startsWith('ord-')) {
-      const ts = parseInt(order.id.replace('ord-', ''), 10);
+    if (typeof order.id === 'string' && order.id.toLowerCase().startsWith('ord-')) {
+      const ts = parseInt(order.id.toLowerCase().replace('ord-', ''), 10);
       if (!isNaN(ts) && ts > 1000000000000) {
         return new Date(ts);
       }
     }
-    return new Date();
+    if (order.date) {
+      const d = new Date(order.date);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return new Date(0);
   };
 
-  // Valid orders for today: strictly exclude rejected and cancelled orders from expected totals
+  // Valid orders for today: strictly exclude rejected and cancelled orders, and strictly bounds to 00:00:00 - 23:59:59 today
   const validTodayOrders = useMemo(() => {
-    const now = new Date();
+    const { start: todayStart, end: todayEnd } = getDailyDateRange(new Date());
     return (orders || []).filter((o) => {
       if (!o || o.status === 'rejected' || o.status === 'cancelled') return false;
       const d = getOrderDate(o);
-      return (
-        d.getFullYear() === now.getFullYear() &&
-        d.getMonth() === now.getMonth() &&
-        d.getDate() === now.getDate()
-      );
+      return d >= todayStart && d <= todayEnd;
     });
-  }, [orders]);
+  }, [orders, todayDateKey]);
 
   // Calculate Expected Totals strictly from valid non-rejected recorded orders for today
   const expectedCash = useMemo(() => {
@@ -507,10 +571,10 @@ export default function CounterView({
   const totalVariance = diffCash + diffCard + diffUpi;
   const hasVarianceAlert = Math.abs(totalVariance) > 200.0; // ₹200 threshold
 
-  // Daily Cash Check Archives
+  // Daily Cash Check Archives (automatically preserving all historical days from database)
   const dailyArchives = useMemo(() => {
     return buildDailyArchives({ orders, checklists });
-  }, [orders, checklists]);
+  }, [orders, checklists, todayDateKey]);
 
   const [isResettingData, setIsResettingData] = useState(false);
   const handleCounterResetFinancials = async () => {
@@ -844,16 +908,32 @@ export default function CounterView({
   };
 
   // Filter orders by status tab (supports both cooking/in-progress and served/done)
-  const filteredOrders = orders.filter((o) => {
-    if (filterStatus === 'all') return true;
-    if (filterStatus === 'cooking' || filterStatus === 'in-progress') {
-      return o.status === 'cooking' || o.status === 'in-progress';
-    }
-    if (filterStatus === 'served' || filterStatus === 'done') {
-      return o.status === 'served' || o.status === 'done';
-    }
-    return o.status === filterStatus;
-  });
+  // For fresh use next day, completed/served orders from previous days do not clutter today's active Counter POS feed
+  const filteredOrders = useMemo(() => {
+    const { start: todayStart } = getDailyDateRange(new Date());
+    return (orders || []).filter((o) => {
+      if (!o) return false;
+      const d = getOrderDate(o);
+
+      if (filterStatus === 'cooking' || filterStatus === 'in-progress') {
+        if (o.status !== 'cooking' && o.status !== 'in-progress') return false;
+      } else if (filterStatus === 'served' || filterStatus === 'done') {
+        if (o.status !== 'served' && o.status !== 'done') return false;
+      } else if (filterStatus !== 'all') {
+        if (o.status !== filterStatus) return false;
+      }
+
+      // Completed orders (served, done, rejected, cancelled): only show today's orders
+      // Resets at 12:00 AM for fresh use next day while previous days remain safe in daily archives
+      const isCompleted = o.status === 'served' || o.status === 'done' || o.status === 'rejected' || o.status === 'cancelled';
+      if (isCompleted) {
+        return d >= todayStart;
+      }
+
+      // Active kitchen orders (received, cooking, ready) remain visible until served
+      return true;
+    });
+  }, [orders, filterStatus, todayDateKey]);
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 85 }}>

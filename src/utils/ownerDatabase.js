@@ -10,7 +10,7 @@
 
 import { initFirebase, isQuotaExhausted, handleFirestoreError } from './firebaseSync.js';
 import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
-import { calculateVerificationBridge } from './salesBridge.js';
+import { calculateVerificationBridge, getReportDate, getDailyDateRange } from './salesBridge.js';
 import { loadData, getScopedKey, STORAGE_KEYS } from './storage.js';
 
 const DB_NAME = 'OnTap_OwnerDatabase_v1';
@@ -418,7 +418,8 @@ export async function persistStaffSubmission({ report, businessId, orders = null
  */
 export function calculateStaffSubmittedAmounts({
   submittedReports = [],
-  todayDateStr = new Date().toLocaleDateString('en-IN'),
+  refDate = new Date(),
+  todayDateStr = null,
   startOfWeek = null,
   endOfWeek = null,
   startOfMonth = null,
@@ -426,22 +427,31 @@ export function calculateStaffSubmittedAmounts({
   todayOrdersCount = 0
 }) {
   const reports = Array.isArray(submittedReports) ? submittedReports : [];
+  const now = new Date(refDate);
+  const { start: todayStart, end: todayEnd } = getDailyDateRange(now);
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayInStr = todayDateStr || now.toLocaleDateString('en-IN');
 
-  // 1. Today's Submitted Report
-  // Match on date string or createdAt
+  // 1. Today's Submitted Report:
+  // Must strictly belong to today's calendar date (00:00:00 to 23:59:59)
   const todayReport = reports.find((r) => {
     if (!r) return false;
-    if (r.date === todayDateStr) return true;
-    if (r.createdAt) {
-      const d = new Date(r.createdAt).toLocaleDateString('en-IN');
-      return d === todayDateStr;
+    if (r.dateKey) {
+      return r.dateKey === todayKey;
+    }
+    const d = getReportDate(r);
+    if (d) {
+      return d >= todayStart && d <= todayEnd;
+    }
+    if (r.date) {
+      return r.date === todayInStr || r.date === todayKey;
     }
     return false;
-  }) || (reports.length > 0 && reports[0].date === todayDateStr ? reports[0] : null);
+  }) || null;
 
   const hasStaffSubmittedToday = Boolean(todayReport && todayReport.actual && typeof todayReport.actual.total === 'number');
 
-  // Today's Verified Amounts
+  // Today's Verified Amounts (resets strictly to 0 at midnight if not yet submitted today)
   const todaySubmittedSales = hasStaffSubmittedToday ? Number(todayReport.actual.total) : 0;
   const todaySubmittedCash = hasStaffSubmittedToday ? Number(todayReport.actual.cash || 0) : 0;
   const todaySubmittedCard = hasStaffSubmittedToday ? Number(todayReport.actual.card || 0) : 0;
@@ -451,15 +461,15 @@ export function calculateStaffSubmittedAmounts({
   const submittedBy = hasStaffSubmittedToday ? todayReport.submittedBy || 'Counter Staff' : '';
   const submittedAt = hasStaffSubmittedToday ? todayReport.timestamp || todayReport.createdAt || '' : '';
 
-  // 2. Weekly Submitted Total (Sum of all staff submissions within the week)
+  // 2. Weekly Submitted Total (Sum of all staff submissions within the current week: Mon 00:00 to Sun 23:59)
   let weekSubmittedSales = 0;
   let weekSubmissionsCount = 0;
 
   if (startOfWeek && endOfWeek) {
     reports.forEach((r) => {
       if (!r || !r.actual || typeof r.actual.total !== 'number') return;
-      const d = r.createdAt ? new Date(r.createdAt) : new Date(r.date);
-      if (!isNaN(d.getTime()) && d >= startOfWeek && d <= endOfWeek) {
+      const d = getReportDate(r);
+      if (d && d >= startOfWeek && d <= endOfWeek) {
         weekSubmittedSales += Number(r.actual.total);
         weekSubmissionsCount += 1;
       }
@@ -477,8 +487,8 @@ export function calculateStaffSubmittedAmounts({
   if (startOfMonth && endOfMonth) {
     reports.forEach((r) => {
       if (!r || !r.actual || typeof r.actual.total !== 'number') return;
-      const d = r.createdAt ? new Date(r.createdAt) : new Date(r.date);
-      if (!isNaN(d.getTime()) && d >= startOfMonth && d <= endOfMonth) {
+      const d = getReportDate(r);
+      if (d && d >= startOfMonth && d <= endOfMonth) {
         monthSubmittedSales += Number(r.actual.total);
         monthSubmissionsCount += 1;
       }

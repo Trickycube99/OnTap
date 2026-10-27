@@ -8,10 +8,10 @@
  */
 
 /**
- * Robust extractor for order creation date
+ * Robust extractor for order creation date (falls back to epoch 0 so ancient/undated orders never bleed into today)
  */
 export function getOrderDate(order) {
-  if (!order) return new Date();
+  if (!order) return new Date(0);
   if (order.createdAt) {
     const d = new Date(order.createdAt);
     if (!isNaN(d.getTime())) return d;
@@ -26,7 +26,43 @@ export function getOrderDate(order) {
       return new Date(ts);
     }
   }
-  return new Date();
+  if (order.date) {
+    const d = new Date(order.date);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return new Date(0);
+}
+
+/**
+ * Robust extractor for staff checklist report date
+ */
+export function getReportDate(report) {
+  if (!report) return null;
+  if (report.dateKey) {
+    const parts = String(report.dateKey).split('-');
+    if (parts.length === 3) {
+      const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 12, 0, 0);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+  if (report.createdAt) {
+    const d = new Date(report.createdAt);
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (report.date) {
+    const d = new Date(report.date);
+    if (!isNaN(d.getTime())) return d;
+    const parts = String(report.date).split('/');
+    if (parts.length === 3) {
+      const dIn = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10), 12, 0, 0);
+      if (!isNaN(dIn.getTime())) return dIn;
+    }
+  }
+  if (report.timestamp) {
+    const d = new Date(report.timestamp);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return null;
 }
 
 /**
@@ -253,8 +289,14 @@ export function buildDailyArchives({ orders, checklists = [] }) {
   const validOrders = getValidOrders(orders);
   const checklistMap = new Map();
   (checklists || []).forEach((c) => {
-    if (c && c.date) {
-      checklistMap.set(c.date, c);
+    if (c) {
+      if (c.dateKey) checklistMap.set(c.dateKey, c);
+      if (c.date) checklistMap.set(c.date, c);
+      const rd = getReportDate(c);
+      if (rd) {
+        const k = `${rd.getFullYear()}-${String(rd.getMonth() + 1).padStart(2, '0')}-${String(rd.getDate()).padStart(2, '0')}`;
+        checklistMap.set(k, c);
+      }
     }
   });
 
@@ -262,6 +304,8 @@ export function buildDailyArchives({ orders, checklists = [] }) {
   const daysMap = new Map();
   validOrders.forEach((o) => {
     const d = getOrderDate(o);
+    // Ignore invalid or epoch 0 fallback orders
+    if (d.getTime() <= 86400000 || isNaN(d.getTime())) return;
     const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const displayDate = d.toLocaleDateString('en-IN');
     if (!daysMap.has(dateKey)) {
@@ -272,28 +316,25 @@ export function buildDailyArchives({ orders, checklists = [] }) {
 
   // Also include any checklists that might not have orders in memory
   (checklists || []).forEach((c) => {
-    if (c && c.date) {
-      let foundKey = null;
-      for (const [k, v] of daysMap.entries()) {
-        if (v.displayDate === c.date || k === c.date) {
-          foundKey = k;
-          break;
-        }
-      }
-      if (!foundKey) {
-        const d = c.createdAt ? new Date(c.createdAt) : new Date();
-        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        daysMap.set(dateKey, { dateKey, displayDate: c.date, dateObj: d, orders: [] });
+    if (c) {
+      const rd = getReportDate(c) || new Date();
+      const dateKey = c.dateKey || `${rd.getFullYear()}-${String(rd.getMonth() + 1).padStart(2, '0')}-${String(rd.getDate()).padStart(2, '0')}`;
+      const displayDate = c.date || rd.toLocaleDateString('en-IN');
+      if (!daysMap.has(dateKey)) {
+        daysMap.set(dateKey, { dateKey, displayDate, dateObj: rd, orders: [] });
       }
     }
   });
 
   // Convert to sorted list (most recent first)
-  const todayStr = new Date().toLocaleDateString('en-IN');
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayStr = now.toLocaleDateString('en-IN');
+
   const dailyRecords = Array.from(daysMap.values())
     .map(({ dateKey, displayDate, dateObj, orders: dayOrders }) => {
-      const isToday = displayDate === todayStr;
-      const checklist = checklistMap.get(displayDate) || null;
+      const isToday = dateKey === todayKey || displayDate === todayStr;
+      const checklist = checklistMap.get(dateKey) || checklistMap.get(displayDate) || null;
 
       const servedOrders = dayOrders.filter((o) => o.status === 'served' || o.status === 'done');
       const inPrepOrders = dayOrders.filter((o) => o.status !== 'served' && o.status !== 'done');
